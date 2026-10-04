@@ -659,7 +659,8 @@ colLoad();
 (function(){
   var anchorTbl=null, anchorIdx=-1;
   function boxesOf(tbl){
-    var all=tbl.querySelectorAll('input[type=checkbox]');
+    var all=tbl.querySelectorAll('tbody input[type=checkbox]');
+    if(!all.length) all=tbl.querySelectorAll('input[type=checkbox]');
     var out=[];
     for(var i=0;i<all.length;i++){ if(all[i].id!=='chall'&&all[i].id!=='ochall') out.push(all[i]); }
     return out;
@@ -692,6 +693,7 @@ colLoad();
     if(t.id==='chall'||t.id==='ochall'){ anchorTbl=null; anchorIdx=-1; return; }
     var cb=t.closest('table input[type=checkbox]');
     if(!cb||cb.id==='chall'||cb.id==='ochall') return;
+    if(cb.closest('thead')){ anchorTbl=null; anchorIdx=-1; return; }
     var tbl=cb.closest('table');
     if(!tbl) return;
     var boxes=boxesOf(tbl);
