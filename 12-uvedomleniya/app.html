@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>12 Уведомления — TiMLog</title>
+<style>
+:root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);display:flex}
+aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14px;position:sticky;top:0;max-height:100vh;overflow:auto}
+aside .logo{font-size:22px;font-weight:700;margin:6px 0 22px}
+aside a{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
+aside a.on{background:var(--vio);color:#fff}
+main{flex:1;padding:18px 22px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:4px 0;font-size:24px}
+.user{display:flex;gap:10px;align-items:center;font-size:14px}
+.ava{width:36px;height:36px;border-radius:50%;background:#CBD5E0;color:#4A5568;display:flex;align-items:center;justify-content:center;font-weight:700}
+#bellbtn{position:relative;cursor:pointer;font-size:18px;background:none;border:0;padding:4px}
+#bellbadge{position:absolute;top:-4px;right:-6px;background:#FF0000;color:#fff;border-radius:50%;min-width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.bar{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap}
+.bar input[type=text]{width:400px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.bar select{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:14px}
+.ntabs{display:flex;gap:16px;margin:8px 0;font-size:15px}
+.ntabs span{cursor:pointer;color:#999;padding-bottom:6px}
+.ntabs span.on{color:var(--ink);font-weight:700;border-bottom:2px solid var(--vio)}
+.wrap{display:flex;gap:16px;align-items:flex-start}
+.list{flex:1;min-width:0}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.ghead{padding:12px 16px 4px;font-weight:700;font-size:14px;color:#000}
+.ntf{display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid #F0F0F0;cursor:pointer;align-items:flex-start;background:#fff}
+.ntf:hover{background:#fafaff}.ntf.sel{background:#f4f1ff}.ntf.read{opacity:.8}
+.ntf .dt{color:var(--mut);font-size:11px;white-space:nowrap;width:86px;flex:none;padding-top:2px}
+.ntf .ic{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+.ntf .tx{flex:1;font-size:12px;min-width:0}.ntf .tx b{font-size:13px;color:#1A1A1A}
+.ntf .tx .sub{color:#A0AEC0}.ntf .tx .body{color:#4A5568;margin-top:2px}
+.ntf .dot{width:10px;height:10px;border-radius:50%;background:#EF5350;flex:none;margin-top:6px}
+#detail{width:400px;flex:none;position:sticky;top:18px;display:none}
+#detail.open{display:block}
+#detail .mbox{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px}
+.kv{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #F5F5F5;font-size:13px}
+.kv .k{width:110px;color:#4A5568;flex:none}
+.kv .v{flex:1}
+table.mini{width:100%;border-collapse:collapse;font-size:12px}
+table.mini td,table.mini th{border-bottom:1px solid #F0F0F0;padding:7px;text-align:left}
+.imgprev{width:140px;height:120px;border:1px dashed #CBD5E0;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#F7FAFC;font-size:28px;color:#A0AEC0}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:99}
+.hint{font-size:12px;color:var(--mut)}
+</style>
+<style>
+#navhidebtn{width:100%;background:#2A3446;color:#8A92A6;border:0;border-radius:8px;padding:8px;cursor:pointer;font-size:13px;margin-bottom:10px}
+#navhidebtn:hover{background:#3A4658;color:#fff}
+#navshowbtn{position:fixed;top:12px;left:8px;z-index:200;display:none;background:#1C2331;color:#fff;border:1px solid #444;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:14px}
+body.navhide aside{display:none}
+body.navhide #navshowbtn{display:block}
+body.navhide main{max-width:none}
+</style>
+<style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
+<body>
+<button id="navshowbtn" title="Показать меню">▶</button>
+<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi on" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a></nav></aside>
+<main>
+<div class="top"><h1>Уведомления</h1><div class="user"><button id="bellbtn" title="Уведомления">🔔<span id="bellbadge">0</span></button><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span><span style="color:var(--mut)">▼</span></div></div>
+<div class="bar">
+<input id="q" type="text" placeholder="🔍 Поиск в уведомлениях ...">
+<button class="btn" id="fbtn">Фильтры (<span id="fbadge">0</span>)</button>
+<select id="f_type"><option value="all">Все типы</option><option value="receipt">Поступления</option><option value="shipment">Отгрузки</option><option value="task">Задания</option><option value="nomenclature">Номенклатура</option></select>
+<select id="f_status"><option value="all">Все статусы</option><option value="unread">Непрочитанные</option><option value="read">Прочитанные</option><option value="important">Важные</option></select>
+<button class="btn" id="readall">···</button>
+</div>
+<div class="ntabs"><span id="t_all" class="on">Все</span><span id="t_unread">Непрочитанные</span><span id="t_imp">Важные</span><span style="flex:1"></span><a href="#" id="markall" style="font-size:13px">Отметить все как прочитанные</a></div>
+<div class="wrap">
+<div class="list"><div class="card" id="groups"></div></div>
+<div id="detail"><div class="mbox">
+<div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">Детали уведомления</h2><button class="btn" id="dclose">✕</button></div>
+<div class="hint" id="dmeta"></div>
+<h3 id="dtitle" style="margin:10px 0"></h3>
+<div id="dkv"></div>
+<div class="imgprev" id="dimg">🖼</div>
+<h4>Изменение</h4>
+<table class="mini"><thead><tr><th>Дата</th><th>Пользователь</th><th>Что изменилось</th><th>Было</th><th>Стало</th></tr></thead><tbody id="dhist"></tbody></table>
+<div style="margin-top:10px"><button class="btn" id="dread">Отметить прочитанным</button></div>
+</div></div>
+</div>
+</main>
+<div id="toast"></div>
+<script>
+const API='../08-nomenklatura/demo_sqlite.php';
+const $=id=>document.getElementById(id);
+let tab='all',rows=[],curId=null;
+const KIND_META={receipt:{t:'Поступления',i:'📥',bg:'#E0EEFF'},shipment:{t:'Отгрузки',i:'📦',bg:'#DCE6D1'},task:{t:'Задания',i:'📝',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'}};
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
+function fmtD(s){s=String(s||'');return s.length>=10?s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4):s}
+function fmtT(s){s=String(s||'');return s.length>=16?s.slice(11,16):s}
+async function load(){const p=new URLSearchParams({action:'notif_list',tab:tab==='read'?'all':tab,limit:200});
+if($('q').value.trim())p.set('search',$('q').value.trim());
+if($('f_type').value!=='all')p.set('type',$('f_type').value);
+const r=await (await fetch(API+'?'+p)).json();rows=r.rows||[];
+if(tab==='read')rows=rows.filter(x=>+x.is_read===1);
+if($('f_status').value==='unread')rows=rows.filter(x=>+x.is_read===0);
+if($('f_status').value==='read')rows=rows.filter(x=>+x.is_read===1);
+if($('f_status').value==='important')rows=rows.filter(x=>+x.is_important===1);
+const c=r.counts||{all:0,unread:0,important:0};
+$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
+let nf=0;if($('q').value.trim())nf++;if($('f_type').value!=='all')nf++;if($('f_status').value!=='all')nf++;if(tab!=='all'&&tab!=='read')nf++;
+$('fbadge').textContent=nf;
+const dates=[...new Set(rows.map(x=>String(x.created_at||'').slice(0,10)))].sort().reverse();
+let h='';
+dates.forEach((d,di)=>{const label=di===0?'Сегодня':(di===1?'Вчера, '+fmtD(d):fmtD(d));
+h+=`<div class="ghead">${label}</div>`;
+rows.filter(x=>String(x.created_at||'').slice(0,10)===d).forEach(x=>{const m=KIND_META[x.kind]||{t:x.kind,i:'🔔',bg:'#F4F0FB'};
+h+=`<div class="ntf ${+x.is_read?'read':''} ${curId===x.id?'sel':''}" data-id="${x.id}"><div class="dt">${fmtD(x.created_at)} ${fmtT(x.created_at)}</div><div class="ic" style="background:${m.bg}">${m.i}</div><div class="tx"><div class="sub">${m.t}</div><b>${x.title||''}</b><div class="body">${x.body||''}</div></div>${+x.is_read?'':'<div class="dot" style="width:10px;height:10px;border-radius:50%;background:#EF5350;flex:none;margin-top:6px"></div>'}</div>`})});
+$('groups').innerHTML=h||'<p class="hint" style="padding:16px">Нет уведомлений</p>';
+document.querySelectorAll('#groups .ntf').forEach(el=>el.onclick=()=>openDetail(+el.dataset.id))}
+function setTab(t){tab=t;[['t_all','all'],['t_unread','unread'],['t_imp','important']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));if(t!=='read')$('f_status').value=t==='all'?'all':t;load()}
+$('t_all').onclick=()=>setTab('all');$('t_unread').onclick=()=>setTab('unread');$('t_imp').onclick=()=>setTab('important');
+$('f_status').onchange=()=>{const v=$('f_status').value;tab=(v==='read')?'read':v;setTabSilent();load()};
+function setTabSilent(){[['t_all','all'],['t_unread','unread'],['t_imp','important']].forEach(([id,k])=>$(id).classList.toggle('on',tab===k))}
+$('f_type').onchange=load;$('q').onchange=load;
+$('fbtn').onclick=()=>toast('Фильтры: используйте поиск, тип и статус');
+$('readall').onclick=async()=>{await fetch(API+'?action=notif_read_all',{method:'POST'});load()};
+$('markall').onclick=async e=>{e.preventDefault();await fetch(API+'?action=notif_read_all',{method:'POST'});load();toast('Все отмечены как прочитанные')};
+$('bellbtn').onclick=()=>{location.href='../08-nomenklatura/app.html'};
+$('dclose').onclick=()=>{$('detail').classList.remove('open');curId=null;load()};
+$('dread').onclick=async()=>{if(!curId)return;await fetch(API+'?action=notif_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:curId})});load();openDetail(curId,true)};
+async function openDetail(id,keep){curId=id;const x=rows.find(r=>+r.id===id);if(!x)return;
+document.querySelectorAll('#groups .ntf').forEach(el=>el.classList.toggle('sel',+el.dataset.id===id));
+const m=KIND_META[x.kind]||{t:x.kind};
+$('dmeta').textContent=m.t+' · '+fmtD(x.created_at)+' '+fmtT(x.created_at);
+$('dtitle').textContent=x.title||'';
+if(!+x.is_read&&!keep){fetch(API+'?action=notif_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}).then(load)}
+if(x.sku){try{const p=await (await fetch(`${API}?action=show&id=`+encodeURIComponent(await idBySku(x.sku)))).json();
+const wh=p.warehouse_id==2?'Холодильный':'Основной';
+$('dkv').innerHTML=[['Код',p.code||''],['Артикул','<span style="color:#7C3AED">'+(p.sku||x.sku||'')+'</span>'],['Категория',p.category||''],['Бренд',p.brand||''],['Владелец',p.owner||''],['Склад',wh]].map(([k,v])=>`<div class="kv"><div class="k">${k}</div><div class="v">${v||'—'}</div></div>`).join('');
+try{const h=await (await fetch(`${API}?action=history&id=${p.id}&limit=5`)).json();const last=(h||[])[0];
+$('dhist').innerHTML=last?`<tr><td>${(last.created_at||'').slice(0,16).replace('T',' ')}</td><td>${last.user_fio||''}</td><td>${last.field_label||last.field||''}</td><td>${last.old_value||''}</td><td>${last.new_value||''}</td></tr>`:`<tr><td colspan="5">${x.body||'—'}</td></tr>`}catch(e){$('dhist').innerHTML=`<tr><td colspan="5">${x.body||'—'}</td></tr>`}
+}catch(e){$('dkv').innerHTML=`<div class="kv"><div class="k">Артикул</div><div class="v">${x.sku||'—'}</div></div>`;$('dhist').innerHTML=`<tr><td colspan="5">${x.body||'—'}</td></tr>`}
+}else{$('dkv').innerHTML='';$('dhist').innerHTML=`<tr><td>${fmtD(x.created_at)} ${fmtT(x.created_at)}</td><td>—</td><td>${m.t}</td><td>—</td><td>${x.body||'—'}</td></tr>`}
+$('detail').classList.add('open')}
+async function idBySku(sku){const r=await (await fetch(API+'?'+new URLSearchParams({action:'list',search:sku,per_page:5}))).json();const f=(r.rows||[]).find(o=>o.sku===sku);return f?f.id:0}
+// --- Скрываемое левое меню (стрелка вверху) ---
+if(localStorage.getItem('navhide')==='1')document.body.classList.add('navhide');
+$('navhidebtn').onclick=()=>{document.body.classList.add('navhide');try{localStorage.setItem('navhide','1')}catch(e){}};
+$('navshowbtn').onclick=()=>{document.body.classList.remove('navhide');try{localStorage.setItem('navhide','0')}catch(e){}};
+load();
+</script>
+<script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>
+</html>

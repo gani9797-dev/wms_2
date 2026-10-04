@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ТСД — Приемка и Сборка</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#F4F5F7;color:#1C2331}
+header{background:#1C2331;color:#fff;padding:12px 14px;position:sticky;top:0;z-index:5}
+header b{font-size:18px}header small{color:#8A92A6;display:block;font-size:12px}
+nav{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+nav button{width:100%;height:60px;padding:10px;font-size:19px;font-weight:700}
+nav button.on{background:#fff;color:#1C2331;border-color:#fff}
+main{padding:12px;max-width:640px;margin:0 auto}
+.card{background:#fff;border:1px solid #EAEAEA;border-radius:12px;padding:12px;margin-bottom:12px}
+.row{display:flex;gap:8px;align-items:center}
+input,select,button{font-size:18px;padding:12px;border-radius:10px;border:1px solid #EAEAEA}
+input,select{width:100%;background:#fff}
+button{background:#6432FF;color:#fff;border-color:#6432FF;font-weight:700;cursor:pointer;width:100%}
+button.ghost{background:#fff;color:#1C2331;border-color:#EAEAEA}
+button.danger{background:#C62828;border-color:#C62828}
+#scan{font-size:22px;text-align:center;letter-spacing:1px}
+.prog{height:12px;background:#E6E6E6;border-radius:8px;overflow:hidden;margin:8px 0}
+.prog i{display:block;height:100%;background:#009900}
+.item{border-top:1px solid #F0F0F0;padding:10px 0;font-size:15px}
+.item b{font-size:16px}.mut{color:#8A92A6;font-size:13px}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:12px 18px;border-radius:10px;display:none;z-index:99;max-width:92vw;font-size:15px}
+.task{padding:12px;border:1px solid #EAEAEA;border-radius:12px;margin-bottom:10px;background:#fff;cursor:pointer}
+.task b{color:#6432FF;font-size:17px}
+.qtyrow{display:flex;gap:8px}.qtyrow button{font-size:22px;padding:8px}
+.hidden{display:none}.who{color:#7CFC9A;font-size:13px}
+.menu{display:flex;flex-direction:column;gap:10px}
+.menu button{min-height:64px;font-size:19px}
+.menu button.sub{background:#fff;color:#1C2331;border-color:#EAEAEA}
+.back{background:#fff;color:#1C2331;border-color:#EAEAEA;min-height:52px;font-size:17px;margin-top:4px}
+.rolechip{display:inline-block;background:#6432FF;color:#fff;border-radius:8px;padding:2px 8px;font-size:12px;margin-left:6px}
+.hbtn{width:auto;padding:8px 12px;font-size:15px}
+.inforow{border-top:1px solid #F0F0F0;padding:8px 0;font-size:15px}
+.inforow b{color:#6432FF}
+h2.m{margin:0 0 8px;font-size:20px}
+</style>
+</head>
+<body>
+<header><div class="row"><b>ТСД</b><span class="who" id="who"></span><span id="rolechip"></span><span style="flex:1"></span><button id="homebtn" class="hbtn" style="width:auto">☰ Меню</button></div><small id="hsub">выбери роль</small></header>
+<main><div id="home"></div>
+<div id="tasks"></div>
+<div id="detail" class="hidden"></div>
+</main>
+<div id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+let TOKEN=localStorage.getItem('tsd_token')||'tsd-12345';
+let MODE=localStorage.getItem('tsd_mode')||'in';
+let ME=JSON.parse(localStorage.getItem('tsd_me')||'null');
+let ROLE=localStorage.getItem('tsd_role')||'';
+let TSUB='';
+let CUR=null, DETAIL=null;
+paintMe(); paintRole();
+function toast(t,ms){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',ms||2600)}
+function paintMe(){$('who').textContent=(ME&&ME.fio)?('· '+ME.fio):'';const mc=$('me');if(!mc)return;mc.textContent=(ME&&ME.fio)?('Вошёл: '+ME.fio+' (id '+ME.id+')'):((ROLE||(ME&&ME.role))?('Роль: '+(roleOf()==='driver'?'Водитель':'Кладовщик')+' (без входа)'):'Без входа сканы запишутся обезличенно. PIN по умолчанию: 1001, 1002… (id+1000).')}
+function roleOf(){if(ROLE==='driver'||ROLE==='storekeeper')return ROLE;const r=(ME&&ME.role)||'';return /водител|driver/i.test(r)?'driver':'storekeeper'}
+function paintRole(){const rc=$('rolechip');if(!rc)return;const rl=ROLE||((ME&&ME.role)?roleOf():'');rc.innerHTML=rl?`<span class="rolechip">${rl==='driver'?'Водитель':'Кладовщик'}</span>`:'';$('hsub').textContent=rl?(rl==='driver'?'роль: водитель':'роль: кладовщик'):'выбери роль'}
+function mapRole(r){return /водител|driver/i.test(r||'')?'driver':(/кладов|storekeeper|admin|менедж|прием/i.test(r||'')?'storekeeper':'')}
+function apiTask(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json','X-Tsd-Token':TOKEN},o.headers||{});return fetch('tasks.php'+p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN),o)}
+function apiRecv(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json','X-Tsd-Token':TOKEN},o.headers||{});return fetch('api.php'+p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN),o)}
+function apiShip(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json','X-Tsd-Token':TOKEN},o.headers||{});return fetch('ship.php'+p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN),o)}
+const INFO_SUB=[
+{t:'По товару',act:'info',kind:'product',ph:'SSCC или штрихкод',hint:'Можно отсканировать SSCC паллеты или штрихкод товара'},
+{t:'По честному знаку',act:'info',kind:'mark',ph:'Код марки'},
+{t:'Информация по ячейке',act:'info',kind:'cell',ph:'Код ячейки'}];
+const MOVE_SUB=[
+{t:'Перемещение целого паллета',act:'mtasks',type:'перемещение',sub:'целый паллет'},
+{t:'Перемещение частичное',act:'mtasks',type:'перемещение',sub:'частичное'}];
+const MENUS={
+driver:{title:'Водитель',items:[
+{t:'Размещение',act:'mtasks',type:'размещение'},
+{t:'Перемещение',sub:MOVE_SUB},
+{t:'Пополнение',act:'mtasks',type:'пополнение'},
+{t:'Отбор',go:'otbor.html'},
+{t:'Работа с ячейками',sub:[
+{t:'Уплотнение до монопаллета',stub:1},
+{t:'Уплотнение Фронт',stub:1},
+{t:'Вымещение пикинга',stub:1}]},
+{t:'Информация',sub:INFO_SUB}]},
+storekeeper:{title:'Кладовщик',items:[
+{t:'Приемка',go:'prihod.html'},
+{t:'Отбор',go:'otbor.html'},
+{t:'Отгрузка',sub:[
+{t:'Сортировка по отгрузке',stub:1},
+{t:'Сортировка по наряду',stub:1},
+{t:'Отгрузить ТС',act:'ship'},
+{t:'Информация по отгрузке',act:'info',kind:'shipment',ph:'Номер отгрузки'}]},
+{t:'Перемещение',sub:MOVE_SUB},
+{t:'Информация',sub:INFO_SUB}]}};
+function hideHome(){$('home').innerHTML='';$('home').style.display='none';$('tasks').style.display='';const d=$('detail');if(d&&CUR)d.classList.remove('hidden')}
+function showHome(){$('tasks').style.display='none';$('detail').classList.add('hidden');$('home').style.display='';if(ROLE||(ME&&ME.role))renderMenu();else renderRoles()}
+document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;
+const d=$('detail');
+if(d&&!d.classList.contains('hidden')){const b=d.querySelector('#back');if(b){e.preventDefault();b.click();return}}
+if($('home').innerHTML===''&&$('tasks').style.display!=='none'){e.preventDefault();showHome()}});
+function renderRoles(){$('home').innerHTML=`<div class="card"><h2 class="m">Вход в ТСД</h2><div class="mut">Выбери роль:</div><div class="menu" style="margin-top:8px">
+<button id="rdrv">Водитель</button><button id="rskl">Кладовщик</button></div>
+<div class="mut" style="margin-top:8px">или войди по PIN — роль подставится сама:</div>
+<div class="row" style="margin-top:8px"><input id="pin" placeholder="PIN сотрудника (4 цифры)" inputmode="numeric" style="flex:1"><button id="login" style="width:auto">Войти</button></div>
+<div class="mut" style="margin-top:6px">PIN по умолчанию: 1001, 1002… (id+1000). Без входа сканы запишутся обезличенно.</div></div>`;
+$('rdrv').onclick=()=>setRole('driver');$('rskl').onclick=()=>setRole('storekeeper');$('login').onclick=doLogin;
+const pe=$('pin');if(pe)pe.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();doLogin()}};window.scrollTo(0,0)}
+function setRole(r){ROLE=r;localStorage.setItem('tsd_role',ROLE);if(ME)ME.role=r==='driver'?'Водитель':'Кладовщик';localStorage.setItem('tsd_me',JSON.stringify(ME));paintMe();paintRole();renderMenu()}
+function renderMenu(){const m=MENUS[roleOf()];$('home').innerHTML=`<div class="card"><h2 class="m">${m.title}</h2><div class="menu">`+
+m.items.map((it,i)=>`<button data-i="${i}">${it.t}</button>`).join('')+`</div><button class="back" id="chrole">Сменить роль</button></div>`;
+$('home').querySelectorAll('.menu button').forEach(b=>b.onclick=()=>openItem(m.items[+b.dataset.i],m.title));
+$('chrole').onclick=()=>{ROLE='';localStorage.removeItem('tsd_role');paintRole();renderRoles()};window.scrollTo(0,0)}
+function openItem(it,back){if(it.go){location.href=it.go;return}
+if(it.stub){$('home').innerHTML=`<div class="card"><h2 class="m">${it.t}</h2><div class="mut">Раздел в разработке.</div><button class="back" id="bk">← Назад</button></div>`;$('bk').onclick=()=>renderMenu();return}
+if(it.sub){$('home').innerHTML=`<div class="card"><div class="mut">${back} → ${it.t}</div><h2 class="m">${it.t}</h2><div class="menu">`+
+it.sub.map((s,i)=>`<button class="sub" data-i="${i}">${s.t}</button>`).join('')+`</div><button class="back" id="bk">← Назад</button></div>`;
+$('home').querySelectorAll('.menu button').forEach(b=>b.onclick=()=>openItem(it.sub[+b.dataset.i],it.t));
+$('bk').onclick=()=>renderMenu();window.scrollTo(0,0);return}
+if(it.act==='mtasks'){TSUB=it.sub||'';hideHome();CUR=null;$('detail').classList.add('hidden');loadModuleTasks(it.type);return}
+if(it.act==='ship'){MODE='out';localStorage.setItem('tsd_mode',MODE);TSUB='';hideHome();CUR=null;$('detail').classList.add('hidden');loadTasks();return}
+if(it.act==='info'){renderInfo(it);return}}
+function renderInfo(it){$('home').innerHTML=`<div class="card"><div class="mut">Информация</div><h2 class="m">${it.t}</h2>
+${it.hint?`<div class="mut">${it.hint}</div>`:''}
+<input id="iq" placeholder="${it.ph||'Скан...'}" autocomplete="off"><button id="igo">Найти</button><div id="ires" style="margin-top:8px"></div>
+<button class="back" id="bk">← Назад</button></div>`;
+const e=$('iq');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();go()}};$('igo').onclick=go;$('bk').onclick=()=>renderMenu();
+async function go(){const v=e.value.trim();if(!v){toast('Отсканируй код');return}
+$('ires').innerHTML='<div class="mut">Поиск...</div>';
+try{const r=await apiInfo('?action='+it.kind+'&q='+encodeURIComponent(v));const j=await r.json();
+if(j.error){$('ires').innerHTML=`<div class="card red" style="border:1px solid #EF9A9A;background:#FFEBEE;border-radius:10px;padding:10px">Ошибка: ${j.error}</div>`;return}
+if(j.empty||!(j.sections||[]).length){$('ires').innerHTML='<div class="mut">'+(j.empty||'Ничего не найдено')+'</div>';return}
+$('ires').innerHTML=j.sections.map(s=>`<div class="card" style="margin-top:8px"><b>${s.title}</b>`+s.rows.map(rw=>`<div class="inforow"><b>${rw[0]}</b><br>${rw[1]??'—'}</div>`).join('')+`</div>`).join('');
+}catch(err){$('ires').innerHTML='<div class="mut">Нет сети — попробуй позже</div>'}}}
+function apiInfo(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json','X-Tsd-Token':TOKEN},o.headers||{});return fetch('info.php'+p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN),o)}
+$('homebtn').onclick=()=>showHome();
+async function loadModuleTasks(type){
+const r=await apiTask('?action=tasks&type='+encodeURIComponent(type));
+if(r.status===401){toast('Нет доступа: проверь токен');return}
+const j=await r.json();const box=$('tasks');$('detail').classList.add('hidden');
+const rows=j.rows||[];
+if(!rows.length){box.innerHTML='<div class="card">Заданий ('+type+') нет. <div class="mut">Создай в веб: Задания → + Создать → тип «'+type+'».</div></div>';return}
+const lbl=type;
+box.innerHTML='<div class="mut">Модуль «Задания» · '+lbl+(TSUB?(' · '+TSUB):'')+': '+rows.length+'. Выбери задание (приоритет 1 = наивысший):</div>'+rows.map(t=>{
+return `<div class="task" data-id="${t.id}"><b>№${t.doc_no}</b> <span class="mut">приоритет ${t.prio} · ${t.type} · ${t.status}${t.lock_status?(' · '+t.lock_status+' ('+(t.lock_fio||'')+')'):''}</span><br><span class="mut">${t.warehouse||''}${t.doc_ref?(' · '+t.doc_ref):''}</span><div class="prog"><i style="width:${t.pct}%"></i></div><span class="mut">${t.fact_qty||0} / ${t.plan_qty||0} · ${t.pct}%</span></div>`}).join('')
++(j.wave&&j.wave.possible?'<div class="card"><b>Волна возможна</b><div class="mut">'+(j.wave.hint||'')+': '+Object.keys(j.wave.cross_sku||{}).join(', ')+'</div></div>':'');
+box.querySelectorAll('.task').forEach(el=>el.onclick=()=>openModuleTask(+el.dataset.id,type))};
+async function openModuleTask(id,type){
+const take=await apiTask('?action=take',{method:'POST',body:JSON.stringify({task_id:id,user_id:ME?ME.id:null,user_fio:ME?ME.fio:''})});
+const tj=await take.json();
+if(!take.ok&&tj.busy_id){toast(tj.error||'Занято');return}
+const r=await apiTask('?action=task&id='+id);const j=await r.json();
+if(j.error){toast(j.error);return}
+CUR=id;DETAIL=j;DETAIL._type=type;renderModuleDetail();$('detail').classList.remove('hidden');window.scrollTo(0,0)}
+function renderModuleDetail(){
+const h=DETAIL.head,type=DETAIL._type||h.type;
+const items=DETAIL.items||[];
+let s=`<div class="card"><b style="font-size:20px">№${h.doc_no} · ${type}</b><br><span>${h.warehouse||''}${h.doc_ref?(' · '+h.doc_ref):''}</span><div class="prog"><i style="width:${h.progress||0}%"></i></div><b>${h.fact_qty||0} / ${h.plan_qty||0} · ${h.progress||0}%</b><br><span class="mut">статус: ${h.status} · исполнитель: ${h.executor_fio||'—'}</span></div>`;
+s+=`<div class="card"><input id="scan" placeholder="Скан ячейки (${type==='размещение'?'куда':'откуда'})" autocomplete="off" inputmode="none"><div class="qtyrow" style="margin-top:8px"><button class="ghost" id="m1" style="width:60px">−</button><input id="qty" value="1" inputmode="numeric" style="text-align:center"><button class="ghost" id="p1" style="width:60px">+</button></div>`;
+s+=`<div class="row" style="margin-top:8px"><input id="sku" placeholder="Скан ШК / артикула"></div>`;
+s+=`<div class="row" style="margin-top:8px"><input id="pal" placeholder="Паллета (напр. MEZ223895)"></div>`;
+s+=`<button id="send" style="margin-top:8px">Подтвердить строку (Enter)</button><div class="mut" style="margin-top:6px">Порядок: ячейка → товар → кол-во → паллета. Большее кол-во запрещено.</div></div>`;
+s+=`<div class="card"><b>Позиции (${items.length})</b>`+items.map(i=>{const f=+i.fact_qty||0,pl=+i.plan_qty||0,pc=pl>0?Math.min(100,Math.round(f/pl*100)):0;return `<div class="item"><b>${i.sku}</b> <span class="mut">${i.code||''}</span><br>${i.name||''}<br><span class="mut">${i.cell_from||''}${i.cell_to?(' → '+i.cell_to):''} · ${f} / ${pl} ${i.unit||'шт'} · ${pc}%</span><div class="prog"><i style="width:${pc}%"></i></div></div>`}).join('')+`</div>`;
+s+=`<div class="row"><button class="ghost" id="back">← Задания</button><button id="fin" class="danger">Завершить</button></div>`;
+$('detail').innerHTML=s;const sc=$('scan');sc.focus();
+sc.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();doModuleScan()}};
+$('m1').onclick=()=>{const q=$('qty');q.value=Math.max(1,(+q.value||1)-1);sc.focus()};
+$('p1').onclick=()=>{const q=$('qty');q.value=(+q.value||1)+1;sc.focus()};
+$('send').onclick=doModuleScan;$('back').onclick=()=>{$('detail').classList.add('hidden');CUR=null;loadModuleTasks(type)};$('fin').onclick=finishModuleTask}
+async function doModuleScan(){
+const cell=$('scan').value.trim(),sku=$('sku').value.trim(),pal=$('pal').value.trim(),qty=+$('qty').value||1;
+if(!cell){toast('Отсканируй ячейку');return}
+if(!sku){toast('Отсканируй товар');return}
+const uid=ME?ME.id:null;
+try{
+const r=await apiTask('?action=confirm',{method:'POST',body:JSON.stringify({task_id:CUR,sku,qty,cell,pallet:pal,user_id:uid})});
+const j=await r.json();
+if(!r.ok){toast('Ошибка: '+(j.error||r.status));return}
+toast('Готово: '+sku+' ✓');openModuleTask(CUR,DETAIL._type);
+}catch(e){toast('Нет сети — попробуй позже')}$('scan').focus()}
+async function finishModuleTask(){
+const uid=ME?ME.id:null;
+const r=await apiTask('?action=move_to_sort',{method:'POST',body:JSON.stringify({task_id:CUR,pallet:($('pal')||{value:'—'}).value||'—',gate_cell:'ЗОНА-СОРТИРОВКИ',user_id:uid,moved_ok:1})});
+const j=await r.json();
+if(!r.ok&&j.ok===false){toast('Ошибка, передана оператору');return}
+toast('Строки подтверждены ✓');$('detail').classList.add('hidden');CUR=null;loadModuleTasks(DETAIL._type||'размещение')}
+async function doLogin(){const pe=$('pin');if(!pe)return;const pin=pe.value.trim();if(!pin){toast('Введи PIN');return}
+const r=await apiRecv('?action=login',{method:'POST',body:JSON.stringify({pin})});const j=await r.json();
+if(!r.ok){toast('Ошибка: '+(j.error||''));return}ME={id:j.id,fio:j.fio,role:j.role||''};localStorage.setItem('tsd_me',JSON.stringify(ME));const mr=mapRole(j.role||'');if(mr){ROLE=mr;localStorage.setItem('tsd_role',ROLE)}paintMe();paintRole();toast('Привет, '+ME.fio+'!');if(ROLE)renderMenu();else renderRoles()};
+async function loadTasks(){
+const api=MODE==='in'?apiRecv:apiShip;const r=await api('?action=tasks');
+if(r.status===401){toast('Нет доступа: проверь токен');return}
+const j=await r.json();const box=$('tasks');$('detail').classList.add('hidden');
+if(!(j.rows||[]).length){box.innerHTML='<div class="card">Нет заданий</div>';return}
+const lbl=MODE==='in'?'поступлений':'отгрузок';
+box.innerHTML='<div class="mut">Заданий ('+lbl+'): '+j.rows.length+'. Выбери документ:</div>'+j.rows.map(t=>{
+const no=t.doc_no||('#'+t.id), sub=MODE==='in'?((t.external_no||'')+' · '+(t.supplier||'')):((t.consignee||'')+' · '+(t.status||''));
+const wh=(t.warehouse||'')+((t.vehicle||'')?(' · '+t.vehicle):'');
+return `<div class="task" data-id="${t.id}"><b>${no}</b> <span class="mut">${sub}</span><br><span class="mut">${wh}</span><div class="prog"><i style="width:${t.pct}%"></i></div><span class="mut">${t.fact_qty||0} / ${t.plan_qty||0} · ${t.pct}% · ${t.status}</span></div>`}).join('');
+box.querySelectorAll('.task').forEach(el=>el.onclick=()=>openTask(+el.dataset.id))}
+async function openTask(id){const api=MODE==='in'?apiRecv:apiShip;const r=await api('?action=task&id='+id);const j=await r.json();if(j.error){toast(j.error);return}CUR=id;DETAIL=j;renderDetail();$('detail').classList.remove('hidden');window.scrollTo(0,0)}
+function renderDetail(){const h=DETAIL.head,p=DETAIL.progress;
+const title=MODE==='in'?('Поступление '+(h.doc_no||'')):('Отгрузка '+(h.doc_no||''));
+const sub=MODE==='in'?((h.supplier||'')+' · '+(h.warehouse||'')):((h.consignee||'')+' · '+(h.warehouse||''));
+let s=`<div class="card"><b style="font-size:20px">${title}</b><br><span>${sub}</span><div class="prog"><i style="width:${p.pct}%"></i></div><b>${p.fact} / ${p.plan} шт · ${p.pct}%</b><br><span class="mut">статус: ${h.status}</span></div>`;
+s+=`<div class="card"><input id="scan" placeholder="Скан штрихкода / артикула" autocomplete="off" inputmode="none"><div class="qtyrow" style="margin-top:8px"><button class="ghost" id="m1" style="width:60px">−</button><input id="qty" value="1" inputmode="numeric" style="text-align:center"><button class="ghost" id="p1" style="width:60px">+</button></div>`;
+if(MODE==='in')s+=`<div class="row" style="margin-top:8px"><input id="serial" placeholder="Серийник / марка ЧЗ (необязательно)"></div>`;
+s+=`<button id="send" style="margin-top:8px">${MODE==='in'?'Принять':'Собрать'} (Enter)</button><div class="mut" style="margin-top:6px">Сканер как клавиатура: скан → Enter. Офлайн-сканы копятся и досылаются.</div></div>`;
+s+=`<div class="card"><b>Позиции (${DETAIL.items.length})</b>`+DETAIL.items.map(i=>{const f=+i.fact_qty||0,pl=+i.plan_qty||0,pc=pl>0?Math.min(100,Math.round(f/pl*100)):0;return `<div class="item"><b>${i.sku}</b> <span class="mut">${i.code||''}</span><br>${i.name||''}<br><span class="mut">${f} / ${pl} шт · ${pc}%</span><div class="prog"><i style="width:${pc}%"></i></div></div>`}).join('')+`</div>`;
+s+=`<div class="row"><button class="ghost" id="back">← Задания</button><button id="fin" class="danger">${MODE==='in'?'Завершить приемку':'Завершить сборку'}</button></div>`;
+$('detail').innerHTML=s;const sc=$('scan');sc.focus();
+sc.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();doScan()}};
+$('m1').onclick=()=>{const q=$('qty');q.value=Math.max(1,(+q.value||1)-1);sc.focus()};
+$('p1').onclick=()=>{const q=$('qty');q.value=(+q.value||1)+1;sc.focus()};
+$('send').onclick=doScan;$('back').onclick=()=>{$('detail').classList.add('hidden');CUR=null;loadTasks()};$('fin').onclick=finishTask}
+async function doScan(){const code=$('scan').value.trim();if(!code){toast('Отсканируй код');return}
+const uid=ME?ME.id:null;
+const body=MODE==='in'?{receipt_id:CUR,code,qty:+$('qty').value||1,pallet:(($('pallet')||{value:''}).value||'').trim(),serial:($('serial')||{value:''}).value.trim(),receiver_id:uid}:{shipment_id:CUR,code,qty:+$('qty').value||1,user_id:uid};
+const api=MODE==='in'?apiRecv:apiShip;const act='?action=scan';
+try{const r=await api(act,{method:'POST',body:JSON.stringify(body)});const j=await r.json();
+if(!r.ok){if(!navigator.onLine){queueScan(body);toast('Офлайн — скан в очереди');return}toast('Ошибка: '+(j.error||r.status));return}
+toast(j.excess?('СВЕРХ ПЛАНА: '+j.sku):((MODE==='in'?'Принято: ':'Собрано: ')+j.sku+' ✓'));$('scan').value='';const sr=$('serial');if(sr)sr.value='';openTask(CUR);
+}catch(e){queueScan(body);toast('Нет сети — скан в очереди')}$('scan').focus()}
+function qkey(){return MODE==='in'?'tsd_queue_in':'tsd_queue_out'}
+function queueScan(b){const q=JSON.parse(localStorage.getItem(qkey())||'[]');q.push(b);localStorage.setItem(qkey(),JSON.stringify(q))}
+async function flushQueue(){for(const m of ['in','out']){const k=m==='in'?'tsd_queue_in':'tsd_queue_out';const q=JSON.parse(localStorage.getItem(k)||'[]');if(!q.length||!navigator.onLine)continue;const api=m==='in'?apiRecv:apiShip;const rest=[];for(const b of q){try{const r=await api('?action=scan',{method:'POST',body:JSON.stringify(b)});if(!r.ok)rest.push(b)}catch(e){rest.push(b)}}localStorage.setItem(k,JSON.stringify(rest));if(q.length!==rest.length)toast('Очередь дослана: '+(q.length-rest.length))} }
+async function finishTask(){if(!confirm(MODE==='in'?'Завершить приемку? Статус → Готова к размещению':'Завершить сборку? Статус → Собрано'))return;
+const api=MODE==='in'?apiRecv:apiShip;const uid=ME?ME.id:null;
+const body=MODE==='in'?{receipt_id:CUR,receiver_id:uid}:{shipment_id:CUR,user_id:uid};
+const r=await api('?action=finish',{method:'POST',body:JSON.stringify(body)});const j=await r.json();
+if(!r.ok){toast('Ошибка: '+(j.error||''));return}toast(MODE==='in'?'Приемка завершена ✓':'Сборка завершена ✓');$('detail').classList.add('hidden');CUR=null;loadTasks()}
+setInterval(flushQueue,5000);
+function boot(){if(ROLE||(ME&&ME.role)){if(!ROLE){ROLE=roleOf();localStorage.setItem('tsd_role',ROLE)}paintRole();renderMenu()}else renderRoles()}
+boot();
+</script>
+</body>
+</html>

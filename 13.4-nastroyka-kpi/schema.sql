@@ -1,0 +1,17 @@
+-- Модуль 13.4 Настройка KPI
+
+CREATE TABLE IF NOT EXISTS kpi_indicators (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(50) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  UNIQUE KEY uq_kpii_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS kpi_rules (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  indicator_id BIGINT UNSIGNED NOT NULL,
+  formula VARCHAR(255) NOT NULL DEFAULT '',
+  is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  KEY idx_kpir_ind (indicator_id),
+  CONSTRAINT fk_kpir FOREIGN KEY (indicator_id) REFERENCES kpi_indicators (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

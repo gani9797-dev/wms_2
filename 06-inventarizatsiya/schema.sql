@@ -1,0 +1,21 @@
+-- Модуль 6 Инвентаризация
+
+CREATE TABLE IF NOT EXISTS inventories (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  doc_no VARCHAR(20) NOT NULL COMMENT 'ИНВ-0001',
+  warehouse_id BIGINT UNSIGNED NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'new' COMMENT 'new/work/done',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_inv_no (doc_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS inventory_items (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  inventory_id BIGINT UNSIGNED NOT NULL,
+  sku VARCHAR(50) NOT NULL,
+  cell VARCHAR(50) NULL,
+  plan_qty DECIMAL(12,3) NOT NULL DEFAULT 0,
+  fact_qty DECIMAL(12,3) NOT NULL DEFAULT 0,
+  KEY idx_invi_inv (inventory_id),
+  CONSTRAINT fk_invi FOREIGN KEY (inventory_id) REFERENCES inventories (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

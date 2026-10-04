@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Поступления — TiMLog</title>
+<style>
+:root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);display:flex}
+aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14px;position:sticky;top:0;max-height:100vh;overflow:auto}
+aside .logo{font-size:22px;font-weight:700;margin:6px 0 22px}
+aside a{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
+aside a.on{background:var(--vio);color:#fff}
+main{flex:1;padding:18px 22px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:4px 0;font-size:24px}
+.user{display:flex;gap:10px;align-items:center;font-size:14px}
+.ava{width:36px;height:36px;border-radius:50%;background:#EAEAEA;display:flex;align-items:center;justify-content:center;font-weight:700}
+.bar{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap}
+.bar input[type=text]{width:360px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:14px;position:relative}
+.btn.pri{background:var(--vio);color:#fff;border-color:var(--vio);font-weight:700}
+.badge{position:absolute;top:-8px;right:-8px;background:var(--vio);color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;display:flex;align-items:center;justify-content:center}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px;color:#2C313C;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+td{padding:10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+tr.sel{background:#F8F6FC}tr:hover td{background:#fafaff;cursor:pointer}
+a.num{color:var(--vio);font-weight:700;text-decoration:none}
+.st{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap}
+.st-accepting{background:#FFF3E0;color:#E65100;border:1px solid #FFCC80}
+.st-ready_accept{background:#E8F5E9;color:#2E7D32;border:1px solid #A5D6A7}
+.st-placing{background:#FFF3E0;color:#E65100;border:1px solid #FFCC80}
+.st-unloading{background:#F0F6FF;color:#1D61D2;border:1px solid #A3C2F0}
+.st-closed_short,.st-closed{border:1px solid #6d7280;color:#6d7280}
+.st-cancelled{background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A}
+.st-draft{background:#eee;color:#555}
+.st-expected,.st-arrived,.st-on_stock,.st-ready_place{background:#F0F6FF;color:#1D61D2;border:1px solid #A3C2F0}
+.pager{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;color:var(--mut);font-size:13px}
+.pg button{border:1px solid var(--line);background:#fff;border-radius:8px;min-width:34px;padding:6px 8px;margin:0 2px;cursor:pointer}
+.pg button.on{background:var(--vio);color:#fff;border-color:var(--vio)}
+.drawer{position:fixed;top:0;right:-1180px;width:1120px;max-width:97vw;height:100vh;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.15);transition:right .25s;padding:18px 22px;overflow:auto;z-index:40}
+.drawer.open{right:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);margin:10px 0 16px;font-size:14px}
+.tabs b{color:var(--vio);border-bottom:3px solid var(--vio);padding-bottom:8px;cursor:pointer}
+.tabs span{color:#6C757D;cursor:pointer}
+.grid2{display:flex;gap:16px}.box{flex:1;border:1px solid #F0F0F0;border-radius:8px;padding:14px 16px;margin-bottom:14px}
+.box h3{margin:0 0 8px;font-size:14px}.kv{display:flex;justify-content:space-between;padding:7px 0;font-size:13px;gap:12px}.kv i{color:#4A4A4A;font-style:normal}
+.fpanel{position:fixed;top:0;right:-520px;width:480px;max-width:94vw;height:100vh;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.15);transition:right .25s;padding:18px;overflow:auto;z-index:50}
+.fpanel.open{right:0}.fpanel label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:12px 0 4px}
+.fpanel input,.fpanel select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px}
+.frow{display:flex;gap:8px}.frow>*{flex:1}
+.ctx{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:99;min-width:260px;padding:6px 0;font-size:14px;max-height:80vh;overflow:auto}
+.ctx div{padding:9px 18px;cursor:pointer}.ctx div:hover{background:#F4F2FF}.ctx hr{border:0;border-top:1px solid #F0F0F0}
+.prog{height:8px;background:#E6E6E6;border-radius:6px;min-width:70px;overflow:hidden}.prog i{display:block;height:100%;background:#009900}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.chip{background:#F4F0FB;color:#663EB2;border-radius:12px;padding:5px 10px;font-size:12px}
+.sub{padding-left:28px !important;color:#555}
+.wiz{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:70}
+.wiz.open{display:flex}.wbox{background:#fff;border-radius:12px;padding:20px;width:760px;max-width:96vw;max-height:90vh;overflow:auto}
+table.mini{width:100%;border-collapse:collapse;font-size:13px}table.mini td,table.mini th{border-bottom:1px solid #F0F0F0;padding:7px;white-space:nowrap}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:60}
+.modal.open{display:flex}.mbox{background:#fff;border-radius:12px;padding:20px;width:640px;max-width:96vw;max-height:90vh;overflow:auto}
+.mbox input,.mbox select{width:100%;padding:9px;margin:6px 0;border:1px solid var(--line);border-radius:8px}
+.mbox label{font-size:12px;color:#4A4A4A;font-weight:700}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:99}
+#bellbtn{position:relative;cursor:pointer;font-size:18px;background:none;border:0;padding:4px}
+#bellbadge{position:absolute;top:-4px;right:-6px;background:#FF0000;color:#fff;border-radius:50%;min-width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px}
+#notifpanel{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);z-index:120;width:440px;max-width:94vw;max-height:80vh;overflow:auto;padding:14px 16px}
+#notifpanel h2{margin:0;font-size:18px}
+.ntf{display:flex;gap:10px;padding:10px 6px;border-bottom:1px solid #F0F0F0;cursor:pointer;align-items:flex-start}
+.ntf:hover{background:#fafaff}.ntf.read{opacity:.75}
+.ntf .ic{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+.ntf .tx{flex:1;font-size:12px}.ntf .tx b{font-size:13px;color:#1A1A1A}
+.ntf .tx .sub{color:#A0AEC0;padding-left:0 !important}.ntf .tx .body{color:#4A5568;margin-top:2px}
+.ntf .tm{color:#A0AEC0;font-size:11px;white-space:nowrap}
+.ntf .dot{width:10px;height:10px;border-radius:50%;background:#EF5350;flex:none;margin-top:6px}
+.ntabs{display:flex;gap:16px;margin:8px 0;font-size:14px}
+.ntabs span{cursor:pointer;color:#999;padding-bottom:6px}
+.ntabs span.on{color:var(--ink);font-weight:700;border-bottom:2px solid var(--vio)}
+.tgl{position:relative;width:44px;height:24px;background:#B3B3B3;border-radius:12px;cursor:pointer;flex:none;border:0}
+.tgl::after{content:'';position:absolute;top:2px;left:22px;width:20px;height:20px;background:#fff;border-radius:50%;transition:left .15s}
+.tgl.on{background:#009900}.tgl.on::after{left:2px}
+.subrow{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #F0F0F0;font-size:13px}
+.subrow .nm{flex:1}.subrow .nm b{display:block}
+.subrow label{font-size:11px;color:#4A4A4A;display:flex;gap:4px;align-items:center;margin:0 !important;font-weight:400 !important}
+.hint{font-size:12px;color:var(--mut)}
+</style>
+<style>
+#navhidebtn{width:100%;background:#2A3446;color:#8A92A6;border:0;border-radius:8px;padding:8px;cursor:pointer;font-size:13px;margin-bottom:10px}
+#navhidebtn:hover{background:#3A4658;color:#fff}
+#navshowbtn{position:fixed;top:12px;left:8px;z-index:200;display:none;background:#1C2331;color:#fff;border:1px solid #444;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:14px}
+body.navhide aside{display:none}
+body.navhide #navshowbtn{display:block}
+body.navhide main{max-width:none}
+</style>
+<style>
+.gear{cursor:pointer;color:#663EB2}
+#colpanel{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);z-index:130;width:320px;max-width:92vw;max-height:80vh;overflow:auto;padding:14px 16px}
+#colpanel h2{margin:0;font-size:16px}
+.hint{font-size:12px;color:var(--mut)}
+</style>
+<style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
+<body>
+<button id="navshowbtn" title="Показать меню">▶</button>
+<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<main>
+<div class="top"><h1>Поступления</h1><div class="user"><button id="bellbtn" title="Уведомления">🔔<span id="bellbadge">0</span></button><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span></div></div>
+<div class="bar">
+<input id="q" type="text" placeholder="Поиск по № документа, накладной, поставщику, ТТН...">
+<button class="btn" id="fbtn">Фильтры<span class="badge" id="fbadge" style="display:none">0</span></button>
+<button class="btn" id="imp">Импорт</button>
+<button class="btn" id="exp">Экспорт</button>
+<button class="btn pri" id="mk">+ Создать</button>
+</div>
+<div class="chips" id="chips"></div>
+<div class="card" style="overflow:auto">
+<table><thead><tr><th><input type="checkbox"></th><th>№ документа</th><th>№ внешний</th><th>Дата прибытия</th><th>Дата приемки</th><th>Поставщик</th><th>ТС</th><th>Ворота</th><th>Тип разгрузки</th><th>Склад</th><th>Статус приемки</th><th>Сумма, ₽</th><th>SKU</th><th>шт.</th><th>Принято</th><th>Размещено</th><th>Флаги</th><th>⋮ <span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
+<tbody id="rows"><tr><td colspan="18">Загрузка...</td></tr></tbody></table>
+<div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
+<select id="pp"><option>5</option><option>9</option><option selected>14</option><option>20</option></select></div>
+<div class="pg" id="pg"></div></div>
+</div>
+
+<!-- Текущие операции по поступлению (как в макете под реестром) -->
+<div class="card" style="margin-top:16px;overflow:auto">
+<div style="padding:12px 14px;font-weight:700">Текущие операции по поступлению</div>
+<table><thead><tr><th>№</th><th>Код</th><th>Артикул ▲</th><th>Статус приемки</th><th>Дата приемки</th><th>Приемщик</th><th>Паллета</th><th>Кол-во SKU</th><th>Кол-во шт.</th><th>Статус размещения</th><th>Дата размещения</th><th>Кладовщик</th><th>Ячейка</th></tr></thead>
+<tbody id="ops"><tr><td colspan="13" style="color:var(--mut)">Откройте поступление — операции подгрузятся сюда</td></tr></tbody></table>
+</div>
+</main>
+
+<div class="fpanel" id="fp">
+<h2 style="margin:0">Фильтры <span class="badge" id="fbadge2" style="position:static;display:inline-flex">0</span></h2>
+<label>Дата поставки (планируемая)</label><div class="frow"><input type="date" id="plf"><input type="date" id="plt"></div>
+<label>Дата приемки (фактическая)</label><div class="frow"><input type="date" id="acf"><input type="date" id="act"></div>
+<label>Дата размещения</label><div class="frow"><input type="date" id="pcf"><input type="date" id="pct"></div>
+<label>Дата создания документа</label><div class="frow"><input type="date" id="df"><input type="date" id="dt"></div>
+<label>Дата прибытия ТС</label><div class="frow"><input type="date" id="arf"><input type="date" id="art"></div>
+<label>Дата разгрузки ТС</label><div class="frow"><input type="date" id="unf"><input type="date" id="unt"></div>
+<label>Статус приемки</label>
+<div id="sts">
+<label><input type="checkbox" value="draft"> Черновик</label>
+<label><input type="checkbox" value="expected"> Ожидается</label>
+<label><input type="checkbox" value="arrived"> Прибыл</label>
+<label><input type="checkbox" value="unloading"> Разгружается</label>
+<label><input type="checkbox" value="ready_accept"> Готова к приемке</label>
+<label><input type="checkbox" value="accepting"> Приемка</label>
+<label><input type="checkbox" value="ready_place"> Готова к размещению</label>
+<label><input type="checkbox" value="placing"> Размещение</label>
+<label><input type="checkbox" value="closed"> Закрыто</label>
+<label><input type="checkbox" value="closed_short"> Закрыто с недостачей</label>
+<label><input type="checkbox" value="cancelled"> Отменено</label>
+</div>
+<label>Поставщик</label><select id="sup"><option value="">Выбрать</option><option value="1">ООО «СпортОпт»</option><option value="2">ООО «Мяч-Сервис»</option><option value="3">ООО «Восток»</option><option value="4">ИП Смирнов В.В.</option><option value="6">ООО «ТоргСнаб»</option><option value="7">ООО «ФиТрейд»</option><option value="8">ИП Козлов К.К.</option></select>
+<label>Склад</label><select id="wh"><option value="">Все склады</option><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select>
+<label>ТС</label><input id="veh" type="text" placeholder="А221ВА77">
+<label>Ворота</label><input id="gate" type="text" placeholder="11">
+<label>Тип разгрузки</label><select id="ult"><option value="">Выбрать</option><option>Внавал</option><option>Паллеты</option></select>
+<label>Тип поступления</label><select id="rtp"><option value="">Все</option><option value="supply">Поставка на склад</option><option value="return">Возврат</option></select>
+<label>Приоритет</label><select id="pri"><option value="all">Все</option><option value="low">Низкий</option><option value="normal">Обычный</option><option value="high">Высокий</option></select>
+<label>Наличие расхождений</label><select id="hdiff"><option value="all">Все</option><option value="yes">Есть</option><option value="no">Нет</option></select>
+<div style="display:flex;gap:10px;margin-top:16px"><button class="btn" id="fclr">Сбросить фильтры</button><button class="btn pri" id="fok">Применить</button><button class="btn" id="fclose">Отмена</button></div>
+<p style="color:var(--mut);font-size:13px">Активные фильтры: <span id="factive">0</span> · <a href="#" id="freset">Сбросить все</a></p>
+</div>
+
+<div class="drawer" id="dr"><button class="btn" onclick="dr.classList.remove('open')">✕</button>
+<h2 id="dh">Карточка</h2>
+<div class="tabs" id="tabs"><b data-t="main">Основное</b><span data-t="goods">Товары</span><span data-t="docs">Документы</span><span data-t="hist">История</span><span data-t="flags">Флаги</span></div>
+<div id="db">...</div>
+<div style="display:flex;gap:10px;margin:10px 0"><button class="btn pri">Изменить</button><button class="btn" id="dprint">Печать ▾</button><button class="btn" onclick="dr.classList.remove('open')">Закрыть</button></div>
+</div>
+
+<div class="ctx" id="ctx">
+<div data-a="open">Открыть</div><div data-a="edit">Редактировать</div><div data-a="copy">Копировать</div><div data-a="base">Создать на основании ▸</div>
+<div class="sub" data-a="base-short">Доприемка недостачи (A-105107-Н)</div>
+<div class="sub" data-a="base-over">Доприемка излишков (A-105107-И)</div><hr>
+<div data-a="print">Печать ▸</div>
+<div class="sub" data-a="p-act">Акт приема-передачи</div>
+<div class="sub" data-a="p-torg12">Торг-12</div>
+<div class="sub" data-a="p-torg2">Торг-2</div>
+<div class="sub" data-a="p-mx1">МХ1</div>
+<div class="sub" data-a="p-shk">ШК по товарам</div>
+<div class="sub" data-a="p-re">Реестр приемки/размещения</div>
+<div class="sub" data-a="p-pal">Паллетный лист</div>
+<div data-a="send">Отправить ▸</div>
+<div class="sub" data-a="s-mail">Письмо</div>
+<div class="sub" data-a="s-link">Ссылку на документ</div>
+<div data-a="docs">Показать документы</div><div data-a="mov">Показать движения</div><div data-a="tasks">Задания по документу</div><div data-a="hist">История изменений</div><hr>
+<div data-a="auto">Принять автоматически</div><div data-a="assign">Назначить приемщика</div>
+<div data-a="prio">Приоритет ▸</div>
+<div class="sub" data-a="prio-h">Повысить</div>
+<div class="sub" data-a="prio-l">Понизить</div>
+<div data-a="cancel">Отменить/Вернуть</div><hr>
+<div data-a="arch">Архивировать</div>
+<div data-a="del">Удалить</div>
+</div>
+
+<div class="modal" id="mm"><div class="mbox"><h3 style="margin-top:0">Новое поступление</h3>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Поставщик *</label><select id="ns"><option value="1">ООО «СпортОпт»</option><option value="2">ООО «Мяч-Сервис»</option><option value="3">ООО «Восток»</option><option value="7">ООО «ФиТрейд»</option></select></div>
+<div style="flex:1"><label>Склад *</label><select id="nw"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Документ № (внешний)</label><input id="next2" type="text" placeholder="АСН223697"></div>
+<div style="flex:1"><label>Дата поставки, план *</label><input id="np" type="date" value="2025-06-22"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Тип поступления *</label><select id="nrt"><option value="supply">Поставка на склад</option><option value="return">Возврат</option></select></div>
+<div style="flex:1"><label>Тип приемки *</label><select id="nat"><option value="recount">С пересчетом вложений</option><option value="no_recount">Без пересчета</option></select></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Тип разгрузки</label><select id="nut"><option>Внавал</option><option>Паллеты</option></select></div>
+<div style="flex:1"><label>Кол-во грузовых мест, план *</label><input id="ncp" type="number" value="4"></div></div>
+<div style="display:flex;gap:10px;margin-top:10px"><button class="btn" onclick="mm.classList.remove('open')">Отмена</button><button class="btn pri" id="mok">Создать</button></div>
+</div></div>
+<div id="notifpanel">
+<div style="display:flex;justify-content:space-between;align-items:center"><h2>Уведомления</h2><div><a href="#" id="notifset" style="font-size:16px;text-decoration:none" title="Настройка уведомлений">⚙️</a></div></div>
+<div class="ntabs"><span id="nt_all" class="on">Все <b id="nc_all">0</b></span><span id="nt_unread">Непрочитанные <b id="nc_unread">0</b></span><span id="nt_imp">Важные <b id="nc_imp">0</b></span></div>
+<div><a href="#" id="notifreadall" style="font-size:13px">Отметить все как прочитанные</a></div>
+<div id="notiflist" style="margin-top:6px"></div>
+<div style="margin-top:8px"><a href="../12-uvedomleniya/app.html" style="font-size:13px">Показать все уведомления</a></div>
+</div>
+
+<div class="modal" id="notifmodal"><div class="mbox" style="width:720px;max-width:96vw"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Настройка уведомлений</h3><button class="btn" id="notifmclose">✕</button></div>
+<div class="tabs"><span id="nstab1" class="on">Мои подписки</span><span id="nstab2">○ Каналы и расписание</span></div>
+<div id="nspane1">
+<div style="display:flex;justify-content:flex-end;margin:6px 0"><button class="btn pri" id="subadd">+ Добавить подписку</button></div>
+<div style="display:flex;gap:8px;font-size:12px;color:#4A4A4A;font-weight:700;border-bottom:1px solid #E2E8F0;padding-bottom:6px"><div style="flex:1">Что отслеживаем</div><div style="width:170px">Каналы уведомлений</div><div style="width:150px">Условие</div><div style="width:60px">Статус</div></div>
+<div id="subrows"></div>
+<div class="hint">Web / Email / Telegram — предпочтения доставки. Реальная отправка за пределами модуля.</div>
+<div style="display:flex;gap:10px;margin-top:10px;justify-content:flex-end"><button class="btn" id="subreset">Сбросить</button><button class="btn" id="subclose">Закрыть</button></div>
+</div>
+<div id="nspane2" style="display:none"><p class="hint">Каналы и расписание: Email — ежедневно в 09:00, Telegram — мгновенно, Web — мгновенно. Настройка расписания — в модуле 12.</p></div>
+</div></div>
+<div id="colpanel">
+<div style="display:flex;justify-content:space-between;align-items:center"><h2>Столбцы таблицы</h2></div>
+<div class="hint" style="margin:6px 0">Свои настройки для каждого пользователя.</div>
+<div id="collist" style="margin:6px 0;max-height:50vh;overflow:auto"></div>
+<div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="colreset">Сбросить</button><button class="btn pri" id="colclose">Готово</button></div>
+</div>
+<div id="toast"></div>
+<input type="file" id="impfile" accept=".csv" style="display:none">
+
+<script>
+const API='demo_sqlite.php';
+let page=1,perPage=14,lastRows=[],ctxId=null,curId=null,curTab='main';
+const $=id=>document.getElementById(id);
+const stLabel={draft:'Черновик',expected:'Ожидается',arrived:'Прибыл',unloading:'Разгружается',on_stock:'На складе',ready_accept:'Готова к приемке',accepting:'Приемка',ready_place:'Готова к размещению',placing:'Размещение',closed:'Закрыто',closed_short:'Закрыто с недостачей',cancelled:'Отменена',archived:'В архиве'};
+const dFmt=s=>(s||'').slice(0,16).replace('T',' ');
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2400)}
+function params(){const p=new URLSearchParams({action:'list',page,per_page:perPage});
+const v=(id,k)=>{if($(id)&&$(id).value)p.set(k,$(id).value)};
+if($('q').value)p.set('search',$('q').value);
+v('df','doc_from');v('dt','doc_to');v('plf','plan_from');v('plt','plan_to');
+v('acf','accept_from');v('act','accept_to');v('pcf','place_from');v('pct','place_to');
+v('arf','arrival_from');v('art','arrival_to');v('unf','unload_from');v('unt','unload_to');
+v('sup','supplier_id');v('wh','warehouse_id');v('veh','vehicle');v('gate','gate');v('ult','unload_type');v('rtp','receipt_type');
+if($('pri').value!=='all')p.set('priority',$('pri').value);
+if($('hdiff').value!=='all')p.set('has_diff',$('hdiff').value);
+document.querySelectorAll('#sts input:checked').forEach(c=>p.append('status[]',c.value));
+return p}
+function flagsHtml(o){let f=[];if(o.serial_scan)f.push('SN');if(o.marking_scan)f.push('ЧЗ');if(o.has_diff)f.push('⚠');return f.join(' ')}
+async function load(){const r=await fetch(API+'?'+params());const j=await r.json();lastRows=j.rows||[];
+$('info').textContent=`Показано ${j.from}–${j.to} из ${j.total}`;
+const n=j.active_filters||0;$('fbadge').style.display=n?'flex':'none';$('fbadge').textContent=n;$('fbadge2').textContent=n;$('factive').textContent=n;
+$('rows').innerHTML=lastRows.map(o=>`<tr data-id="${o.id}"><td><input type="checkbox"></td>
+<td><a class="num" href="#" data-id="${o.id}">${o.doc_no}</a></td><td>${o.external_no||''}</td><td>${dFmt(o.arrival_date)}</td><td>${dFmt(o.accept_date)}</td>
+<td>${o.supplier||''}</td><td>${o.vehicle||''}</td><td>${o.gate||''}</td><td>${o.unload_type||''}</td><td>${o.warehouse||''}</td>
+<td><span class="st st-${o.status}">${stLabel[o.status]||o.status}</span></td>
+<td>${Number(o.total||0).toLocaleString('ru-RU')}</td><td>${o.sku_count??''}</td><td>${o.qty_total??''}</td>
+<td>${o.accepted_pct??0}%</td><td>${o.placed_pct??0}%</td><td>${flagsHtml(o)}</td><td>⋮</td></tr>`).join('')||'<tr><td colspan=18>Ничего не найдено</td></tr>';
+const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
+for(let i=1;i<=Math.min(pages,5);i++)h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`;
+$('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()});
+document.querySelectorAll('#rows tr').forEach(tr=>{if(!tr.dataset.id)return;tr.onclick=e=>{if(e.target.tagName!=='INPUT')open(+tr.dataset.id)};
+tr.oncontextmenu=e=>{e.preventDefault();ctxId=+tr.dataset.id;const c=$('ctx');c.style.display='block';c.style.left=e.clientX+'px';c.style.top=e.clientY+'px'}})}
+async function loadOps(id){const r=await (await fetch(`${API}?action=operations&id=${id}`)).json();
+$('ops').innerHTML=r.map(o=>`<tr><td>${o.line_no}</td><td style="color:#783feb">${o.sku}</td><td>${o.sku}</td><td>${o.accept_status||''}</td><td>${dFmt(o.accept_date)}</td><td>${o.receiver_name||''}</td><td style="color:#783feb">${o.pallet||''}</td><td>${o.sku_qty}</td><td>${o.qty}</td><td>${o.place_status||''}</td><td>${dFmt(o.place_date)}</td><td>${o.storekeeper_name||''}</td><td style="color:#783feb">${o.cell||''}</td></tr>`).join('')||'<tr><td colspan=13>Операций нет</td></tr>'}
+async function open(id,tab){curId=id;if(tab)curTab=tab;
+const r=await fetch(`${API}?action=show&id=${id}`);const s=await r.json();
+if(s.error){toast(s.error);return}
+$('dh').textContent=`Поступление ${s.doc_no} от ${dFmt(s.doc_date)}`;
+document.querySelectorAll('#tabs [data-t]').forEach(el=>{el.style.fontWeight=el.dataset.t===curTab?'700':'400';el.style.color=el.dataset.t===curTab?'#6432FF':'#6C757D'});
+if(curTab==='main'){
+$('db').innerHTML=`<div class="grid2"><div class="box"><h3>Основная информация</h3>
+<div class="kv"><i>Поступление №</i><b>${s.doc_no}</b></div><div class="kv"><i>Документ № (внеш.)</i><span>${s.external_no||'—'}</span></div>
+<div class="kv"><i>Дата документа</i><span>${dFmt(s.doc_date)}</span></div>
+<div class="kv"><i>Контрагент</i><span>${s.contractor_name||''}</span></div>
+<div class="kv"><i>Поставщик</i><span>${s.supplier_name||''}</span></div>
+<div class="kv"><i>Договор</i><span>${s.contract_no||'—'}</span></div>
+<div class="kv"><i>Склад</i><span>${s.warehouse_name||''}</span></div>
+<div class="kv"><i>Статус</i><span class="st st-${s.status}">${s.status_label}</span></div>
+<div class="kv"><i>Тип / Приемка / Разгрузка</i><span>${s.receipt_type} / ${s.accept_type||'—'} / ${s.unload_type||'—'}</span></div></div>
+<div class="box"><h3>Стоимость</h3>
+<div class="kv"><i>Сумма, ₽</i><span>${s.total}</span></div><div class="kv"><i>НДС</i><span>${s.vat_rate}%</span></div>
+<div class="kv"><i>Сумма НДС, ₽</i><span>${s.vat_sum}</span></div><div class="kv"><i>Итого с НДС, ₽</i><b>${s.total_with_vat}</b></div>
+<div class="kv"><i>Оплачено, ₽</i><span>${s.paid}</span></div><div class="kv"><i>Долг, ₽</i><b>${s.debt}</b></div></div></div>
+<div class="box"><h3>Планирование</h3>
+<div class="kv"><i>Дата поставки, план</i><span>${dFmt(s.plan_delivery_date)}</span></div>
+<div class="kv"><i>Дата прибытия ТС, план/факт</i><span>${dFmt(s.vehicle_arrival_plan)} / ${dFmt(s.vehicle_arrival_fact)}</span></div>
+<div class="kv"><i>Номер ТС, план/факт</i><span>${s.vehicle_plan||'—'} / ${s.vehicle_fact||s.vehicle||'—'}</span></div>
+<div class="kv"><i>Грузовые места, план/факт</i><span>${s.cargo_places_plan} / ${s.cargo_places_fact}</span></div>
+<div class="kv"><i>Принято / Размещено</i><span>${s.accepted_pct}% / ${s.placed_pct}%</span></div></div>`;
+await loadOps(id);
+}else{await loadTab()}
+$('dr').classList.add('open')}
+async function loadTab(){const id=curId;let h='';
+if(curTab==='goods'){const r=await (await fetch(`${API}?action=items&id=${id}`)).json();
+h=`<h3>Товары по поступлению (${r.length})</h3><table class="mini"><tr><th>п/п</th><th>Код</th><th>Артикул</th><th>Наименование</th><th>Ед</th><th>Кол-во</th><th>Цена</th><th>НДС%</th><th>Сумма без НДС</th><th>Сумма НДС</th><th>Сумма с НДС</th></tr>`+r.map((t,i)=>`<tr><td>${t.line_no||i+1}</td><td>${t.code||''}</td><td>${t.sku}</td><td>${t.name}</td><td>${t.unit}</td><td>${t.qty}</td><td>${t.price}</td><td>${t.vat_rate}</td><td>${t.sum_novat}</td><td>${t.vat_sum}</td><td>${t.sum_vat}</td></tr>`).join('')+'</table>'}
+else if(curTab==='docs'){const r=await (await fetch(`${API}?action=documents&id=${id}`)).json();
+h=`<h3>Вложенные документы (${r.length})</h3><table class="mini"><tr><th>п/п</th><th>Наименование</th><th>Формат</th><th>Страниц</th></tr>`+r.map((d,i)=>`<tr><td>${i+1}</td><td>${d.name}</td><td>${d.format}</td><td>${d.pages}</td></tr>`).join('')+'</table>'}
+else if(curTab==='hist'){const r=await (await fetch(`${API}?action=history&id=${id}`)).json();
+h=`<h3>История документа (${r.length})</h3><table class="mini"><tr><th>Дата ▲</th><th>Что изменилось</th><th>Было</th><th>Стало</th><th>Пользователь</th></tr>`+r.map(x=>`<tr><td>${x.created_at||''}</td><td>${x.field||x.action}</td><td>${x.old_value||x.old_status||''}</td><td>${x.new_value||x.new_status||''}</td><td>${x.user_fio||''}</td></tr>`).join('')+'</table>'}
+else if(curTab==='flags'){const r=await (await fetch(`${API}?action=flags&id=${id}`)).json();
+h=`<h3>Сканирование маркировок ЧЗ / серийники (${r.length})</h3><table class="mini"><tr><th>п/п</th><th>Артикул</th><th>Маркировка КИ</th><th>Приемщик</th><th>Дата</th></tr>`+r.map((f,i)=>`<tr><td>${i+1}</td><td>${f.sku||''}</td><td style="max-width:320px;overflow:hidden;text-overflow:ellipsis">${f.marking_code||f.serial_no||''}</td><td>${f.receiver||''}</td><td>${f.flag_date||''}</td></tr>`).join('')+'</table>'}
+$('db').innerHTML=h}
+document.querySelectorAll('#tabs [data-t]').forEach(el=>el.onclick=()=>{curTab=el.dataset.t;open(curId)});
+$('fbtn').onclick=()=>$('fp').classList.add('open');
+$('fclose').onclick=()=>$('fp').classList.remove('open');
+$('fok').onclick=()=>{page=1;$('fp').classList.remove('open');load()};
+function clrF(){['q','df','dt','plf','plt','acf','act','pcf','pct','arf','art','unf','unt','veh','gate'].forEach(i=>{if($(i))$(i).value=''});['sup','wh','ult','rtp'].forEach(i=>{if($(i))$(i).value=''});['pri','hdiff'].forEach(i=>{if($(i))$(i).value='all'});document.querySelectorAll('#sts input').forEach(c=>c.checked=false);page=1;load()}
+$('fclr').onclick=clrF;const fr=$('freset');if(fr)fr.onclick=e=>{e.preventDefault();clrF()};
+$('q').onchange=()=>{page=1;load()};$('pp').onchange=e=>{perPage=+e.target.value;page=1;load()};
+$('mk').onclick=()=>$('mm').classList.add('open');
+if($('mok'))$('mok').onclick=async()=>{const body={supplier_id:+$('ns').value,warehouse_id:+$('nw').value,external_no:$('next2').value,plan_delivery_date:$('np').value,receipt_type:$('nrt').value,accept_type:$('nat').value,unload_type:$('nut').value,cargo_places_plan:+$('ncp').value};
+const r=await fetch(API+'?action=store',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const j=await r.json();$('mm').classList.remove('open');toast(r.ok?'Создано '+j.doc_no:'Ошибка: '+(j.error||''));load()};
+$('exp').onclick=()=>{const h=['№ документа','№ внешний','Дата прибытия','Дата приемки','Поставщик','ТС','Ворота','Тип разгрузки','Склад','Статус','Сумма','SKU','шт'];
+const csv='﻿'+h.join(';')+'\n'+lastRows.map(o=>[o.doc_no,o.external_no,o.arrival_date,o.accept_date,'"'+(o.supplier||'')+'"',o.vehicle,o.gate,o.unload_type,o.warehouse,stLabel[o.status],o.total,o.sku_count,o.qty_total].join(';')).join('\n');
+const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='receipts.csv';a.click()};
+$('imp').onclick=()=>$('impfile').click();
+$('impfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;const t=await f.text();toast('Импорт принят: '+t.split('\n').length+' строк (демо)');load()};
+// Печать PDF: сервер формирует документ, браузер сразу открывает.
+// fetch→blob→новая вкладка; если popup заблокирован — встроенный просмотрщик.
+async function openPdfDoc(url){
+try{
+const r=await fetch(url);
+const ct=(r.headers.get('Content-Type')||'').toLowerCase();
+if(!r.ok||ct.indexOf('pdf')<0){let t='';try{t=await r.text()}catch(e){}toast('Ошибка печати: '+(t||('HTTP '+r.status)).slice(0,160));return}
+const blob=await r.blob();
+const obj=URL.createObjectURL(new Blob([blob],{type:'application/pdf'}));
+pdfViewer(obj);
+}catch(e){toast('Ошибка печати: '+(e&&e.message||e))}}
+function pdfViewer(obj){
+let m=$('pdfview');
+if(!m){
+m=document.createElement('div');m.id='pdfview';m.className='modal';
+m.innerHTML='<div class="mbox" style="max-width:900px;width:92vw"><h3 style="margin-top:0">Документ PDF</h3><iframe id="pdfviewf" style="width:100%;height:70vh;border:1px solid #EAEAEA;border-radius:8px"></iframe><div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end"><a class="btn" id="pdfviewtab" target="_blank" rel="noopener" style="text-decoration:none">Новая вкладка</a><button class="btn" id="pdfviewprt">Печать</button><a class="btn" id="pdfviewdl" download="document.pdf" style="text-decoration:none">Скачать</a><button class="btn" id="pdfviewcls">Закрыть</button></div></div>';
+document.body.appendChild(m);
+$('pdfviewcls').onclick=()=>{m.classList.remove('open');$('pdfviewf').src='about:blank'};
+$('pdfviewprt').onclick=()=>{try{$('pdfviewf').contentWindow.print()}catch(e){toast('Печать недоступна')}};
+m.addEventListener('click',e=>{if(e.target===m){m.classList.remove('open');$('pdfviewf').src='about:blank'}});
+}
+$('pdfviewf').src=obj;$('pdfviewdl').href=obj;$('pdfviewtab').href=obj;m.classList.add('open');
+}
+// window.open здесь перекрыт функцией open() карточки — новую вкладку открываем ссылкой.
+function openUrl(url){const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove()}
+$('dprint').onclick=()=>{if(!curId)return;openPdfDoc(`${API}?action=print&id=${curId}&kind=act&format=pdf`)};
+document.addEventListener('click',e=>{if(!$('ctx').contains(e.target))$('ctx').style.display='none';
+if($('notifpanel')&&$('notifpanel').style.display==='block'&&!$('notifpanel').contains(e.target)&&!$('bellbtn').contains(e.target))$('notifpanel').style.display='none';
+if(e.target.classList&&e.target.classList.contains('num')&&e.target.dataset.id){e.preventDefault();open(+e.target.dataset.id)}});
+$('ctx').onclick=async e=>{const a=e.target.dataset.a;if(!a)return;$('ctx').style.display='none';const id=ctxId;
+const post=async(url,body)=>{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});const j=await r.json();toast(r.ok?'Готово':'Ошибка: '+(j.error||''));load();return j};
+if(a==='open')open(id);
+else if(a==='edit')open(id);
+else if(a==='copy'){const r=await fetch(API+'?action=store',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({supplier_id:2,warehouse_id:1,cargo_places_plan:4})});const j=await r.json();toast(r.ok?'Скопировано как '+j.doc_no:'Ошибка');load()}
+else if(a.startsWith('base-'))toast(a==='base-short'?'Доприемка недостачи создана (A-105107-Н)':'Доприемка излишков создана (A-105107-И)');
+else if(a.startsWith('p-')||a.startsWith('s-')){if(a.startsWith('p-')){openPdfDoc(`${API}?action=print&id=${id}&kind=${a}&format=pdf`)}else toast(a==='s-mail'?'Письмо отправлено (демо)':'Ссылка скопирована (демо)')}
+else if(a==='docs')open(id,'docs');else if(a==='hist')open(id,'hist');else if(a==='mov')toast('Движения: проводки по складу (демо)');
+else if(a==='tasks'){const row=lastRows.find(x=>x.id===id);const ref=row?row.doc_no:'';openUrl('../07-zadaniya/app.html?doc_ref='+encodeURIComponent(ref));toast('Открыты задания по документу (новая вкладка)')}
+else if(a==='auto')post(`${API}?action=status&id=${id}`,{to:'closed'});
+else if(a==='assign')post(`${API}?action=status&id=${id}`,{to:'accepting'});
+else if(a==='prio-h')post(`${API}?action=priority&id=${id}`,{priority:'high'});
+else if(a==='prio-l')post(`${API}?action=priority&id=${id}`,{priority:'low'});
+else if(a==='cancel')post(`${API}?action=status&id=${id}`,{to:'cancelled'});
+else if(a==='arch')post(`${API}?action=status&id=${id}`,{to:'archived'});
+else if(a==='del')toast('Удаление — только черновик (демо)')};
+// --- уведомления: колокол в шапке (общее хранилище — API 08, как в модуле 12) ---
+const NAPI='../08-nomenklatura/demo_sqlite.php';
+let ntab='all';
+const KIND_META={receipt:{t:'Поступления',i:'📥',bg:'#E0EEFF'},shipment:{t:'Отгрузки',i:'📦',bg:'#DCE6D1'},task:{t:'Задания',i:'📝',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'}};
+const KIND_CONDS={receipt:['Все статусы','Принято','Принято с отклонениями','Отменено'],shipment:['Все статусы','Расхождение, Отменено','Доставлена'],task:['Все статусы','Просрочено','Назначено','Выполнено'],nomenclature:['Все статусы','Любое изменение']};
+function nTime(s){s=String(s||'');return s.length>=16?s.slice(11,16)+' · '+s.slice(8,10)+'.'+s.slice(5,7):s}
+async function notifCounts(){try{const r=await (await fetch(NAPI+'?action=notif_counts')).json();$('bellbadge').textContent=r.unread||0;$('bellbadge').style.display=r.unread?'flex':'none';$('nc_all').textContent=r.all||0;$('nc_unread').textContent=r.unread||0;$('nc_imp').textContent=r.important||0}catch(e){}}
+async function notifLoad(){try{const r=await (await fetch(`${NAPI}?action=notif_list&tab=${ntab}&limit=20`)).json();const rows=r.rows||[];const c=r.counts||{};$('nc_all').textContent=c.all||0;$('nc_unread').textContent=c.unread||0;$('nc_imp').textContent=c.important||0;$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
+$('notiflist').innerHTML=rows.map(x=>{const m=KIND_META[x.kind]||{t:x.kind,i:'🔔',bg:'#F4F0FB'};return `<div class="ntf ${+x.is_read?'read':''}" data-nid="${x.id}"><div class="ic" style="background:${m.bg}">${m.i}</div><div class="tx"><div class="sub">${m.t}</div><b>${x.title||''}</b><div class="body">${x.body||''}</div></div><div class="tm">${nTime(x.created_at)}</div>${+x.is_read?'':'<div class="dot"></div>'}</div>`}).join('')||'<p class="hint">Нет уведомлений</p>';
+document.querySelectorAll('#notiflist .ntf').forEach(el=>el.onclick=async()=>{const id=+el.dataset.nid;await fetch(NAPI+'?action=notif_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});notifLoad()})}catch(e){}}
+function setNtab(t){ntab=t;[['nt_all','all'],['nt_unread','unread'],['nt_imp','important']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));notifLoad()}
+$('nt_all').onclick=()=>setNtab('all');$('nt_unread').onclick=()=>setNtab('unread');$('nt_imp').onclick=()=>setNtab('important');
+$('bellbtn').onclick=e=>{e.stopPropagation();const p=$('notifpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px';notifLoad()}};
+$('notifreadall').onclick=async e=>{e.preventDefault();await fetch(NAPI+'?action=notif_read_all',{method:'POST'});notifLoad();toast('Все отмечены как прочитанные')};
+$('notifset').onclick=e=>{e.preventDefault();$('notifpanel').style.display='none';$('notifmodal').classList.add('open');subLoad()};
+$('notifmclose').onclick=$('subclose').onclick=()=>$('notifmodal').classList.remove('open');
+$('nstab1').onclick=()=>{$('nstab1').textContent='Мои подписки';$('nstab2').textContent='○ Каналы и расписание';$('nspane1').style.display='block';$('nspane2').style.display='none'};
+$('nstab2').onclick=()=>{$('nstab1').textContent='○ Мои подписки';$('nstab2').textContent='Каналы и расписание';$('nspane1').style.display='none';$('nspane2').style.display='block'};
+async function subLoad(){try{const rows=await (await fetch(NAPI+'?action=notif_subs')).json();const byK={};(rows||[]).forEach(r=>byK[r.event_kind]=r);
+$('subrows').innerHTML=Object.keys(KIND_META).map(k=>{const m=KIND_META[k];const s=byK[k]||{ch_web:0,ch_email:0,ch_tg:0,cond_label:'Все статусы',is_on:1};const conds=(KIND_CONDS[k]||['Все статусы']).map(c=>`<option ${c===(s.cond_label||'Все статусы')?'selected':''}>${c}</option>`).join('');
+return `<div class="subrow" data-kind="${k}"><div class="nm"><b>${m.t}</b><span class="hint">${m.i}</span></div><div style="width:170px"><label><input type="checkbox" data-f="ch_web" ${+s.ch_web?'checked':''}> Web</label><label><input type="checkbox" data-f="ch_email" ${+s.ch_email?'checked':''}> Email</label><label><input type="checkbox" data-f="ch_tg" ${+s.ch_tg?'checked':''}> Telegram</label></div><div style="width:150px"><select data-f="cond_label">${conds}</select></div><div style="width:60px"><button class="tgl ${+s.is_on?'on':''}" data-f="is_on" title="Вкл/выкл"></button></div></div>`}).join('');
+document.querySelectorAll('#subrows .subrow input[type=checkbox],#subrows .subrow select').forEach(e=>e.onchange=subSave);
+document.querySelectorAll('#subrows .tgl').forEach(b=>b.onclick=()=>{b.classList.toggle('on');subSave()})}catch(e){}}
+async function subSave(){const rows=[...document.querySelectorAll('#subrows .subrow')];for(const r of rows){const k=r.dataset.kind;const g=f=>r.querySelector(`[data-f="${f}"]`);const body={event_kind:k,ch_web:g('ch_web').checked?1:0,ch_email:g('ch_email').checked?1:0,ch_tg:g('ch_tg').checked?1:0,cond_label:g('cond_label').value,is_on:g('is_on').classList.contains('on')?1:0};await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}toast('Подписки сохранены')}
+$('subadd').onclick=async()=>{const rows=await (await fetch(NAPI+'?action=notif_subs')).json();const has=new Set((rows||[]).map(r=>r.event_kind));const miss=Object.keys(KIND_META).find(k=>!has.has(k));if(!miss){toast('Все типы уже подписаны');return}await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:miss,ch_web:1,ch_email:0,ch_tg:0,cond_label:'Все статусы',is_on:1})});subLoad()};
+$('subreset').onclick=async()=>{const defs=[['receipt',0,0,0,'Все статусы',1],['shipment',0,1,0,'Расхождение, Отменено',1],['task',1,0,1,'Просрочено',1],['nomenclature',0,1,0,'Любое изменение',0]];for(const [k,w,e,t,c,on] of defs)await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:k,ch_web:w,ch_email:e,ch_tg:t,cond_label:c,is_on:on})});subLoad();toast('Сброшено к значениям по схеме')};
+notifCounts();setInterval(notifCounts,60000);
+// --- Скрываемое левое меню (стрелка вверху) ---
+if(localStorage.getItem('navhide')==='1')document.body.classList.add('navhide');
+$('navhidebtn').onclick=()=>{document.body.classList.add('navhide');try{localStorage.setItem('navhide','1')}catch(e){}};
+$('navshowbtn').onclick=()=>{document.body.classList.remove('navhide');try{localStorage.setItem('navhide','0')}catch(e){}};
+// --- Настройка столбцов (шестеренка): свои колонки для каждого пользователя ---
+const COLFORM='receipts';
+let hideCols=[];
+function colTable(){const tb=document.querySelector('#rows');return tb?tb.closest('table'):null}
+function colApply(){const tbl=colTable();if(!tbl)return;const ths=[...tbl.querySelectorAll('thead th')];
+ths.forEach((th,i)=>{const h=hideCols.includes(i);th.style.display=h?'none':'';[...tbl.querySelectorAll('tbody tr')].forEach(tr=>{const c=tr.children[i];if(c)c.style.display=h?'none':''})})}
+async function colLoad(){try{const r=await (await fetch(API+'?action=columns_get&form='+COLFORM)).json();const c=(r&&r.cols&&Array.isArray(r.cols.hidden))?r.cols.hidden:[];hideCols=c.map(Number).filter(n=>n>=0)}catch(e){hideCols=[]}colApply()}
+async function colSave(){try{await fetch(API+'?action=columns_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:COLFORM,cols:{hidden:hideCols}})})}catch(e){}}
+function colPanel(){const tbl=colTable();if(!tbl)return;const ths=[...tbl.querySelectorAll('thead th')];
+$('collist').innerHTML=ths.map((th,i)=>{const t=((th.textContent||'').trim()||('Столбец '+(i+1)));return `<label style="display:block;padding:6px 4px;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="${i}" ${hideCols.includes(i)?'':'checked'}> ${t}</label>`}).join('');
+document.querySelectorAll('#collist input[data-ci]').forEach(c=>c.onchange=()=>{const i=+c.dataset.ci;hideCols=c.checked?hideCols.filter(n=>n!==i):[...new Set([...hideCols,i])];colApply();colSave()});
+const p=$('colpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px'}}
+$('colset').onclick=e=>{e.stopPropagation();colPanel()};
+$('colclose').onclick=()=>$('colpanel').style.display='none';
+$('colreset').onclick=async()=>{hideCols=[];colApply();await colSave();colPanel()};
+if(document.querySelector('#rows'))new MutationObserver(()=>colApply()).observe(document.querySelector('#rows'),{childList:true});
+colLoad();
+load();
+</script>
+<script data-shift-select>
+/* Shift+клик по галкам: выделение диапазона подряд, как в Windows/проводнике.
+   Обычный клик запоминает якорь, Shift+клик отмечает/снимает все строки между якорем и текущей. */
+(function(){
+  var anchorTbl=null, anchorIdx=-1;
+  function boxesOf(tbl){
+    var all=tbl.querySelectorAll('input[type=checkbox]');
+    var out=[];
+    for(var i=0;i<all.length;i++){ if(all[i].id!=='chall'&&all[i].id!=='ochall') out.push(all[i]); }
+    return out;
+  }
+  function syncSet(c,state){
+    try{
+      var k=c.getAttribute('data-ch')||c.getAttribute('data-id');
+      if(k===null||k===undefined||k==='') return;
+      if(typeof checked!=='undefined'&&checked&&checked instanceof Set){
+        var id=+k;
+        if(state) checked.add(id); else checked.delete(id);
+      }
+    }catch(e){}
+  }
+  function refreshHead(tbl){
+    try{
+      var boxes=boxesOf(tbl);
+      var allOn=boxes.length>0&&boxes.every(function(x){return x.checked;});
+      var h=tbl.querySelector('#chall'); if(h) h.checked=allOn;
+      var h2=tbl.querySelector('#ochall'); if(h2) h2.checked=allOn;
+      if(tbl.contains(document.getElementById('rows'))){
+        var g=document.getElementById('chall'); if(g) g.checked=allOn;
+      }
+    }catch(e){}
+    try{ if(typeof massSync==='function') massSync(); }catch(e){}
+  }
+  document.addEventListener('click',function(e){
+    var t=e.target;
+    if(!t||!t.closest) return;
+    if(t.id==='chall'||t.id==='ochall'){ anchorTbl=null; anchorIdx=-1; return; }
+    var cb=t.closest('table input[type=checkbox]');
+    if(!cb||cb.id==='chall'||cb.id==='ochall') return;
+    var tbl=cb.closest('table');
+    if(!tbl) return;
+    var boxes=boxesOf(tbl);
+    var idx=boxes.indexOf(cb);
+    if(idx<0) return;
+    if(e.shiftKey&&tbl===anchorTbl&&anchorIdx>=0&&anchorIdx<boxes.length){
+      var state=cb.checked;
+      var a=anchorIdx<idx?anchorIdx:idx, b=anchorIdx<idx?idx:anchorIdx;
+      for(var i=a;i<=b;i++){
+        var c=boxes[i];
+        if(c.checked!==state){
+          c.checked=state;
+          syncSet(c,state);
+          try{ if(typeof c.onchange==='function') c.onchange.call(c,{target:c}); }catch(err){}
+        }
+      }
+      try{ if(typeof massSync==='function') massSync(); }catch(err){}
+      refreshHead(tbl);
+      try{ if(window.getSelection) window.getSelection().removeAllRanges(); }catch(err){}
+      anchorIdx=idx;
+    }else{
+      anchorTbl=tbl; anchorIdx=idx;
+    }
+  });
+  try{
+    var obs=new MutationObserver(function(){ anchorTbl=null; anchorIdx=-1; });
+    document.querySelectorAll('table tbody').forEach(function(tb){ obs.observe(tb,{childList:true}); });
+  }catch(e){}
+})();
+</script>
+<script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>
+</html>

@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Задания — TiMLog</title>
+<style>
+:root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);display:flex}
+aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14px;position:sticky;top:0;max-height:100vh;overflow:auto}
+aside .logo{font-size:22px;font-weight:700;margin:6px 0 22px}
+aside a{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
+aside a.on{background:var(--vio);color:#fff}
+main{flex:1;padding:18px 22px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:4px 0;font-size:24px}
+.user{display:flex;gap:10px;align-items:center;font-size:14px}
+.ava{width:36px;height:36px;border-radius:50%;background:#EAEAEA;display:flex;align-items:center;justify-content:center;font-weight:700}
+.bar{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap}
+.bar input[type=text]{width:360px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:14px;position:relative}
+.btn.pri{background:var(--vio);color:#fff;border-color:var(--vio);font-weight:700}
+.badge{position:absolute;top:-8px;right:-8px;background:var(--vio);color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;display:flex;align-items:center;justify-content:center}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px;color:#2C313C;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+td{padding:10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+tr.sel{background:#F8F6FC}tr:hover td{background:#fafaff;cursor:pointer}
+a.num{color:var(--vio);font-weight:700;text-decoration:none}
+.st{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700}
+.st-done{background:#E8F5E9;color:#2E7D32;border:1px solid #A5D6A7}
+.st-work{background:#FFF3E0;color:#E65100;border:1px solid #FFCC80}
+.st-cancelled{background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A}
+.st-new{background:#F0F6FF;color:#1D61D2;border:1px solid #A3C2F0}
+.st-paused{background:#f5f5f5;color:#888;border:1px solid #B3B3B3}
+.pr{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700}
+.pr-lowest{background:#F1F3F4;color:#5F6368}
+.pr-low{background:#E8F5E9;color:#2E7D32}
+.pr-normal{background:#FFF3E0;color:#E65100}
+.pr-high{background:#FFEBEE;color:#C62828}
+.pr-critical{background:#4A148C;color:#fff}
+.pr{cursor:pointer}
+.pager{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;color:var(--mut);font-size:13px}
+.pg button{border:1px solid var(--line);background:#fff;border-radius:8px;min-width:34px;padding:6px 8px;margin:0 2px;cursor:pointer}
+.pg button.on{background:var(--vio);color:#fff;border-color:var(--vio)}
+.fpanel{position:fixed;top:0;right:-520px;width:480px;max-width:94vw;height:100vh;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.15);transition:right .25s;padding:18px;overflow:auto;z-index:50}
+.fpanel.open{right:0}.fpanel label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:12px 0 4px}
+.fpanel input,.fpanel select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px}
+.frow{display:flex;gap:8px}.frow>*{flex:1}
+.ctx{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:99;min-width:260px;padding:6px 0;font-size:14px}
+.ctx div{padding:9px 18px;cursor:pointer}.ctx div:hover{background:#F4F2FF}.ctx hr{border:0;border-top:1px solid #F0F0F0}
+.ctx .sub{padding-left:30px;color:#333}
+#ctx div.sub{display:none}
+#ctx div.sub.vis{display:block}
+#ctx div.par.on{background:#F4F2FF}
+.prog{height:8px;background:#E6E6E6;border-radius:6px;min-width:90px;overflow:hidden}.prog i{display:block;height:100%;background:#783feb}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.chip{background:#F4F0FB;color:#663EB2;border-radius:12px;padding:5px 10px;font-size:12px}
+.det{margin:18px 0}.det h2{font-size:18px;margin:8px 0}
+.wiz{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:70}
+.wiz.open{display:flex}.wbox{background:#fff;border-radius:12px;padding:20px;width:820px;max-width:96vw;max-height:90vh;overflow:auto}
+.wbox label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:10px 0 4px}
+.wbox input,.wbox select,.wbox textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px}
+.tiles{display:flex;gap:10px}.tile{flex:1;border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center;cursor:pointer}
+.tile.on{border-color:var(--vio);box-shadow:0 0 0 1px var(--vio)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:60}
+.modal.open{display:flex}.mbox{background:#fff;border-radius:12px;padding:20px;width:400px}
+.mbox input,.mbox select{width:100%;padding:9px;margin:6px 0;border:1px solid var(--line);border-radius:8px}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:99}
+.gear{cursor:pointer;color:#663EB2}
+table.mini{width:100%;border-collapse:collapse;font-size:12px}
+table.mini td,table.mini th{border-bottom:1px solid #F0F0F0;padding:7px;white-space:nowrap}
+#bellbtn{position:relative;cursor:pointer;font-size:18px;background:none;border:0;padding:4px}
+#bellbadge{position:absolute;top:-4px;right:-6px;background:#FF0000;color:#fff;border-radius:50%;min-width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px}
+#notifpanel{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);z-index:120;width:440px;max-width:94vw;max-height:80vh;overflow:auto;padding:14px 16px}
+#notifpanel h2{margin:0;font-size:18px}
+.ntf{display:flex;gap:10px;padding:10px 6px;border-bottom:1px solid #F0F0F0;cursor:pointer;align-items:flex-start}
+.ntf:hover{background:#fafaff}.ntf.read{opacity:.75}
+.ntf .ic{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+.ntf .tx{flex:1;font-size:12px}.ntf .tx b{font-size:13px;color:#1A1A1A}
+.ntf .tx .sub{color:#A0AEC0;padding-left:0 !important}.ntf .tx .body{color:#4A5568;margin-top:2px}
+.ntf .tm{color:#A0AEC0;font-size:11px;white-space:nowrap}
+.ntf .dot{width:10px;height:10px;border-radius:50%;background:#EF5350;flex:none;margin-top:6px}
+.ntabs{display:flex;gap:16px;margin:8px 0;font-size:14px}
+.ntabs span{cursor:pointer;color:#999;padding-bottom:6px}
+.ntabs span.on{color:var(--ink);font-weight:700;border-bottom:2px solid var(--vio)}
+.tgl{position:relative;width:44px;height:24px;background:#B3B3B3;border-radius:12px;cursor:pointer;flex:none;border:0}
+.tgl::after{content:'';position:absolute;top:2px;left:22px;width:20px;height:20px;background:#fff;border-radius:50%;transition:left .15s}
+.tgl.on{background:#009900}.tgl.on::after{left:2px}
+.subrow{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #F0F0F0;font-size:13px}
+.subrow .nm{flex:1}.subrow .nm b{display:block}
+.subrow label{font-size:11px;color:#4A4A4A;display:flex;gap:4px;align-items:center;margin:0 !important;font-weight:400 !important}
+.hint{font-size:12px;color:var(--mut)}
+</style>
+<style>
+#navhidebtn{width:100%;background:#2A3446;color:#8A92A6;border:0;border-radius:8px;padding:8px;cursor:pointer;font-size:13px;margin-bottom:10px}
+#navhidebtn:hover{background:#3A4658;color:#fff}
+#navshowbtn{position:fixed;top:12px;left:8px;z-index:200;display:none;background:#1C2331;color:#fff;border:1px solid #444;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:14px}
+body.navhide aside{display:none}
+body.navhide #navshowbtn{display:block}
+body.navhide main{max-width:none}
+</style>
+<style>
+#colpanel{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);z-index:130;width:320px;max-width:92vw;max-height:80vh;overflow:auto;padding:14px 16px}
+#colpanel h2{margin:0;font-size:16px}
+</style>
+<style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
+<body>
+<button id="navshowbtn" title="Показать меню">▶</button>
+<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<main>
+<div class="top"><h1>Задания</h1><div class="user"><button id="bellbtn" title="Уведомления">🔔<span id="bellbadge">0</span></button><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span></div></div>
+<div class="bar">
+<input id="q" type="text" placeholder="Поиск по № задания, типу, сотруднику, товару ...">
+<button class="btn" id="fbtn">Фильтры<span class="badge" id="fbadge" style="display:none">0</span></button>
+<button class="btn" id="imp">Импорт</button>
+<button class="btn" id="exp">Экспорт</button>
+<button class="btn pri" id="mk">+ Создать</button>
+</div>
+<div class="chips" id="chips"></div>
+<div class="card" style="overflow:auto">
+<table><thead><tr><th><input type="checkbox"></th><th>№ задания</th><th>Дата создания</th><th>Тип задания</th><th>Статус</th><th>Склад</th><th>Товары / позиции</th><th>Ячеек</th><th>Документ</th><th>Приоритет</th><th>Прогресс</th><th>Исполнитель</th><th>Флаги</th><th id="colset" class="gear" title="Настройки полей">⚙️</th></tr></thead>
+<tbody id="rows"><tr><td colspan="14">Загрузка...</td></tr></tbody></table>
+<div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
+<select id="pp"><option>5</option><option>9</option><option selected>20</option><option>50</option></select></div>
+<div class="pg" id="pg"></div></div>
+</div>
+
+<div class="det card" id="detcard" style="display:none;padding:0 0 10px">
+<div style="padding:14px 16px 0"><h2>Детализация по заданию <small id="dettitle" style="color:var(--mut)"></small></h2></div>
+<div style="overflow:auto"><table class="mini"><thead><tr><th>№</th><th>Код</th><th>Артикул</th><th>Наименование</th><th>Ед. изм.</th><th>Тип задания</th><th>Склад</th><th>Паллета</th><th>План</th><th>Факт</th><th>Состояние</th><th>Исполнитель</th><th>Откуда</th><th>Куда</th><th>Дата выполнения</th></tr></thead>
+<tbody id="detrows"></tbody></table>
+<div class="pager"><div><span id="detinfo">—</span></div><div class="pg" id="detpg"></div></div></div>
+</div>
+</main>
+
+<div class="fpanel" id="fp">
+<h2 style="margin:0">Фильтры <span class="badge" id="fbadge2" style="position:static;display:inline-flex">0</span></h2>
+<label>Дата создания</label><div class="frow"><input type="date" id="cf"><input type="date" id="ct"></div>
+<label>Дата выполнения</label><div class="frow"><input type="date" id="df"><input type="date" id="dt"></div>
+<label>Тип задания</label><select id="ftp"><option value="">Все</option><option value="сбор">Сбор</option><option value="размещение">Размещение</option><option value="перемещение">Перемещение</option><option value="комплектация">Комплектация</option><option value="пополнение">Пополнение</option></select>
+<label>Статус</label>
+<div id="sts">
+<label><input type="checkbox" value="new"> Новый</label>
+<label><input type="checkbox" value="work"> В работе</label>
+<label><input type="checkbox" value="paused"> На паузе</label>
+<label><input type="checkbox" value="done"> Выполнен</label>
+<label><input type="checkbox" value="cancelled"> Отменено</label>
+</div>
+<label>Склад</label><select id="wh"><option value="">Все склады</option><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select>
+<label>Приоритет</label><select id="pri"><option value="all">Все</option><option value="lowest">Самый низкий</option><option value="low">Низкий</option><option value="normal">Средний</option><option value="high">Высокий</option><option value="critical">Критический</option></select>
+<label>Исполнитель</label><input id="ex" type="text" placeholder="ФИО или табельный...">
+<label>Документ</label><input id="doc" type="text" placeholder="№ отгрузки / поступления...">
+<label>Заказ</label><input id="ord" type="text" placeholder="№ заказа...">
+<label>Код товара</label><input id="sku" type="text" placeholder="Код / артикул...">
+<label>Товаров</label><div class="frow"><input id="gf" type="number" placeholder="От"><input id="gt" type="number" placeholder="До"></div>
+<label>Позиций</label><div class="frow"><input id="lf" type="number" placeholder="От"><input id="lt" type="number" placeholder="До"></div>
+<label>Ячеек</label><div class="frow"><input id="cf2" type="number" placeholder="От"><input id="ct2" type="number" placeholder="До"></div>
+<label>Прогресс, %</label><div class="frow"><input id="pf" type="number" placeholder="От"><input id="pt" type="number" placeholder="До"></div>
+<label>Объем, м3</label><div class="frow"><input id="vf" type="number" step="0.001" placeholder="От"><input id="vt" type="number" step="0.001" placeholder="До"></div>
+<label>Вес, кг</label><div class="frow"><input id="wf" type="number" placeholder="От"><input id="wt" type="number" placeholder="До"></div>
+<label>Флаги</label><select id="flg"><option value="all">Все</option><option value="danger">Опасный груз</option><option value="check">Контроль качества</option><option value="confirm">Требуется подтверждение</option></select>
+<div style="display:flex;gap:10px;margin-top:16px"><button class="btn" id="fclr">Сбросить фильтры</button><button class="btn pri" id="fok">Применить</button><button class="btn" id="fclose">Отмена</button></div>
+<p style="color:var(--mut);font-size:13px">Активные фильтры: <span id="factive">0</span> · <a href="#" id="freset">Сбросить все</a></p>
+</div>
+
+<div class="ctx" id="ctx">
+<div data-a="pause">Приостановить</div>
+<div data-a="prio">Сменить приоритет</div>
+<div data-a="assign">Назначить исполнителя</div><hr>
+<div data-a="print">Печать</div>
+<div class="par" data-a="send" data-sub="s-">Отправить ▸</div>
+<div class="sub" data-a="s-mail">Письмо</div>
+<div class="sub" data-a="s-link">Ссылку на документ</div>
+<div data-a="docs">Показать документы</div>
+<div data-a="mov">Показать движения</div>
+<div data-a="hist">История изменений</div><hr>
+<div data-a="auto">Выполнить автоматически</div>
+<div data-a="restart">Вернуть к началу</div>
+</div>
+
+<div class="ctx" id="prioctx" style="min-width:180px">
+<div data-p="critical">⛔ Критический</div><div data-p="high">🔴 Высокий</div><div data-p="normal">🟠 Средний</div><div data-p="low">🟢 Низкий</div><div data-p="lowest">⚪ Самый низкий</div>
+</div>
+
+<div class="wiz" id="wiz"><div class="wbox">
+<h3 style="margin-top:0">Создать задание</h3>
+<div style="display:flex;gap:16px;border-bottom:2px solid var(--vio);margin-bottom:10px;font-size:14px"><b style="color:var(--vio);border-bottom:3px solid var(--vio);padding-bottom:6px">Основная информация</b><span style="color:#999">Позиции задания <span style="background:#E6E6E6;border-radius:50%;padding:0 7px">3</span></span></div>
+<label>Тип операции *</label>
+<div class="tiles" id="tiles">
+<div class="tile on" data-t="сбор">📦<br>Сбор</div>
+<div class="tile" data-t="размещение">📥<br>Размещение</div>
+<div class="tile" data-t="перемещение">🔀<br>Перемещение</div>
+<div class="tile" data-t="комплектация">🧩<br>Комплектация</div>
+</div>
+<div class="frow"><div><label>Приоритет *</label><select id="npri"><option value="normal">Средний</option><option value="lowest">Самый низкий</option><option value="low">Низкий</option><option value="high">Высокий</option><option value="critical">Критический</option></select></div>
+<div><label>Склад *</label><select id="nwh"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select></div></div>
+<div class="frow"><div><label>Исполнитель</label><input id="nex" type="text" placeholder="1287 Ш Феничев Олег"></div>
+<div><label>Связанный документ</label><select id="ndoc"><option value="">—</option><option>Заказ клиента</option><option>Отгрузка</option><option>Поступление</option></select></div></div>
+<div class="frow"><div><label>№ документа</label><input id="ndocref" type="text" placeholder="S-205107"></div>
+<div><label>Дата выполнения</label><input id="ndue" type="date"></div></div>
+<label>Комментарий</label><input id="ncmt" type="text" placeholder="Введите комментарий (не обязательно)">
+<h4>Параметры задания</h4>
+<div class="frow"><div><label>Зона</label><select id="nzone"><option>А. Зона хранения</option><option>Б. Зона приемки</option><option>В. Зона отгрузки</option></select></div>
+<div><label>Способ работы</label><select id="nmode"><option>По списку (рекомендованный)</option><option>Волна</option><option>Зональный</option></select></div></div>
+<div class="frow"><div><label>Ячейки</label>
+<label><input type="radio" name="cells" checked> Все в зоне</label>
+<label><input type="radio" name="cells"> Выбрать конкретные</label>
+<label><input type="radio" name="cells"> Без привязки к ячейкам</label></div>
+<div><label>Доп. параметры</label>
+<label><input type="checkbox" id="f_danger"> Опасный груз!</label>
+<label><input type="checkbox" id="f_check" checked> Контроль качества</label>
+<label><input type="checkbox" id="f_confirm"> Требуется подтверждение</label></div></div>
+<label>Комментарий для исполнителя</label><textarea id="nexc" rows="3" placeholder="Укажите особые требования или инструкции для исполнителя (не обязательно)"></textarea>
+<div style="display:flex;gap:10px;margin-top:12px;justify-content:flex-end"><button class="btn" id="wclose">Отмена</button><button class="btn pri" id="wcreate">Создать задание</button></div>
+</div></div>
+
+<div class="modal" id="mm"><div class="mbox"><h3 style="margin-top:0" id="mmtitle">Назначить исполнителя</h3>
+<input id="mminp" type="text" placeholder="ФИО или табельный номер...">
+<div style="display:flex;gap:10px;margin-top:10px"><button class="btn" onclick="mm.classList.remove('open')">Отмена</button><button class="btn pri" id="mmok">OK</button></div>
+</div></div>
+<input type="file" id="impfile" accept=".csv" style="display:none">
+<div id="notifpanel">
+<div style="display:flex;justify-content:space-between;align-items:center"><h2>Уведомления</h2><div><a href="#" id="notifset" style="font-size:16px;text-decoration:none" title="Настройка уведомлений">⚙️</a></div></div>
+<div class="ntabs"><span id="nt_all" class="on">Все <b id="nc_all">0</b></span><span id="nt_unread">Непрочитанные <b id="nc_unread">0</b></span><span id="nt_imp">Важные <b id="nc_imp">0</b></span></div>
+<div><a href="#" id="notifreadall" style="font-size:13px">Отметить все как прочитанные</a></div>
+<div id="notiflist" style="margin-top:6px"></div>
+<div style="margin-top:8px"><a href="../12-uvedomleniya/app.html" style="font-size:13px">Показать все уведомления</a></div>
+</div>
+
+<div class="modal" id="notifmodal"><div class="mbox" style="width:720px;max-width:96vw"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Настройка уведомлений</h3><button class="btn" id="notifmclose">✕</button></div>
+<div class="tabs"><span id="nstab1" class="on">Мои подписки</span><span id="nstab2">○ Каналы и расписание</span></div>
+<div id="nspane1">
+<div style="display:flex;justify-content:flex-end;margin:6px 0"><button class="btn pri" id="subadd">+ Добавить подписку</button></div>
+<div style="display:flex;gap:8px;font-size:12px;color:#4A4A4A;font-weight:700;border-bottom:1px solid #E2E8F0;padding-bottom:6px"><div style="flex:1">Что отслеживаем</div><div style="width:170px">Каналы уведомлений</div><div style="width:150px">Условие</div><div style="width:60px">Статус</div></div>
+<div id="subrows"></div>
+<div class="hint">Web / Email / Telegram — предпочтения доставки. Реальная отправка за пределами модуля.</div>
+<div style="display:flex;gap:10px;margin-top:10px;justify-content:flex-end"><button class="btn" id="subreset">Сбросить</button><button class="btn" id="subclose">Закрыть</button></div>
+</div>
+<div id="nspane2" style="display:none"><p class="hint">Каналы и расписание: Email — ежедневно в 09:00, Telegram — мгновенно, Web — мгновенно. Настройка расписания — в модуле 12.</p></div>
+</div></div>
+<div id="colpanel">
+<div style="display:flex;justify-content:space-between;align-items:center"><h2>Столбцы таблицы</h2></div>
+<div class="hint" style="margin:6px 0">Свои настройки для каждого пользователя.</div>
+<div id="collist" style="margin:6px 0;max-height:50vh;overflow:auto"></div>
+<div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="colreset">Сбросить</button><button class="btn pri" id="colclose">Готово</button></div>
+</div>
+<div id="toast"></div>
+
+<script>
+const API='demo_sqlite.php';
+let page=1,perPage=20,lastRows=[],ctxId=null,curId=null,ntype='сбор';
+const $=id=>document.getElementById(id);
+const stLabel={new:'Новый',work:'В работе',paused:'На паузе',done:'Выполнен',cancelled:'Отменено'};
+const priLabel={lowest:'Самый низкий',low:'Низкий',normal:'Средний',high:'Высокий',critical:'Критический'};
+const dFmt=s=>(s||'').slice(0,16).replace('T',' ');
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2400)}
+function params(){const p=new URLSearchParams({action:'list',page,per_page:perPage});
+const v=(id,k)=>{if($(id)&&$(id).value)p.set(k,$(id).value)};
+if($('q').value)p.set('search',$('q').value);
+v('cf','created_from');v('ct','created_to');v('df','due_from');v('dt','due_to');
+v('wh','warehouse_id');v('ex','executor');v('doc','doc_ref');v('ord','order_ref');v('sku','sku');
+v('gf','goods_from');v('gt','goods_to');v('lf','lines_from');v('lt','lines_to');
+v('cf2','cells_from');v('ct2','cells_to');v('pf','progress_from');v('pt','progress_to');
+v('vf','volume_from');v('vt','volume_to');v('wf','weight_from');v('wt','weight_to');
+if($('ftp').value)p.set('type',$('ftp').value);
+if($('pri').value!=='all')p.set('priority',$('pri').value);
+if($('flg').value!=='all')p.set('flag',$('flg').value);
+document.querySelectorAll('#sts input:checked').forEach(c=>p.append('status[]',c.value));
+return p}
+function flagsHtml(o){let f=[];const fl=(o.flags||'');if(/danger/i.test(fl))f.push('⚠');if(o.need_check)f.push('☑');return f.join(' ')}
+async function load(){const r=await fetch(API+'?'+params());const j=await r.json();lastRows=j.rows||[];
+$('info').textContent=`Показано ${j.from}–${j.to} из ${j.total}`;
+const n=j.active_filters||0;$('fbadge').style.display=n?'flex':'none';$('fbadge').textContent=n;$('fbadge2').textContent=n;$('factive').textContent=n;
+const q=params();const chips=[];
+if(q.get('search'))chips.push('Поиск: '+q.get('search'));
+if(q.get('warehouse_id'))chips.push('Склад');
+if(q.getAll('status[]').length)chips.push('Статус: '+q.getAll('status[]').length);
+if(q.get('type'))chips.push('Тип: '+q.get('type'));
+$('chips').innerHTML=chips.map(c=>`<span class="chip">${c}</span>`).join('')+(n?` <a href="#" id="clrall" style="font-size:12px">Сбросить все</a>`:'');
+const ca=$('clrall');if(ca)ca.onclick=e=>{e.preventDefault();clrF()};
+$('rows').innerHTML=lastRows.map(o=>{const pc=o.progress??0;
+return `<tr data-id="${o.id}"><td><input type="checkbox"></td>
+<td><a class="num" href="#" data-id="${o.id}">${o.doc_no}</a></td><td>${dFmt(o.created_at)}</td><td>${o.type||''}</td>
+<td><span class="st st-${o.status}">${stLabel[o.status]||o.status}</span></td>
+<td>${o.warehouse||''}</td><td>${Math.round(o.fact_qty??0)} / ${Math.round(o.plan_qty??0)}</td><td>${o.cells_count??''}</td>
+<td>${o.doc_ref?`<a class="num" href="#">${o.doc_ref}</a>`:'—'}</td>
+<td><span class="pr pr-${o.priority}" data-prid="${o.id}" title="Нажми, чтобы сменить приоритет">${priLabel[o.priority]||o.priority}</span></td>
+<td><div class="prog"><i style="width:${pc}%"></i></div><small>${pc} %</small></td>
+<td>${o.executor_fio||''}</td><td>${flagsHtml(o)}</td><td>⋮</td></tr>`}).join('')||'<tr><td colspan=14>Ничего не найдено</td></tr>';
+const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
+for(let i=1;i<=Math.min(pages,5);i++)h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`;
+$('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()});
+document.querySelectorAll('#rows tr').forEach(tr=>{if(!tr.dataset.id)return;
+tr.onclick=e=>{if(e.target.tagName!=='INPUT'&&!(e.target.classList&&e.target.classList.contains('num'))&&!(e.target.closest&&e.target.closest('[data-prid]')))openDet(+tr.dataset.id);};
+tr.oncontextmenu=e=>{e.preventDefault();ctxId=+tr.dataset.id;colSub();const c=$('ctx');c.style.display='block';c.style.left=e.clientX+'px';c.style.top=e.clientY+'px'}})}
+async function openDet(id){curId=id;
+const r=await (await fetch(`${API}?action=items&id=${id}&per_page=50`)).json();
+const head=lastRows.find(x=>x.id===id)||{};
+$('detcard').style.display='block';
+$('dettitle').textContent='· '+ (head.doc_no||('№'+id));
+$('detinfo').textContent=`Показано ${r.from}–${r.to} из ${r.total}`;
+$('detrows').innerHTML=(r.rows||[]).map((t,i)=>`<tr><td>${i+1}</td><td>${t.code||''}</td><td>${t.sku||''}</td><td>${t.name||''}</td><td>${t.unit||'шт'}</td><td>${head.type||''}</td><td>${head.warehouse||''}</td><td>${t.pallet||''}</td><td>${t.plan_qty}</td><td>${t.fact_qty}</td><td>${t.state||''}</td><td>${t.executor_fio||head.executor_fio||''}</td><td>${t.cell_from||''}</td><td style="color:var(--vio)"><u>${t.cell_to||''}</u></td><td>${head.due_date||''}</td></tr>`).join('')||'<tr><td colspan=15>Нет позиций</td></tr>';
+document.querySelectorAll('#rows tr').forEach(tr=>tr.classList.toggle('sel',+tr.dataset.id===id));
+$('detcard').scrollIntoView({behavior:'smooth',block:'nearest'})}
+$('fbtn').onclick=()=>$('fp').classList.add('open');
+$('fclose').onclick=()=>$('fp').classList.remove('open');
+$('fok').onclick=()=>{page=1;$('fp').classList.remove('open');load()};
+function clrF(){['q','cf','ct','df','dt','ex','doc','ord','sku','gf','gt','lf','lt','cf2','ct2','pf','pt','vf','vt','wf','wt'].forEach(i=>{if($(i))$(i).value=''});['wh','ftp'].forEach(i=>{if($(i))$(i).value=''});['pri','flg'].forEach(i=>{if($(i))$(i).value='all'});document.querySelectorAll('#sts input').forEach(c=>c.checked=false);page=1;load()}
+$('fclr').onclick=clrF;const fr=$('freset');if(fr)fr.onclick=e=>{e.preventDefault();clrF()};
+$('q').onchange=()=>{page=1;load()};$('pp').onchange=e=>{perPage=+e.target.value;page=1;load()};
+$('colset').onclick=e=>{e.stopPropagation();colPanel()};
+document.querySelectorAll('#tiles .tile').forEach(t=>t.onclick=()=>{document.querySelectorAll('#tiles .tile').forEach(x=>x.classList.remove('on'));t.classList.add('on');ntype=t.dataset.t});
+$('mk').onclick=()=>$('wiz').classList.add('open');
+$('wclose').onclick=()=>$('wiz').classList.remove('open');
+$('wcreate').onclick=async()=>{
+const flags=[];if($('f_danger').checked)flags.push('danger');if($('f_check').checked)flags.push('check');if($('f_confirm').checked)flags.push('confirm');
+const body={type:ntype,priority:$('npri').value,warehouse_id:+$('nwh').value,executor_fio:$('nex').value||null,doc_ref:$('ndocref').value||null,order_ref:null,due_date:$('ndue').value||null,comment:(($('ncmt').value||'')+' '+($('nexc').value||'')).trim()||null,flags:flags.join(',')||null,need_check:$('f_check').checked?1:0};
+const r=await fetch(API+'?action=store',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const j=await r.json();
+if(r.ok){$('wiz').classList.remove('open');toast('Создано задание #'+j.id);load()}else toast('Ошибка: '+(j.error||''))};
+$('exp').onclick=()=>{const h=['№ задания','Дата создания','Тип','Статус','Склад','Товары','Ячеек','Документ','Приоритет','Прогресс','Исполнитель'];
+const csv='\ufeff'+h.join(';')+'\n'+lastRows.map(o=>[o.doc_no,o.created_at,o.type,stLabel[o.status],o.warehouse,(o.fact_qty+'/'+o.plan_qty),o.cells_count,o.doc_ref,priLabel[o.priority],o.progress,o.executor_fio].join(';')).join('\n');
+const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='tasks.csv';a.click()};
+$('imp').onclick=()=>$('impfile').click();
+$('impfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;const t=await f.text();toast('Импорт принят: '+t.split('\n').length+' строк (демо)');load()};
+document.addEventListener('click',e=>{
+if(!$('ctx').contains(e.target))$('ctx').style.display='none';
+if(!$('prioctx').contains(e.target))$('prioctx').style.display='none';
+if($('notifpanel')&&$('notifpanel').style.display==='block'&&!$('notifpanel').contains(e.target)&&!$('bellbtn').contains(e.target))$('notifpanel').style.display='none';
+if(e.target.classList&&e.target.classList.contains('num')&&e.target.dataset.id){e.preventDefault();openDet(+e.target.dataset.id)}});
+let mmMode=null;
+// --- Выпадающие подменю ПКМ: клик по родителю раскрывает список ---
+function togSub(par){
+ const pre=par.dataset.sub||'';
+ const subs=[...document.querySelectorAll('#ctx div.sub')].filter(d=>(d.dataset.a||'').startsWith(pre));
+ const open=subs.length&&!subs[0].classList.contains('vis');
+ colSub();
+ if(open){subs.forEach(d=>d.classList.add('vis'));par.classList.add('on');par.textContent=par.textContent.replace(/▸/,'▾')}}
+function colSub(){document.querySelectorAll('#ctx div.sub.vis').forEach(d=>d.classList.remove('vis'));
+document.querySelectorAll('#ctx div.par.on').forEach(d=>{d.classList.remove('on');d.textContent=d.textContent.replace(/▾/,'▸')})}
+$('ctx').onclick=async e=>{const a=e.target.dataset.a;if(!a)return;
+const par=e.target.closest?e.target.closest('.par'):null;
+if(par&&par.dataset.sub){togSub(par);return}
+const id=ctxId;
+const post=async(url,body)=>{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});const j=await r.json();toast(r.ok?'Готово':'Ошибка: '+(j.error||''));load();return j};
+if(a==='pause')post(`${API}?action=pause&id=${id}`);
+else if(a==='restart')post(`${API}?action=restart&id=${id}`);
+else if(a==='auto')post(`${API}?action=auto&id=${id}`);
+else if(a==='prio'){$('ctx').style.display='none';const p=$('prioctx');p.style.display='block';p.style.left=(event.clientX)+'px';p.style.top=(event.clientY)+'px';return}
+else if(a==='assign'){mmMode='assign';$('mmtitle').textContent='Назначить исполнителя';$('mminp').value='';$('mm').classList.add('open')}
+else if(a==='print'){const r=await (await fetch(`${API}?action=print&id=${id}&kind=list`)).json();toast('Печать: позиций '+(r.items||[]).length)}
+else if(a==='s-mail')toast('Письмо отправлено (демо)');
+else if(a==='s-link')toast('Ссылка скопирована (демо)');
+else if(a==='docs'){const r=await (await fetch(`${API}?action=documents&id=${id}`)).json();toast('Документы: '+(r.map(d=>d.name).join(', ')||'—'))}
+else if(a==='mov')toast('Движения: проводки по складу (демо)');
+else if(a==='hist'){const r=await (await fetch(`${API}?action=history&id=${id}`)).json();toast('История: записей '+r.length)}
+$('ctx').style.display='none'};
+$('prioctx').onclick=async e=>{const p=e.target.dataset.p;if(!p)return;$('prioctx').style.display='none';
+const r=await fetch(`${API}?action=priority&id=${ctxId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({priority:p})});
+const j=await r.json();toast(r.ok?'Приоритет сменен':'Ошибка: '+(j.error||''));load()};
+// --- Смена приоритета кликом по бейджу прямо в списке ---
+document.addEventListener('click',e=>{const b=e.target.closest?e.target.closest('[data-prid]'):null;if(!b)return;
+e.preventDefault();e.stopPropagation();ctxId=+b.dataset.prid;
+$('ctx').style.display='none';const p=$('prioctx');p.style.display='block';
+p.style.left=Math.min(e.clientX||100,innerWidth-200)+'px';p.style.top=(e.clientY||100)+'px'});
+$('mmok').onclick=async()=>{if(mmMode!=='assign'||!ctxId)return;
+const v=$('mminp').value.trim();if(!v){toast('Укажите исполнителя');return}
+const r=await fetch(`${API}?action=assign&id=${ctxId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({executor_fio:v})});
+const j=await r.json();$('mm').classList.remove('open');toast(r.ok?'Исполнитель назначен':'Ошибка: '+(j.error||''));load()};
+// предфильтр из отгрузок: ?doc_ref=S-205107
+(function(){const u=new URLSearchParams(location.search);const d=u.get('doc_ref')||u.get('doc');if(d){$('doc').value=d;}})();
+// --- уведомления: колокол в шапке (общее хранилище — API 08, как в модуле 12) ---
+const NAPI='../08-nomenklatura/demo_sqlite.php';
+let ntab='all';
+const KIND_META={receipt:{t:'Поступления',i:'📥',bg:'#E0EEFF'},shipment:{t:'Отгрузки',i:'📦',bg:'#DCE6D1'},task:{t:'Задания',i:'📝',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'}};
+const KIND_CONDS={receipt:['Все статусы','Принято','Принято с отклонениями','Отменено'],shipment:['Все статусы','Расхождение, Отменено','Доставлена'],task:['Все статусы','Просрочено','Назначено','Выполнено'],nomenclature:['Все статусы','Любое изменение']};
+function nTime(s){s=String(s||'');return s.length>=16?s.slice(11,16)+' · '+s.slice(8,10)+'.'+s.slice(5,7):s}
+async function notifCounts(){try{const r=await (await fetch(NAPI+'?action=notif_counts')).json();$('bellbadge').textContent=r.unread||0;$('bellbadge').style.display=r.unread?'flex':'none';$('nc_all').textContent=r.all||0;$('nc_unread').textContent=r.unread||0;$('nc_imp').textContent=r.important||0}catch(e){}}
+async function notifLoad(){try{const r=await (await fetch(`${NAPI}?action=notif_list&tab=${ntab}&limit=20`)).json();const rows=r.rows||[];const c=r.counts||{};$('nc_all').textContent=c.all||0;$('nc_unread').textContent=c.unread||0;$('nc_imp').textContent=c.important||0;$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
+$('notiflist').innerHTML=rows.map(x=>{const m=KIND_META[x.kind]||{t:x.kind,i:'🔔',bg:'#F4F0FB'};return `<div class="ntf ${+x.is_read?'read':''}" data-nid="${x.id}"><div class="ic" style="background:${m.bg}">${m.i}</div><div class="tx"><div class="sub">${m.t}</div><b>${x.title||''}</b><div class="body">${x.body||''}</div></div><div class="tm">${nTime(x.created_at)}</div>${+x.is_read?'':'<div class="dot"></div>'}</div>`}).join('')||'<p class="hint">Нет уведомлений</p>';
+document.querySelectorAll('#notiflist .ntf').forEach(el=>el.onclick=async()=>{const id=+el.dataset.nid;await fetch(NAPI+'?action=notif_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});notifLoad()})}catch(e){}}
+function setNtab(t){ntab=t;[['nt_all','all'],['nt_unread','unread'],['nt_imp','important']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));notifLoad()}
+$('nt_all').onclick=()=>setNtab('all');$('nt_unread').onclick=()=>setNtab('unread');$('nt_imp').onclick=()=>setNtab('important');
+$('bellbtn').onclick=e=>{e.stopPropagation();const p=$('notifpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px';notifLoad()}};
+$('notifreadall').onclick=async e=>{e.preventDefault();await fetch(NAPI+'?action=notif_read_all',{method:'POST'});notifLoad();toast('Все отмечены как прочитанные')};
+$('notifset').onclick=e=>{e.preventDefault();$('notifpanel').style.display='none';$('notifmodal').classList.add('open');subLoad()};
+$('notifmclose').onclick=$('subclose').onclick=()=>$('notifmodal').classList.remove('open');
+$('nstab1').onclick=()=>{$('nstab1').textContent='Мои подписки';$('nstab2').textContent='○ Каналы и расписание';$('nspane1').style.display='block';$('nspane2').style.display='none'};
+$('nstab2').onclick=()=>{$('nstab1').textContent='○ Мои подписки';$('nstab2').textContent='Каналы и расписание';$('nspane1').style.display='none';$('nspane2').style.display='block'};
+async function subLoad(){try{const rows=await (await fetch(NAPI+'?action=notif_subs')).json();const byK={};(rows||[]).forEach(r=>byK[r.event_kind]=r);
+$('subrows').innerHTML=Object.keys(KIND_META).map(k=>{const m=KIND_META[k];const s=byK[k]||{ch_web:0,ch_email:0,ch_tg:0,cond_label:'Все статусы',is_on:1};const conds=(KIND_CONDS[k]||['Все статусы']).map(c=>`<option ${c===(s.cond_label||'Все статусы')?'selected':''}>${c}</option>`).join('');
+return `<div class="subrow" data-kind="${k}"><div class="nm"><b>${m.t}</b><span class="hint">${m.i}</span></div><div style="width:170px"><label><input type="checkbox" data-f="ch_web" ${+s.ch_web?'checked':''}> Web</label><label><input type="checkbox" data-f="ch_email" ${+s.ch_email?'checked':''}> Email</label><label><input type="checkbox" data-f="ch_tg" ${+s.ch_tg?'checked':''}> Telegram</label></div><div style="width:150px"><select data-f="cond_label">${conds}</select></div><div style="width:60px"><button class="tgl ${+s.is_on?'on':''}" data-f="is_on" title="Вкл/выкл"></button></div></div>`}).join('');
+document.querySelectorAll('#subrows .subrow input[type=checkbox],#subrows .subrow select').forEach(e=>e.onchange=subSave);
+document.querySelectorAll('#subrows .tgl').forEach(b=>b.onclick=()=>{b.classList.toggle('on');subSave()})}catch(e){}}
+async function subSave(){const rows=[...document.querySelectorAll('#subrows .subrow')];for(const r of rows){const k=r.dataset.kind;const g=f=>r.querySelector(`[data-f="${f}"]`);const body={event_kind:k,ch_web:g('ch_web').checked?1:0,ch_email:g('ch_email').checked?1:0,ch_tg:g('ch_tg').checked?1:0,cond_label:g('cond_label').value,is_on:g('is_on').classList.contains('on')?1:0};await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}toast('Подписки сохранены')}
+$('subadd').onclick=async()=>{const rows=await (await fetch(NAPI+'?action=notif_subs')).json();const has=new Set((rows||[]).map(r=>r.event_kind));const miss=Object.keys(KIND_META).find(k=>!has.has(k));if(!miss){toast('Все типы уже подписаны');return}await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:miss,ch_web:1,ch_email:0,ch_tg:0,cond_label:'Все статусы',is_on:1})});subLoad()};
+$('subreset').onclick=async()=>{const defs=[['receipt',0,0,0,'Все статусы',1],['shipment',0,1,0,'Расхождение, Отменено',1],['task',1,0,1,'Просрочено',1],['nomenclature',0,1,0,'Любое изменение',0]];for(const [k,w,e,t,c,on] of defs)await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:k,ch_web:w,ch_email:e,ch_tg:t,cond_label:c,is_on:on})});subLoad();toast('Сброшено к значениям по схеме')};
+notifCounts();setInterval(notifCounts,60000);
+// --- Скрываемое левое меню (стрелка вверху) ---
+if(localStorage.getItem('navhide')==='1')document.body.classList.add('navhide');
+$('navhidebtn').onclick=()=>{document.body.classList.add('navhide');try{localStorage.setItem('navhide','1')}catch(e){}};
+$('navshowbtn').onclick=()=>{document.body.classList.remove('navhide');try{localStorage.setItem('navhide','0')}catch(e){}};
+// --- Настройка столбцов (шестеренка): свои колонки для каждого пользователя ---
+const COLFORM='tasks';
+let hideCols=[];
+function colTable(){const tb=document.querySelector('#rows');return tb?tb.closest('table'):null}
+function colApply(){const tbl=colTable();if(!tbl)return;const ths=[...tbl.querySelectorAll('thead th')];
+ths.forEach((th,i)=>{const h=hideCols.includes(i);th.style.display=h?'none':'';[...tbl.querySelectorAll('tbody tr')].forEach(tr=>{const c=tr.children[i];if(c)c.style.display=h?'none':''})})}
+async function colLoad(){try{const r=await (await fetch(API+'?action=columns_get&form='+COLFORM)).json();const c=(r&&r.cols&&Array.isArray(r.cols.hidden))?r.cols.hidden:[];hideCols=c.map(Number).filter(n=>n>=0)}catch(e){hideCols=[]}colApply()}
+async function colSave(){try{await fetch(API+'?action=columns_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:COLFORM,cols:{hidden:hideCols}})})}catch(e){}}
+function colPanel(){const tbl=colTable();if(!tbl)return;const ths=[...tbl.querySelectorAll('thead th')];
+$('collist').innerHTML=ths.map((th,i)=>{const t=((th.textContent||'').trim()||('Столбец '+(i+1)));return `<label style="display:block;padding:6px 4px;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="${i}" ${hideCols.includes(i)?'':'checked'}> ${t}</label>`}).join('');
+document.querySelectorAll('#collist input[data-ci]').forEach(c=>c.onchange=()=>{const i=+c.dataset.ci;hideCols=c.checked?hideCols.filter(n=>n!==i):[...new Set([...hideCols,i])];colApply();colSave()});
+const p=$('colpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px'}}
+$('colclose').onclick=()=>$('colpanel').style.display='none';
+$('colreset').onclick=async()=>{hideCols=[];colApply();await colSave();colPanel()};
+if(document.querySelector('#rows'))new MutationObserver(()=>colApply()).observe(document.querySelector('#rows'),{childList:true});
+colLoad();
+load();
+</script>
+<script data-shift-select>
+/* Shift+клик по галкам: выделение диапазона подряд, как в Windows/проводнике.
+   Обычный клик запоминает якорь, Shift+клик отмечает/снимает все строки между якорем и текущей. */
+(function(){
+  var anchorTbl=null, anchorIdx=-1;
+  function boxesOf(tbl){
+    var all=tbl.querySelectorAll('input[type=checkbox]');
+    var out=[];
+    for(var i=0;i<all.length;i++){ if(all[i].id!=='chall'&&all[i].id!=='ochall') out.push(all[i]); }
+    return out;
+  }
+  function syncSet(c,state){
+    try{
+      var k=c.getAttribute('data-ch')||c.getAttribute('data-id');
+      if(k===null||k===undefined||k==='') return;
+      if(typeof checked!=='undefined'&&checked&&checked instanceof Set){
+        var id=+k;
+        if(state) checked.add(id); else checked.delete(id);
+      }
+    }catch(e){}
+  }
+  function refreshHead(tbl){
+    try{
+      var boxes=boxesOf(tbl);
+      var allOn=boxes.length>0&&boxes.every(function(x){return x.checked;});
+      var h=tbl.querySelector('#chall'); if(h) h.checked=allOn;
+      var h2=tbl.querySelector('#ochall'); if(h2) h2.checked=allOn;
+      if(tbl.contains(document.getElementById('rows'))){
+        var g=document.getElementById('chall'); if(g) g.checked=allOn;
+      }
+    }catch(e){}
+    try{ if(typeof massSync==='function') massSync(); }catch(e){}
+  }
+  document.addEventListener('click',function(e){
+    var t=e.target;
+    if(!t||!t.closest) return;
+    if(t.id==='chall'||t.id==='ochall'){ anchorTbl=null; anchorIdx=-1; return; }
+    var cb=t.closest('table input[type=checkbox]');
+    if(!cb||cb.id==='chall'||cb.id==='ochall') return;
+    var tbl=cb.closest('table');
+    if(!tbl) return;
+    var boxes=boxesOf(tbl);
+    var idx=boxes.indexOf(cb);
+    if(idx<0) return;
+    if(e.shiftKey&&tbl===anchorTbl&&anchorIdx>=0&&anchorIdx<boxes.length){
+      var state=cb.checked;
+      var a=anchorIdx<idx?anchorIdx:idx, b=anchorIdx<idx?idx:anchorIdx;
+      for(var i=a;i<=b;i++){
+        var c=boxes[i];
+        if(c.checked!==state){
+          c.checked=state;
+          syncSet(c,state);
+          try{ if(typeof c.onchange==='function') c.onchange.call(c,{target:c}); }catch(err){}
+        }
+      }
+      try{ if(typeof massSync==='function') massSync(); }catch(err){}
+      refreshHead(tbl);
+      try{ if(window.getSelection) window.getSelection().removeAllRanges(); }catch(err){}
+      anchorIdx=idx;
+    }else{
+      anchorTbl=tbl; anchorIdx=idx;
+    }
+  });
+  try{
+    var obs=new MutationObserver(function(){ anchorTbl=null; anchorIdx=-1; });
+    document.querySelectorAll('table tbody').forEach(function(tb){ obs.observe(tb,{childList:true}); });
+  }catch(e){}
+})();
+</script>
+<script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>
+</html>

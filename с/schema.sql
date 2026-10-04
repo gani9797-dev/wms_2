@@ -1,0 +1,26 @@
+-- Модуль 3.1 Заказы
+
+CREATE TABLE IF NOT EXISTS client_orders (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  doc_no VARCHAR(20) NOT NULL COMMENT 'ЗАК-001245',
+  contractor_id BIGINT UNSIGNED NULL,
+  consignee VARCHAR(255) NULL,
+  warehouse_id BIGINT UNSIGNED NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'created',
+  total DECIMAL(14,2) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_co_no (doc_no),
+  KEY idx_co_status (status),
+  KEY idx_co_contractor (contractor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS client_order_items (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  order_id BIGINT UNSIGNED NOT NULL,
+  sku VARCHAR(50) NOT NULL,
+  name VARCHAR(255) NOT NULL DEFAULT '',
+  qty DECIMAL(12,3) NOT NULL DEFAULT 0,
+  price DECIMAL(14,2) NOT NULL DEFAULT 0,
+  KEY idx_coi_order (order_id),
+  CONSTRAINT fk_coi FOREIGN KEY (order_id) REFERENCES client_orders (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

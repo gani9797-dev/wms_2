@@ -1,0 +1,20 @@
+-- Модуль 5.1 Карта склада 3D
+
+CREATE TABLE IF NOT EXISTS warehouse_zones (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  warehouse_id BIGINT UNSIGNED NOT NULL,
+  code VARCHAR(30) NOT NULL,
+  name VARCHAR(150) NOT NULL,
+  UNIQUE KEY uq_wz (warehouse_id, code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS warehouse_map_objects (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  warehouse_id BIGINT UNSIGNED NOT NULL,
+  obj_type VARCHAR(30) NOT NULL COMMENT 'cell/gate/zone',
+  ref_code VARCHAR(50) NOT NULL,
+  x DECIMAL(10,2) NOT NULL DEFAULT 0,
+  y DECIMAL(10,2) NOT NULL DEFAULT 0,
+  z DECIMAL(10,2) NOT NULL DEFAULT 0,
+  KEY idx_wmo_wh (warehouse_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,0 +1,26 @@
+# Binaries / tools
+cloudflared.exe
+*.exe
+*.dll
+
+# Logs
+*.log
+
+# SQLite journals / temp
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db-journal
+*.db-wal
+*.db-shm
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# PHP sessions / cache
+/tmp/

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ТСД — Приход</title>
+<style>
+:root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7;--ok:#2E7D32;--bad:#C62828;--warn:#E65100}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--ink);color:#fff;padding:12px 14px;position:sticky;top:0;z-index:5}
+header .t{display:flex;justify-content:space-between;align-items:center}
+header b{font-size:18px}header small{color:var(--mut);display:block;font-size:12px}
+header a{color:#fff;text-decoration:none;font-size:16px;border:1px solid #444;border-radius:8px;padding:6px 10px}
+main{padding:12px;max-width:640px;margin:0 auto;padding-bottom:40px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.card.red{border-color:#EF9A9A;background:#FFEBEE}.card.green{border-color:#A5D6A7;background:#E8F5E9}.card.amber{border-color:#FFCC80;background:#FFF8E1}
+h2{margin:0 0 8px;font-size:20px}.mut{color:var(--mut);font-size:13px}
+input,select{width:100%;font-size:20px;padding:14px;border:1px solid var(--line);border-radius:10px;margin:6px 0;background:#fff}
+button{width:100%;font-size:19px;font-weight:700;padding:16px;border-radius:12px;border:1px solid var(--vio);background:var(--vio);color:#fff;cursor:pointer;margin:6px 0;min-height:58px}
+button.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
+button.red{background:var(--bad);border-color:var(--bad)}
+button.green{background:var(--ok);border-color:var(--ok)}
+button.amber{background:#EF6C00;border-color:#EF6C00}
+.row2{display:flex;gap:8px}.row2>*{flex:1}
+.prog{height:12px;background:#E6E6E6;border-radius:8px;overflow:hidden;margin:8px 0}.prog i{display:block;height:100%;background:#009900}
+.doc{padding:12px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:#fff;cursor:pointer}
+.doc b{color:var(--vio);font-size:18px}
+.step{font-size:12px;color:var(--vio);font-weight:700;margin-bottom:4px}
+.big{font-size:24px;font-weight:700;text-align:center}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:10px;display:none;z-index:99;max-width:92vw;font-size:16px}
+table.mini{width:100%;border-collapse:collapse;font-size:14px}table.mini td,table.mini th{border-bottom:1px solid #F0F0F0;padding:8px;text-align:left}
+.hidden{display:none}
+#navback{position:fixed;left:12px;bottom:16px;z-index:98;width:auto;padding:12px 18px;min-height:48px;font-size:16px;display:none;background:#fff;color:#1C2331;border:1px solid #EAEAEA;border-radius:12px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;margin:0}
+</style>
+</head>
+<body>
+<header><div class="t"><a href="app.html">‹ Меню</a><b>ТСД — Приход</b><span id="who" style="font-size:12px;color:#7CFC9A"></span></div><small id="dhead">этап 1 · сканируй ворота</small></header>
+<main id="m"></main>
+<div id="toast"></div>
+<button id="navback">← Назад</button>
+<script>
+const $=id=>document.getElementById(id);
+const TOKEN=localStorage.getItem('tsd_token')||'tsd-12345';
+const ME=JSON.parse(localStorage.getItem('tsd_me')||'null');
+if(ME)$('who').textContent=ME.fio;
+const uid=()=>ME?ME.id:null;
+let DOC=null,ITEM=null,PALLET=null,CROSS=false,MARKS=0,CHECK=null,CHZ=false,GATE='',PENDING_QTY=0,UNIT_COUNT=0;
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',2600)}
+function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json','X-Tsd-Token':TOKEN},o.headers||{});return fetch('prihod.php'+p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN),o)}
+const post=(a,b)=>api('?action='+a,{method:'POST',body:JSON.stringify(b||{})}).then(r=>r.json().then(j=>({s:r.status,j})));
+function head(){$('dhead').textContent=DOC?('№ '+(DOC.doc_no||DOC.id)+' · '+(DOC.status||'')):'этап 1 · сканируй ворота'}
+// --- Навигация: стек кадров; кнопка «← Назад» и ESC возвращают на предыдущий кадр ---
+let NAV=[];
+function paintBack(){const b=$('navback');if(b)b.style.display=NAV.length>1?'block':'none'}
+function go(name,fn){NAV.push({name,fn});if(NAV.length>40)NAV.splice(0,NAV.length-40);paintBack();const r=fn();if(r&&r.catch)r.catch(()=>{})}
+function back(){if(NAV.length>1){NAV.pop();paintBack();const r=NAV[NAV.length-1].fn();if(r&&r.catch)r.catch(()=>{})}}
+$('navback').onclick=()=>back();
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();back()}});
+// --- 1. Этап: сканируем ворота ---
+function scrGate(){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 1 · ВОРОТА</div><h2>Сканируй ворота</h2>
+<input id="gate" placeholder="Ячейка ворот (напр. 11)" autocomplete="off" value="${GATE}">
+<button id="go">Далее</button></div>`;
+const e=$('gate');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();next()}};
+$('go').onclick=next;
+function next(){const v=e.value.trim();if(!v){toast('Отсканируй ворота');return}GATE=v;go('docs',scrDocs)}}
+// --- 2. Этап: документы с этими воротами + штрихкод документа ---
+async function scrDocs(){ITEM=null;PALLET=null;CROSS=false;DOC=null;head();
+const r=await api('?action=docs&gate='+encodeURIComponent(GATE));const j=await r.json();const rows=j.rows||[];
+$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 2 · ДОКУМЕНТ · ВОРОТА ${GATE}</div><h2>Выбор документа поставки</h2>
+<input id="doccode" placeholder="Штрихкод документа (№ прихода)" autocomplete="off">
+<button id="docgo">Открыть по штрихкоду</button>
+<div class="mut">Документов с воротами ${GATE}: ${rows.length} · выбери Приход из списка или отсканируй штрихкод документа</div></div>`
++(rows.length?'':`<div class="card amber"><div class="mut">С этими воротами документов в работе нет — отсканируй штрихкод документа выше.</div></div>`)
++rows.map(t=>`<div class="doc" data-id="${t.id}"><b>${t.doc_no}</b> <span class="mut">${t.external_no||''} · ${t.supplier||''}</span><br><span class="mut">${t.warehouse||''} · ворота ${t.gate||'—'} · ${t.status}</span><div class="prog"><i style="width:${t.pct}%"></i></div><span class="mut">${t.fact_qty||0} / ${t.plan_qty||0}</span></div>`).join('');
+async function openDoc(id){
+// Ворота из этапа 1 проставляются в документ (в Поступлениях номер ворот обновляется).
+const {s,j:jj}=await post('start',{receipt_id:id,gate:GATE,user_id:uid()});
+if(jj.error){toast('Ошибка: '+jj.error);return}
+const st=await (await api('?action=state&receipt_id='+id)).json();DOC=st.head;head();go('ean',scrEan)}
+document.querySelectorAll('.doc').forEach(el=>el.onclick=()=>openDoc(+el.dataset.id));
+const dc=$('doccode');dc.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();openByCode()}};
+$('docgo').onclick=openByCode;
+async function openByCode(){const v=dc.value.trim();if(!v){toast('Отсканируй штрихкод документа');return}
+const r=await api('?action=doc_by_code&code='+encodeURIComponent(v));const j=await r.json();
+if(!j.found){toast('Документ не найден среди документов в работе');return}
+toast('Приход '+j.doc.doc_no);openDoc(j.doc.id)}}
+// --- 4. Этап: вопрос «это кросс-док?» (пока оставляем, после скана товара) ---
+function scrCrossQ(ms){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 4 · КРОСС-ДОК?</div><h2>Это кросс-док?</h2>
+<div class="row2"><button class="amber" id="y">Да</button><button class="ghost" id="n">Нет</button></div></div>`;
+$('y').onclick=()=>{CROSS=true;go('cross',()=>scrCross(ms))};$('n').onclick=()=>{CROSS=false;go('measure',()=>scrMeasure(ms,afterMeasure))}}
+function scrCross(ms){$('m').innerHTML=`<div class="card"><div class="step">КРОСС-ДОК</div><h2>Паллет кросдок (SSCC KD)</h2>
+<input id="sscc" placeholder="Сканируй SSCC паллета"><input id="cg" placeholder="Ячейка ворот" value="${GATE||(DOC.gate||'')}">
+<button id="go">Создать строку кросдока</button></div>`;
+$('sscc').focus();$('go').onclick=async()=>{const ss=$('sscc').value.trim();if(!ss){toast('Отсканируй SSCC');return}
+const {j}=await post('crossdock',{receipt_id:DOC.id,gate_id:$('cg').value.trim(),sscc:ss});
+if(j.error){toast('Ошибка: '+j.error);return}PALLET=ss;toast('Строка кросдока создана');go('measure',()=>scrMeasure(ms,afterMeasure))}}
+// --- Дальше после обмеров: марки (ЧЗ) или поштучные сканы ---
+function afterMeasure(){if(CHZ){MARKS=0;toast('Группа «Легкая промышленность» — сканирование Честного знака обязательно');go('marks',scrMarks)}else{UNIT_COUNT=0;go('units',scrUnits)}}
+// --- Скан EAN ---
+function scrEan(){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 3 · СКАН ТОВАРА</div><h2>Штрихкод товара (EAN-13)</h2>
+<input id="ean" placeholder="Скан..." autocomplete="off"><button id="go">Найти</button>
+<button class="ghost" id="fin">Завершить приёмку</button>
+<div class="mut">Паллета: ${PALLET||'—'}${CROSS?' · кросс-док':''}</div></div>`;
+const e=$('ean');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();find()}};$('go').onclick=find;$('fin').onclick=()=>go('finish',scrFinish);
+async function find(){const v=e.value.trim();if(!v){toast('Отсканируй штрихкод');return}
+const r=await api('?action=ean&receipt_id='+DOC.id+'&ean='+encodeURIComponent(v));const j=await r.json();
+if(!j.found){go('unclaimed',()=>scrUnclaimed(v));return}ITEM=j.item;CHZ=!!j.chz_required;go('crossq',()=>scrCrossQ(j.measure))}}
+// --- Обмеры: новый товар -> ввести габариты; существующий -> показать + подтвердить ---
+function scrMeasure(ms,next){ms=ms||null;
+if(ms&&!ms.need&&ms.length_mm!=null){
+$('m').innerHTML=`<div class="card green"><div class="step">ЗАМЕРЫ ТОВАРА · ${ITEM.sku}</div>
+<h2>${ms.length_mm} × ${ms.width_mm} × ${ms.height_mm} мм · ${ms.weight_g} г</h2>
+<div class="mut">${ITEM.name||''}</div><button id="go">Замеры верны — далее</button></div>`;
+$('go').onclick=next;return}
+if(!ms||!ms.need){next();return}
+const stale=ms.measure_reason==='stale';
+$('m').innerHTML=`<div class="card amber"><div class="step">${stale?'ОБМЕРЫ УСТАРЕЛИ':'НОВЫЙ ТОВАР'} · ${ITEM.sku}</div>
+<h2>Требуются обмеры!</h2><div class="mut">${ITEM.name||''} — ${stale?'последнее движение более 2 месяцев назад, нужны новые замеры':'товар новый (ранее не было на складе)'}. Введи длину, ширину, высоту в мм и вес в г, без них дальше нельзя.</div>
+<input id="ml" placeholder="Длина, мм" inputmode="numeric"><input id="mw" placeholder="Ширина, мм" inputmode="numeric">
+<input id="mh" placeholder="Высота, мм" inputmode="numeric"><input id="mg" placeholder="Вес, г" inputmode="numeric">
+<button id="go">Сохранить обмеры</button></div>`;
+$('go').onclick=async()=>{const b={sku:ITEM.sku,length_mm:+$('ml').value||0,width_mm:+$('mw').value||0,height_mm:+$('mh').value||0,weight_g:+$('mg').value||0,user_id:uid()};
+if(b.length_mm<=0||b.width_mm<=0||b.height_mm<=0||b.weight_g<=0){toast('Все 4 замера обязательны и больше нуля');return}
+const {j}=await post('measure_save',b);
+if(j.error){toast('Ошибка: '+j.error);return}
+toast('Обмеры сохранены');scrMeasure({need:false,length_mm:j.length_mm,width_mm:j.width_mm,height_mm:j.height_mm,weight_g:j.weight_g},next)}}
+// --- Не числится: отклонить / не заявлен (шаг 3) ---
+function scrUnclaimed(ean){$('m').innerHTML=`<div class="card red"><div class="step">ТОВАР НЕ В ДОКУМЕНТЕ</div>
+<h2>${ean}</h2><div class="mut">ШК нет в документе. Отклонить или принять как «не заявленный»?</div>
+<button class="red" id="rej">Отклонить</button><button class="amber" id="acc">Принять как не заявленный</button></div>`;
+$('rej').onclick=()=>back();$('acc').onclick=async()=>{const {j}=await post('unclaimed',{receipt_id:DOC.id,ean,user_id:uid()});
+if(j.error){toast('Ошибка: '+j.error);return}ITEM={sku:j.sku,name:'Не заявлен: '+ean,code:ean,qty:0,unit:'шт',fact:0};CHZ=false;toast('Строка «не заявлен» создана');go('measure',()=>scrMeasure(null,afterMeasure))}}
+// --- 5. Этап: сканируем штрихкода товара (поштучно, немаркированные) ---
+function scrUnits(){UNIT_COUNT=0;const f=+ITEM.fact||0;
+$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 5 · ШТРИХКОДЫ · ${ITEM.sku}</div>
+<h2>${ITEM.name||''}</h2><div class="mut">Код: ${ITEM.code||'—'} · План: ${ITEM.qty||0} · Факт: ${f}</div>
+<div class="big" id="uc">Отсканировано: 0</div>
+<input id="uscan" placeholder="Сканируй штрихкод единицы" autocomplete="off">
+<button id="ugo">Сканировать</button>
+<div class="row2"><button class="ghost" id="uman">Ввести вручную</button><button id="unext">Далее →</button></div></div>`;
+const e=$('uscan');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();scanOne()}};
+$('ugo').onclick=scanOne;
+function scanOne(){const v=e.value.trim();if(!v){toast('Отсканируй штрихкод');return}
+if(v!==ITEM.sku&&v!==ITEM.code){toast('Уведомление: штрихкод не этого товара');return}
+UNIT_COUNT++;const mc=$('uc');if(mc)mc.textContent='Отсканировано: '+UNIT_COUNT;e.value='';e.focus()}
+$('uman').onclick=()=>go('qty',()=>scrQty(0));
+$('unext').onclick=()=>go('qty',()=>scrQty(UNIT_COUNT))}
+// --- 7. Этап: вводим количество штук (пустое поле по умолчанию) ---
+function scrQty(preset){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 7 · КОЛИЧЕСТВО · ${ITEM.sku}</div><h2>Количество</h2>
+<input id="q" value="${preset>0?preset:''}" placeholder="Введи количество" inputmode="numeric">
+<div class="mut">Отсканировано единиц: ${UNIT_COUNT}</div>
+<button id="go">Далее</button></div>`;
+$('q').focus();$('go').onclick=()=>{const q=+$('q').value||0;if(q<=0){toast('Введи количество');return}PENDING_QTY=q;go('pallet',scrPalletStep)}}
+// --- 8. Этап: сканируем тарное место ---
+function scrPalletStep(){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 8 · ТАРНОЕ МЕСТО · ${ITEM.sku}</div>
+<h2>Паллета / короб (SSCC)</h2><input id="sscc" placeholder="Сканируй тарное место" autocomplete="off" value="${PALLET||''}">
+<button id="go">Далее</button></div>`;
+$('sscc').focus();$('go').onclick=async()=>{const ss=$('sscc').value.trim();if(!ss){toast('Отсканируй тарное место');return}
+const {j}=await post('pallet_open',{receipt_id:DOC.id,sscc:ss});
+if(j.error){toast('Ошибка: '+j.error);return}PALLET=ss;go('quality',scrQuality)}}
+// --- 9. Этап: выбираем качество товара ---
+function scrQuality(){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 9 · КАЧЕСТВО · ${ITEM.sku}</div>
+<h2>Качество товара? (${PENDING_QTY} шт)</h2>
+<div class="row2"><button class="green" id="g">Годный</button><button class="red" id="b">Брак</button></div>
+<div id="rz" class="hidden"><select id="rs"><option value="">Причина брака...</option><option>бой</option><option>мятая упаковка</option></select><button class="red" id="bok">Записать брак</button></div></div>`;
+$('g').onclick=async()=>{
+const {j}=await post('qty',{receipt_id:DOC.id,sku:ITEM.sku,qty:PENDING_QTY,pallet:PALLET,user_id:uid()});
+if(j.error){toast('Ошибка: '+j.error);return}go('check',scrCheck)};
+$('b').onclick=()=>$('rz').classList.remove('hidden');
+$('bok').onclick=async()=>{const rs=$('rs').value;if(!rs){toast('Выбери причину брака');return}
+const {j}=await post('qty',{receipt_id:DOC.id,sku:ITEM.sku,qty:PENDING_QTY,quality:'defect',reason:rs,pallet:PALLET,user_id:uid()});
+if(j.error){toast('Ошибка: '+j.error);return}toast('Брак записан: '+rs);go('check',scrCheck)}}
+// --- Марки DataMatrix, цикл (шаги 6-9) ---
+function scrMarks(){$('m').innerHTML=`<div class="card"><div class="step">МАРКИ · ${ITEM.sku} · в буфере: <b id="mc">${MARKS}</b></div>
+<h2>Скан DataMatrix</h2><input id="mk" placeholder="Марка..." autocomplete="off">
+<div class="row2"><button class="green" id="g">Годный</button><button class="amber" id="u">Нечитаемая</button></div>
+<button class="red" id="b">Брак</button>
+<div id="rz" class="hidden"><select id="rs"><option value="">Причина...</option><option>бой</option><option>мятая упаковка</option><option>нечитаемая марка</option></select><button class="red" id="bok">Записать брак</button></div>
+<button class="ghost" id="sscc">Принять целиком по SSCC (без вскрытия)</button>
+<button class="ghost" id="done">Все марки (${MARKS}→ сверка)</button></div>`;
+const e=$('mk');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();send('good')}};
+$('g').onclick=()=>send('good');$('u').onclick=()=>send('unreadable');
+$('b').onclick=()=>$('rz').classList.remove('hidden');$('bok').onclick=()=>send('defect');
+$('sscc').onclick=()=>go('ssccitems',scrSsccItems);
+// --- Вложенность SSCC целиком без вскрытия (шаг 5 схемы: приём всей вложенности по SSCC) ---
+function scrSsccItems(){let rows=[{sku:ITEM.sku,qty:1}];
+function draw(){$('m').innerHTML=`<div class="card"><div class="step">SSCC ${PALLET} · ВЛОЖЕННОСТЬ</div><h2>Состав паллета</h2>
+<div id="rw">${rows.map((r,i)=>`<div class="row2"><input data-i="${i}" data-k="sku" value="${r.sku}"><input data-i="${i}" data-k="qty" value="${r.qty}" inputmode="numeric"></div>`).join('')}</div>
+<button class="ghost" id="add">+ строка</button><button id="go">Принять вложенность</button></div>`;
+document.querySelectorAll('#rw input').forEach(inp=>inp.onchange=()=>{rows[+inp.dataset.i][inp.dataset.k]=inp.dataset.k==='qty'?+inp.value||0:inp.value});
+$('add').onclick=()=>{rows.push({sku:'',qty:1});draw()};$('go').onclick=async()=>{
+const items=rows.filter(r=>r.sku&&r.qty>0);if(!items.length){toast('Заполни состав');return}
+const {j}=await post('sscc_accept',{receipt_id:DOC.id,sscc:PALLET,items,user_id:uid()});
+if(j.error){toast('Ошибка: '+j.error);return}toast('Вложенность принята');scrNext()}}
+draw()}
+$('done').onclick=()=>{if(!MARKS){if(CHZ){toast('Отсканируй хотя бы одну марку Честного знака');return}if(!confirm('Ни одной годной марки. К сверке?'))return}go('check',scrCheck)};
+async function send(q){const mk=e.value.trim();if(!mk){toast('Отсканируй марку');return}
+const b={receipt_id:DOC.id,sku:ITEM.sku,mark:mk,quality:q,user_id:uid()};
+if(q==='defect'){b.reason=$('rs').value;if(!b.reason){toast('Выбери причину брака');return}}
+const {s,j}=await post('mark',b);
+if(j.error){toast('Ошибка: '+j.error);return}
+if(q==='good'){MARKS++;toast('Марка в буфере ('+MARKS+')')}else if(q==='unreadable'){toast('Нечитаемая — отложи товар')}else{toast('Брак записан')}
+scrMarksRefresh();async function scrMarksRefresh(){const mc=$('mc');if(mc)mc.textContent=MARKS;e.value='';e.focus();
+const d=$('done');if(d)d.textContent=`Все марки (${MARKS}→ сверка)`}}}
+// --- Сверка факт vs документ (ромб) ---
+async function scrCheck(){const r=await api('?action=fact&receipt_id='+DOC.id+'&sku='+encodeURIComponent(ITEM.sku));CHECK=await r.json();
+const st=CHECK.state,cls=st==='exact'?'green':(st==='shortage'?'amber':'red');
+const txt=st==='exact'?`СОШЛОСЬ · ${CHECK.fact} / ${CHECK.plan}`:(st==='shortage'?`НЕДОСТАЧА · факт ${CHECK.fact} / план ${CHECK.plan} — довнеси или прими с расхождением`:`ИЗЛИШЕК/ПЕРЕСОРТ · факт ${CHECK.fact} / план ${CHECK.plan} — блокировка, отложи товар`);
+$('m').innerHTML=`<div class="card ${cls}"><div class="step">СВЕРКА · ${ITEM.sku}</div><h2>${txt}</h2>
+${st==='shortage'?'<button id="more">Ввести ещё количество</button><button id="fix" class="amber">Принять с недостачей</button><div class="mut">Принимай по несколько штук, пока не дойдёшь до плана. «Принять с недостачей» — завершить позицию и создать акт о недостаче.</div>':''}
+${st==='excess'?'<h2>Пересчитай товар и вбей количество</h2><input id="rc" value="'+CHECK.fact+'" inputmode="decimal"><button id="fix">Принять с излишками</button><div class="mut">Этим ты подтвердишь излишек и создашь акт о нём.</div>':''}
+${st==='exact'?'<button id="fix">Зафиксировать</button>':''}</div>`;
+const mo=$('more');if(mo)mo.onclick=()=>{if(CHZ){scrMarks()}else{scrQty()}};
+$('fix').onclick=async()=>{const b={receipt_id:DOC.id,sku:ITEM.sku,pallet:PALLET,user_id:uid()};
+if(st==='excess'){const v=+$('rc').value||0;if(v<=0){toast('Вбей количество после пересчета');return}b.recount_qty=v}
+const {j}=await post('fix',b);
+if(j.error){toast('Ошибка: '+j.error);return}CHECK=j;go('confirm',scrConfirm)}}
+// --- Подтвердить позицию + закрыть паллету (шаги 11-12) ---
+function scrConfirm(){$('m').innerHTML=`<div class="card"><div class="step">ФАКТ ${CHECK.fact} / ${CHECK.plan}</div>
+<h2>Подтверди позицию</h2><button id="cf">Подтвердить позицию</button>
+<div id="nx" class="hidden"><h2>Тарное место ${PALLET||'—'}</h2><input id="w" placeholder="Вес, кг (необязательно)" inputmode="decimal">
+<button id="pc">Закрыть тарное место</button></div></div>`;
+$('cf').onclick=async()=>{const {j}=await post('confirm',{receipt_id:DOC.id,sku:ITEM.sku,user_id:uid()});
+if(j&&j.error){toast('Ошибка: '+j.error);return}$('nx').classList.remove('hidden');toast('Позиция подтверждена')};
+$('pc').onclick=async()=>{if(!PALLET){scrNext();return}
+const {j}=await post('pallet_close',{receipt_id:DOC.id,sscc:PALLET,weight:+$('w').value||0});
+if(j.error){toast('Ошибка: '+j.error);return}toast('Паллета закрыта: '+j.qty_total+' шт');PALLET=null;scrNext()}}
+// --- Куда дальше — решает система: осталось что принимать -> скан штрихкода,
+// всё принято -> автозакрытие (кросс-док закрывается вручную через scrFinish) ---
+async function scrNext(){const st=await (await api('?action=state&receipt_id='+DOC.id)).json();
+let rem=0;for(const i of (st.items||[])){rem+=Math.max(0,(+i.qty||0)-(+i.fact||0))}
+rem=Math.round(rem*1000)/1000;
+if(rem>0){toast('Осталось принять: '+rem+' шт — следующий товар');go('ean',scrEan);return}
+if(CROSS){go('finish',scrFinish);return}
+const {j}=await post('close',{receipt_id:DOC.id,user_id:uid()});
+if(j.error){toast('Ошибка закрытия: '+j.error);go('finish',scrFinish);return}
+const d=Math.round(((+j.progress.fact||0)-(+j.progress.plan||0))*1000)/1000;
+toast(d===0?'Приходный ордер закрыт в полном объеме ✓':(d<0?'Приходный ордер закрыт с недостачей ('+d+')':'Приходный ордер закрыт с излишками (+'+d+')'));
+go('docs',scrDocs)}
+// --- Финал: кросс-док перемещение + закрытие + акт ---
+async function scrFinish(){let h=`<div class="card"><div class="step">ЗАКРЫТИЕ</div><h2>Закрытие документа</h2>`;
+if(CROSS){const {j}=await post('crossdock_move',{receipt_id:DOC.id});
+h+=j.error?`<div class="mut">Кросс-док: ${j.error}</div>`:`<div class="mut">Кросс-док → в зоне отгрузки ✓</div>`}
+h+=`<button id="cl">Закрыть документ / сформировать акт</button></div>`;$('m').innerHTML=h;
+$('cl').onclick=async()=>{const {j}=await post('close',{receipt_id:DOC.id,user_id:uid()});
+if(j.error){toast('Ошибка: '+j.error);return}
+const rows=(j.act||[]).map(a=>`<tr><td>${a.sku}</td><td>${a.type}</td><td>${a.qty_diff}</td></tr>`).join('')||'<tr><td colspan=3>Расхождений нет</td></tr>';
+$('m').innerHTML=`<div class="card green"><div class="step">КОНЕЦ ПРИЁМКИ</div><h2>Документ закрыт ✓</h2>
+<div class="mut">Прогресс: ${j.progress.fact} / ${j.progress.plan} · ${j.progress.pct}%</div>
+<h2>Акт расхождений</h2><table class="mini"><tr><th>SKU</th><th>Тип</th><th>Откл.</th></tr>${rows}</table>
+<button class="ghost" id="bk">К документам</button></div>`;
+$('bk').onclick=()=>go('docs',scrDocs)}}
+go('gate',scrGate);
+</script>
+</body>
+</html>

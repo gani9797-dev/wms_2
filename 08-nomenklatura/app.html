@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>8 Номенклатура — TiMLog</title>
+<style>
+:root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);display:flex}
+aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14px;position:sticky;top:0;max-height:100vh;overflow:auto}
+aside .logo{font-size:22px;font-weight:700;margin:6px 0 22px}
+aside a{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
+aside a.on{background:var(--vio);color:#fff}
+main{flex:1;padding:18px 22px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:4px 0;font-size:24px}
+.user{display:flex;gap:10px;align-items:center;font-size:14px}
+.ava{width:36px;height:36px;border-radius:50%;background:#CBD5E0;color:#4A5568;display:flex;align-items:center;justify-content:center;font-weight:700}
+.bar{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap}
+.bar input[type=text]{width:400px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:14px;position:relative}
+.btn.pri{background:var(--vio);color:#fff;border-color:var(--vio);font-weight:700}
+.badge{position:absolute;top:-8px;right:-8px;background:var(--vio);color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;display:flex;align-items:center;justify-content:center}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px;color:#2C313C;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+td{padding:10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+tr.sel{background:#F8F6FC}tr:hover td{background:#fafaff;cursor:pointer}
+a.num{color:var(--vio);font-weight:700;text-decoration:none;cursor:pointer}
+a.bc{color:var(--ink);text-decoration:none;border-bottom:1px dashed #B3B3B3;cursor:pointer}
+.st{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap}
+.st-active{background:#C6F6D5;color:#276749}
+.st-inactive{background:#FF6666;color:#990000}
+.st-archived{background:#E6E6E6;color:#666}
+.danger{display:inline-block;padding:4px 12px;border-radius:12px;font-size:11px;font-weight:700;background:#FED7D7;color:#C53030;white-space:nowrap}
+.pager{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;color:var(--mut);font-size:13px}
+.pg button{border:1px solid var(--line);background:#fff;border-radius:8px;min-width:34px;padding:6px 8px;margin:0 2px;cursor:pointer}
+.pg button.on{background:var(--vio);color:#fff;border-color:var(--vio)}
+.fpanel{position:fixed;top:0;right:-560px;width:520px;max-width:96vw;height:100vh;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.15);transition:right .25s;padding:18px;overflow:auto;z-index:50}
+.fpanel.open{right:0}.fpanel label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:12px 0 4px}
+.fpanel input,.fpanel select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px}
+.frow{display:flex;gap:8px}.frow>*{flex:1}
+.chk{font-weight:400 !important;display:flex !important;align-items:center;gap:6px;margin:4px 0 !important}
+.chk input{width:auto !important}
+.ctx{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:99;min-width:280px;padding:6px 0;font-size:14px}
+.ctx div{padding:9px 18px;cursor:pointer}.ctx div:hover{background:#F4F2FF}.ctx hr{border:0;border-top:1px solid #F0F0F0}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.chip{background:#F4F0FB;color:#663EB2;border-radius:12px;padding:5px 10px;font-size:12px}
+.massbar{display:none;background:#fff;border:1px solid var(--vio);border-radius:8px;padding:10px 14px;margin:8px 0;font-size:13px;align-items:center;gap:10px;flex-wrap:wrap}
+.massbar.open{display:flex}
+.stock{margin:18px 0}.stock h2{font-size:18px;margin:8px 0}
+.wiz{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:70}
+.wiz.open{display:flex}.wbox{background:#fff;border-radius:12px;padding:20px;width:920px;max-width:96vw;max-height:92vh;overflow:auto}
+.wbox label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:10px 0 4px}
+.wbox input,.wbox select,.wbox textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px}
+.wbox input.bad,.wbox select.bad{border-color:#E53E3E;background:#FFF5F5}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 14px}
+.tabs{display:flex;gap:18px;border-bottom:2px solid #EDE9FE;margin:10px 0 6px;font-size:14px}
+.tabs span{padding-bottom:8px;cursor:pointer;color:#999}
+.tabs span.on{color:var(--vio);font-weight:700;border-bottom:3px solid var(--vio)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:60}
+.modal.open{display:flex}.mbox{background:#fff;border-radius:12px;padding:20px;width:460px;max-width:94vw}
+.mbox input,.mbox select{width:100%;padding:9px;margin:6px 0;border:1px solid var(--line);border-radius:8px}
+#bcpop{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:95;padding:12px 16px;font-size:13px;max-width:320px}
+#bcpop .t{font-weight:700;margin-bottom:6px}
+#bcpop code{display:block;background:#F4F0FB;padding:4px 8px;border-radius:6px;margin:4px 0}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:99;max-width:90vw}
+.gear{cursor:pointer;color:#663EB2}
+table.mini{width:100%;border-collapse:collapse;font-size:12px}
+table.mini td,table.mini th{border-bottom:1px solid #F0F0F0;padding:7px;white-space:nowrap}
+.faq{margin:18px 0;padding:16px 18px}
+.faq h2{margin:0 0 6px;font-size:18px}
+.faq ol{margin:6px 0;padding-left:20px;font-size:13px;color:#4A4A4A}
+.faq .more{display:none}.faq.open .more{display:block}
+.req{color:#ff0000}
+.hint{font-size:12px;color:var(--mut)}
+.imgprev{width:140px;height:120px;border:1px dashed #CBD5E0;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#F7FAFC;font-size:12px;color:#A0AEC0;overflow:hidden}
+.imgprev img{max-width:100%;max-height:100%}
+#bellbtn{position:relative;cursor:pointer;font-size:18px;background:none;border:0;padding:4px}
+#bellbadge{position:absolute;top:-4px;right:-6px;background:#FF0000;color:#fff;border-radius:50%;min-width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px}
+#notifpanel{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);z-index:120;width:440px;max-width:94vw;max-height:80vh;overflow:auto;padding:14px 16px}
+#notifpanel h2{margin:0;font-size:18px}
+.ntf{display:flex;gap:10px;padding:10px 6px;border-bottom:1px solid #F0F0F0;cursor:pointer;align-items:flex-start}
+.ntf:hover{background:#fafaff}.ntf.read{opacity:.75}
+.ntf .ic{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+.ntf .tx{flex:1;font-size:12px}.ntf .tx b{font-size:13px;color:#1A1A1A}
+.ntf .tx .sub{color:#A0AEC0}.ntf .tx .body{color:#4A5568;margin-top:2px}
+.ntf .tm{color:#A0AEC0;font-size:11px;white-space:nowrap}
+.ntf .dot{width:10px;height:10px;border-radius:50%;background:#EF5350;flex:none;margin-top:6px}
+.ntabs{display:flex;gap:16px;margin:8px 0;font-size:14px}
+.ntabs span{cursor:pointer;color:#999;padding-bottom:6px}
+.ntabs span.on{color:var(--ink);font-weight:700;border-bottom:2px solid var(--vio)}
+.tgl{position:relative;width:44px;height:24px;background:#B3B3B3;border-radius:12px;cursor:pointer;flex:none;border:0}
+.tgl::after{content:'';position:absolute;top:2px;left:22px;width:20px;height:20px;background:#fff;border-radius:50%;transition:left .15s}
+.tgl.on{background:#009900}.tgl.on::after{left:2px}
+.subrow{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #F0F0F0;font-size:13px}
+.subrow .nm{flex:1}.subrow .nm b{display:block}
+.subrow label{font-size:11px;color:#4A4A4A;display:flex;gap:4px;align-items:center;margin:0 !important;font-weight:400 !important}
+</style>
+<style>
+#navhidebtn{width:100%;background:#2A3446;color:#8A92A6;border:0;border-radius:8px;padding:8px;cursor:pointer;font-size:13px;margin-bottom:10px}
+#navhidebtn:hover{background:#3A4658;color:#fff}
+#navshowbtn{position:fixed;top:12px;left:8px;z-index:200;display:none;background:#1C2331;color:#fff;border:1px solid #444;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:14px}
+body.navhide aside{display:none}
+body.navhide #navshowbtn{display:block}
+body.navhide main{max-width:none}
+</style>
+<style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
+<body>
+<button id="navshowbtn" title="Показать меню">▶</button>
+<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp open" data-grp="8"><div class="par"><a class="mi on" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<main>
+<div class="top"><h1>Номенклатура</h1><div class="user"><button id="bellbtn" title="Уведомления">🔔<span id="bellbadge">0</span></button><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span><span style="color:var(--mut)">▼</span></div></div>
+<div class="bar">
+<input id="q" type="text" placeholder="🔍 Поиск по артикулу, штрихкоду, наименованию...">
+<button class="btn" id="fbtn">Фильтры (<span id="fbadge">0</span>)</button>
+<button class="btn" id="imp">Импорт</button>
+<button class="btn" id="exp">Экспорт</button>
+<button class="btn" id="defbtn" title="Значения по умолчанию для формы создания (только Администратор)">⚙ По умолчанию</button>
+<button class="btn pri" id="mk">+ Создать</button>
+</div>
+<div class="chips" id="chips"></div>
+<div class="massbar" id="massbar"><b id="masscnt">Выбрано: 0</b><span class="hint">массовое редактирование карточек · информация по хранению скрыта</span><button class="btn" id="massedit">Массовое редактирование</button><button class="btn" id="massbc">Печать ШК</button><button class="btn" id="masslabel">Печать этикеток</button><button class="btn" id="massclear">Снять выбор</button></div>
+<div class="card" style="overflow:auto">
+<table><thead><tr><th><input type="checkbox" id="chall"></th><th data-col="code">Код</th><th id="thsku" data-col="sku" style="cursor:pointer" title="Сортировка">Артикул ▲</th><th data-col="name">Наименование</th><th data-col="unit">Ед. изм.</th><th data-col="category">Категория</th><th data-col="qty">Остаток</th><th data-col="reserved">Зарезервировано</th><th data-col="status">Статус</th><th data-col="barcode">Штрихкод</th><th id="colset" class="gear" title="Настройки полей">⚙️</th></tr></thead>
+<tbody id="rows"><tr><td colspan="11">Загрузка...</td></tr></tbody></table>
+<div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
+<select id="pp"><option>16</option><option selected>24</option><option>50</option><option>100</option></select></div>
+<div class="pg" id="pg"></div></div>
+</div>
+
+<div class="card stock" id="stockcard" style="display:none;padding:0 0 10px">
+<div style="padding:14px 16px 0"><h2>Товарный запас <small id="stocktitle" style="color:var(--mut)"></small></h2><div class="hint">Нажатие на строку — ячейки хранения с данным товаром. Артикул — ссылка (открывает запас), штрихкод — ссылка (панель справа).</div></div>
+<div style="overflow:auto"><table class="mini"><thead><tr><th>Склад</th><th>Ячейка</th><th>Паллета</th><th>Кол-во</th><th>Приход</th><th>Отгрузка</th></tr></thead>
+<tbody id="stockrows"></tbody></table></div>
+</div>
+
+<div class="card" id="rcard" style="padding:0 0 10px">
+<div style="padding:14px 16px 0"><h2>Запас по приходу</h2><div class="hint">Вставь код прихода (напр. A-105108) — выгрузится весь товарный запас по данному приходу.</div>
+<div style="display:flex;gap:8px;margin-top:8px"><input id="rdoc" placeholder="Код прихода" style="flex:1"><button class="btn pri" id="rgo">Найти</button><button class="btn" id="rclr">Сбросить</button></div></div>
+<div style="overflow:auto"><table class="mini"><thead><tr><th>Приход</th><th>Артикул</th><th>Наименование</th><th>Склад</th><th>Ячейка</th><th>Паллета</th><th>Кол-во</th></tr></thead>
+<tbody id="rrows"><tr><td colspan="7" style="color:var(--mut)">Введи код прихода и нажми «Найти»</td></tr></tbody></table></div>
+</div>
+
+<div class="card faq" id="faq"><h2>Справочник информации F.A.Q.</h2>
+<ol>
+<li><b>Поиск, фильтрация и настройка отображения информации.</b> Для поиска <b>конкретной</b> номенклатуры — поисковая строка (артикул, штрихкод, наименование). <a href="#" id="faqmore">Показать все →</a></li>
+</ol>
+<div class="more">
+<ol start="2">
+<li><b>Создание новой номенклатуры.</b> Одной — кнопка «+ Создать» на верхней панели; массовой — кнопка «Импорт».</li>
+<li><b>Редактирование номенклатуры.</b> Выбрать строку → правая кнопка мыши → «Редактировать». Также доступно в карточке товара (кнопка «Изменить»). Клик по артикулу открывает товарный запас снизу; выбор чек-боксов — массовое редактирование и печать ШК/этикеток.</li>
+<li><b>Права.</b> Значения по умолчанию в форме создания задаются на уровне интерфейса и только Админом.</li>
+</ol>
+</div>
+</div>
+</main>
+
+<div class="fpanel" id="fp">
+<h2 style="margin:0">Фильтры (<span id="fbadge2">0</span>) <a href="#" id="freset" style="font-size:13px;font-weight:400">Сбросить все</a></h2>
+<label>Дата создания</label><div class="frow"><input type="date" id="f_cf"><input type="date" id="f_ct"></div>
+<label>Дата редактирования</label><div class="frow"><input type="date" id="f_uf"><input type="date" id="f_ut"></div>
+<label>Склад</label><select id="f_wh"><option value="">Все склады</option><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select>
+<label>Категория</label><select id="f_cat"><option value="">Выбрать</option><option>Мячи</option><option>Обувь</option><option>Одежда</option><option>Инвентарь</option></select>
+<label>Владелец</label><select id="f_owner"><option value="">Выбрать</option><option>ООО «Эталон»</option><option>ИП Смирнов</option><option>ООО Мяч-Сервис</option></select>
+<label>Бренд</label><select id="f_brand"><option value="">Выбрать</option><option>Wilson</option><option>Nike</option><option>Adidas</option></select>
+<label>Единица измерения</label><select id="f_unit"><option value="">Все</option><option value="шт">шт</option><option value="кор">кор</option></select>
+<label>Длина, мм</label><div class="frow"><input id="f_lf" type="number" placeholder="От"><input id="f_lt" type="number" placeholder="До"></div>
+<label>Ширина, мм</label><div class="frow"><input id="f_wf" type="number" placeholder="От"><input id="f_wt" type="number" placeholder="До"></div>
+<label>Высота, мм</label><div class="frow"><input id="f_hf" type="number" placeholder="От"><input id="f_ht" type="number" placeholder="До"></div>
+<label>Вес, гр</label><div class="frow"><input id="f_wgf" type="number" placeholder="От"><input id="f_wgt" type="number" placeholder="До"></div>
+<label>Объем, м³</label><div class="frow"><input id="f_vf" type="number" step="0.001" placeholder="От"><input id="f_vt" type="number" step="0.001" placeholder="До"></div>
+<label>Кол-во штук в коробе</label><div class="frow"><input id="f_ibf" type="number" placeholder="От"><input id="f_ibt" type="number" placeholder="До"></div>
+<label>Коробов на паллете</label><div class="frow"><input id="f_opf" type="number" placeholder="От"><input id="f_opt" type="number" placeholder="До"></div>
+<label>Остаток</label><div class="frow"><input id="f_qf" type="number" placeholder="От"><input id="f_qt" type="number" placeholder="До"></div>
+<label>Зарезервировано</label><div class="frow"><input id="f_rf" type="number" placeholder="От"><input id="f_rt" type="number" placeholder="До"></div>
+<label>Срок годности, дни</label><div class="frow"><input id="f_shf" type="number" placeholder="От"><input id="f_sht" type="number" placeholder="До"></div>
+<label>Макс % истечения срока годности</label><div class="frow"><input id="f_mef" type="number" placeholder="От"><input id="f_met" type="number" placeholder="До"></div>
+<label>Стратегия хранения</label><select id="f_stor"><option value="">Выбрать</option><option>FIFO</option><option>FEFO</option><option>LIFO</option></select>
+<label>Стратегия отбора</label><select id="f_pick"><option value="">Выбрать</option><option>FIFO</option><option>FEFO</option><option>LIFO</option></select>
+<label>Стратегия размещения</label><select id="f_place"><option value="">Выбрать</option><option>FIFO</option><option>FEFO</option><option>LIFO</option></select>
+<label>Температурный режим</label><div class="frow"><select id="f_tempf"><option value="">от…</option><option>-20</option><option>-10</option><option>0</option><option>+5</option><option>+10</option><option>+20</option><option>+25</option></select><select id="f_tempt"><option value="">до…</option><option>-20</option><option>-10</option><option>0</option><option>+5</option><option>+10</option><option>+20</option><option>+25</option></select></div>
+<label>Дата начала маркировки</label><div class="frow"><input type="date" id="f_markf"><input type="date" id="f_markt"></div>
+<label>Группа ЧЗ</label><select id="f_chz"><option value="">Выбрать</option><option>Легкая промышленность</option><option>Обувь</option><option>Шины</option></select>
+<label>Статус</label><select id="f_status"><option value="">Все</option><option value="active">Активный</option><option value="inactive">Не активный</option><option value="archived">В архиве</option></select>
+<label>Признаки</label>
+<label class="chk"><input type="checkbox" id="fg_batch"> Партийный учет</label>
+<label class="chk"><input type="checkbox" id="fg_expiry"> Учет сроков годности</label>
+<label class="chk"><input type="checkbox" id="fg_serial"> Учет серийных номеров</label>
+<label class="chk"><input type="checkbox" id="fg_chz"> Честный знак</label>
+<label class="chk"><input type="checkbox" id="fg_danger"> Опасный груз</label>
+<label class="chk"><input type="checkbox" id="fg_partial"> Разрешить частичный отбор</label>
+<label class="chk"><input type="checkbox" id="fg_check"> Требуется проверка после отбора</label>
+<label class="chk"><input type="checkbox" id="fg_pack"> Требуется упаковка заказа</label>
+<label class="chk"><input type="checkbox" id="fg_repl"> Автопополнение</label>
+<label>Изображение</label><select id="f_img"><option value="">Все</option><option value="1">Есть</option><option value="0">Нет</option></select>
+<div style="display:flex;gap:10px;margin-top:16px"><button class="btn" id="fclr">Сбросить фильтры</button><button class="btn pri" id="fok">Применить</button><button class="btn" id="fclose">Отмена</button></div>
+<p style="color:var(--mut);font-size:13px">Активные фильтры: <span id="factive">0</span></p>
+</div>
+
+<div class="ctx" id="ctx">
+<div data-a="open">Открыть</div>
+<div data-a="edit">Редактировать</div>
+<div data-a="copy">Копировать</div>
+<div data-a="based">Создать на основании</div><hr>
+<div data-a="print">Печать ▸</div>
+<div data-a="send">Отправить ▸</div>
+<div data-a="docs">Показать документы ▸</div>
+<div data-a="mov">Показать движения</div>
+<div data-a="tasks">Задания по документу</div>
+<div data-a="hist">История изменений</div><hr>
+<div data-a="block">Заблокировать</div>
+<div data-a="unblock">Разблокировать</div>
+<div data-a="archive">Архивировать</div>
+</div>
+
+<div class="ctx" id="printctx" style="min-width:200px">
+<div data-p="barcode">Штрихкод</div>
+<div data-p="label">Этикетка</div>
+</div>
+
+<div class="ctx" id="sendctx" style="min-width:200px">
+<div data-s="mail">Письмо</div>
+<div data-s="link">Ссылку на документ</div>
+</div>
+
+<div class="ctx" id="docctx" style="min-width:220px">
+<div data-d="receipt">Поступления</div>
+<div data-d="shipment">Отгрузки</div>
+<div data-d="move">Перемещения</div>
+<div data-d="inventory">Инвентаризации</div>
+<div data-d="return">Возвраты</div>
+</div>
+
+<div class="wiz" id="card"><div class="wbox">
+<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><h3 style="margin:0" id="ctitle">Создание новой номенклатуры</h3><div class="hint" id="ccode"></div></div><div style="display:flex;gap:8px"><button class="btn" id="cdel" title="Удалить карточку (только без остатков)">🗑</button><button class="btn" id="cclose2">✕</button></div></div>
+<div class="tabs"><span id="tabmain" class="on">● Основное</span><span id="tabrules">○ Правила</span><span id="tabhist">○ История</span></div>
+
+<div id="pane-main">
+<h4 style="margin:8px 0">Основная информация</h4>
+<div class="grid2">
+<div><label>Артикул <span class="req">*</span></label><input id="c_sku" placeholder="MK-ASM-1315"></div>
+<div><label>Код (автозаполнение, если пусто)</label><input id="c_code" placeholder="T-101"></div>
+</div>
+<div><label>Наименование <span class="req">*</span></label><input id="c_name" placeholder="Мяч баскетбольный А"></div>
+<div class="grid2">
+<div><label>Категория <span class="req">*</span></label><select id="c_cat"><option value="">Выбрать</option><option>Мячи</option><option>Обувь</option><option>Одежда</option><option>Инвентарь</option></select></div>
+<div><label>Единица измерения</label><select id="c_unit"><option>шт</option><option>кор</option></select></div>
+</div>
+<div class="grid2">
+<div><label>Бренд <span class="req">*</span></label><select id="c_brand"><option value="">Выбрать</option><option>Wilson</option><option>Nike</option><option>Adidas</option></select></div>
+<div><label>Владелец <span class="req">*</span></label><select id="c_owner"><option value="">Выбрать</option><option>ООО «Эталон»</option><option>ИП Смирнов</option><option>ООО Мяч-Сервис</option></select></div>
+</div>
+<div><label>Склад <span class="req">*</span></label><select id="c_wh"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select></div>
+<div><label>Описание</label><textarea id="c_descr" rows="2" placeholder="Мяч баскетбольный Wilson NCAA Replica. Для игры в зале и на улице"></textarea></div>
+<div class="grid2">
+<div><label>Изображение</label><div class="imgprev" id="imgprev">🖼<br>Загрузить</div><input type="file" id="c_img" accept="image/*" style="margin-top:6px"></div>
+<div><label>Штрихкоды (через запятую)</label><textarea id="c_barcodes" rows="4" placeholder="2178899952100, 4673192631679"></textarea><div class="hint">Штрихкод кликабелен в реестре — открывается панелью справа.</div></div>
+</div>
+<h4>Габариты и вес</h4>
+<div class="grid3">
+<div><label>Длина, мм <span class="req">*</span></label><input id="c_len" type="number" placeholder="1000"></div>
+<div><label>Ширина, мм <span class="req">*</span></label><input id="c_wid" type="number" placeholder="1000"></div>
+<div><label>Высота, мм <span class="req">*</span></label><input id="c_hei" type="number" placeholder="1000"></div>
+</div>
+<div class="grid3">
+<div><label>Вес, гр <span class="req">*</span></label><input id="c_wgt" type="number" placeholder="12000"></div>
+<div><label>Объем, м³ (авто)</label><input id="c_vol" type="number" step="0.000001" placeholder="авто"></div>
+<div><label>Статус</label><select id="c_active"><option value="1">Активный</option><option value="0">Не активный</option></select></div>
+</div>
+<div class="grid2">
+<div><label>Качество (из приемки)</label><select id="c_qual"><option value="">—</option><option>Годен</option><option>Брак</option></select></div>
+<div><label>&nbsp;</label><div class="hint">Проставляется автоматически при закрытии приемки.</div></div>
+</div>
+<div class="grid2">
+<div><label>Кол-во штук в коробе</label><input id="c_inbox" type="number" placeholder="10"></div>
+<div><label>Коробов на паллете</label><input id="c_onpal" type="number" placeholder="20"></div>
+</div>
+</div>
+
+<div id="pane-rules" style="display:none">
+<details open><summary style="cursor:pointer;font-weight:700;margin:8px 0">Хранение</summary>
+<div class="grid2">
+<div><label>Стратегия хранения <span class="req">*</span></label><select id="c_stor"><option>FIFO</option><option selected>FEFO</option><option>LIFO</option></select></div>
+<div><label>Срок годности, дни</label><input id="c_shelf" type="number" placeholder="365"></div>
+</div>
+<div><label>Температурный режим</label><div class="frow"><select id="c_tempf"><option value="">от…</option><option>-20</option><option>-10</option><option>0</option><option>+5</option><option>+10</option><option>+20</option><option>+25</option></select><select id="c_tempt"><option value="">до…</option><option>-20</option><option>-10</option><option>0</option><option>+5</option><option>+10</option><option>+20</option><option>+25</option></select></div></div>
+<div class="grid2">
+<div><label>Дата начала маркировки</label><input id="c_mark" type="date"></div>
+<div><label>Группа ЧЗ</label><select id="c_chz"><option value="">Выбрать</option><option>Легкая промышленность</option><option>Обувь</option><option>Шины</option></select></div>
+</div>
+<div><label>Макс % истечения срока годности</label><input id="c_maxexp" type="number" step="0.1" placeholder="80"></div>
+<label class="chk"><input type="checkbox" id="r_batch"> Партийный учет</label>
+<label class="chk"><input type="checkbox" id="r_expiry"> Учет сроков годности</label>
+<label class="chk"><input type="checkbox" id="r_serial"> Учет серийных номеров</label>
+<label class="chk"><input type="checkbox" id="r_chz"> Честный знак</label>
+<label class="chk"><input type="checkbox" id="r_danger"> ⚠ Опасный груз</label>
+</details>
+<details open><summary style="cursor:pointer;font-weight:700;margin:8px 0">Отбор</summary>
+<div class="grid2">
+<div><label>Стратегия отбора <span class="req">*</span></label><select id="c_pick"><option>FIFO</option><option selected>FEFO</option><option>LIFO</option></select></div>
+<div><label>Макс % истечения (дубль для отбора)</label><input id="c_maxexp2" type="number" step="0.1" placeholder="80" title="Синхронизируется с полем выше"></div>
+</div>
+<label class="chk"><input type="checkbox" id="r_partial"> Разрешить частичный отбор</label>
+<label class="chk"><input type="checkbox" id="r_check"> Требуется проверка после отбора</label>
+<label class="chk"><input type="checkbox" id="r_pack"> Требуется упаковка заказа</label>
+<label class="chk"><input type="checkbox" id="r_repl"> Автопополнение</label>
+</details>
+<details><summary style="cursor:pointer;font-weight:700;margin:8px 0">Размещение</summary>
+<div class="grid2">
+<div><label>Стратегия размещения <span class="req">*</span></label><select id="c_place"><option>FIFO</option><option selected>FEFO</option><option>LIFO</option></select></div>
+<div><label>&nbsp;</label><div class="hint">Хранение / Отбор / Размещение — раскрываются по принципу выпадающего списка (см. схему).</div></div>
+</div>
+</details>
+</div>
+
+<div id="pane-hist" style="display:none">
+<h4>История изменений</h4>
+<table class="mini"><thead><tr><th>Дата</th><th>Пользователь</th><th>Что изменилось</th><th>Было</th><th>Стало</th></tr></thead><tbody id="histrows"><tr><td colspan="5">—</td></tr></tbody></table>
+<h4>Движение</h4>
+<table class="mini"><thead><tr><th>Дата</th><th>Документ</th><th>Ячейка</th><th>Кол-во</th><th>Остаток</th></tr></thead><tbody id="movrows"><tr><td colspan="5">—</td></tr></tbody></table>
+<div><a href="#" id="histall" style="font-size:12px">Показать все →</a></div>
+</div>
+
+<div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end"><button class="btn" id="cprint">Печать ▾</button><button class="btn" id="cclose">Закрыть</button><button class="btn" id="creset">Сбросить</button><button class="btn pri" id="csave">Создать</button></div>
+<div class="hint">Поля со <span class="req">*</span> обязательны. Значения по умолчанию подставляет интерфейс (настраивает только Админ).</div>
+</div></div>
+
+<div class="modal" id="massmodal"><div class="mbox"><h3 style="margin-top:0">Массовое редактирование (<span id="massn">0</span>)</h3>
+<label>Поле</label><select id="massfield"><option value="category">Категория</option><option value="brand">Бренд</option><option value="owner">Владелец</option><option value="unit">Единица измерения</option><option value="warehouse_id">Склад</option><option value="storage_strategy">Стратегия хранения</option><option value="pick_strategy">Стратегия отбора</option><option value="placement_strategy">Стратегия размещения</option><option value="need_pack">Требуется упаковка заказа</option><option value="need_check">Требуется проверка после отбора</option><option value="allow_partial_pick">Разрешить частичный отбор</option><option value="auto_replenish">Автопополнение</option><option value="is_danger">Опасный груз</option><option value="is_active">Статус (1-активный, 0-не активный)</option></select>
+<label>Значение</label><input id="massval" type="text" placeholder="Мячи / Wilson / 1 / 0 ...">
+<div class="hint">Для флагов: 1 — да, 0 — нет. Для склада: 1 — Основной, 2 — Холодильный.</div>
+<div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="masscancel">Отмена</button><button class="btn pri" id="massok">Применить</button></div>
+</div></div>
+
+<div class="modal" id="colmodal"><div class="mbox" style="width:560px"><h3 style="margin-top:0">Настройки полей</h3>
+<div class="hint">Видимость колонок реестра (по схеме: Код, Артикул, Наименование, Ед. изм., Категория, Остаток, Зарезервировано, Статус, Штрихкод). Сохраняется в браузере.</div>
+<div id="colchecks" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin:10px 0"></div>
+<div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="colcancel">Отмена</button><button class="btn pri" id="colok">Применить</button></div>
+</div></div>
+
+<div class="modal" id="defmodal"><div class="mbox" style="width:560px"><h3 style="margin-top:0">Значения по умолчанию (только Администратор)</h3>
+<div class="hint">Подставляются в форму «+ Создать» на уровне интерфейса.</div>
+<label>Ед. измерения</label><select id="d_unit"><option>шт</option><option>кор</option></select>
+<label>Категория</label><select id="d_cat"><option>Мячи</option><option>Обувь</option><option>Одежда</option><option>Инвентарь</option></select>
+<label>Склад</label><select id="d_wh"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select>
+<div class="frow"><div><label>Хранение</label><select id="d_stor"><option>FIFO</option><option selected>FEFO</option><option>LIFO</option></select></div><div><label>Отбор</label><select id="d_pick"><option>FIFO</option><option selected>FEFO</option><option>LIFO</option></select></div></div>
+<label>Размещение</label><select id="d_place"><option>FIFO</option><option selected>FEFO</option><option>LIFO</option></select>
+<div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="defcancel">Отмена</button><button class="btn pri" id="defok">Сохранить</button></div>
+</div></div>
+
+<div id="bcpop"><div class="t">Штрихкоды</div><div id="bclist"></div><div><a href="#" id="bcclose" style="font-size:12px">Закрыть</a></div></div>
+
+<div id="notifpanel">
+<div style="display:flex;justify-content:space-between;align-items:center"><h2>Уведомления</h2><div><a href="#" id="notifset" style="font-size:16px;text-decoration:none" title="Настройка уведомлений">⚙️</a></div></div>
+<div class="ntabs"><span id="nt_all" class="on">Все <b id="nc_all">0</b></span><span id="nt_unread">Непрочитанные <b id="nc_unread">0</b></span><span id="nt_imp">Важные <b id="nc_imp">0</b></span></div>
+<div><a href="#" id="notifreadall" style="font-size:13px">Отметить все как прочитанные</a></div>
+<div id="notiflist" style="margin-top:6px"></div>
+<div style="margin-top:8px"><a href="../12-uvedomleniya/app.html" style="font-size:13px">Показать все уведомления</a></div>
+</div>
+
+<div class="modal" id="notifmodal"><div class="mbox" style="width:720px;max-width:96vw"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Настройка уведомлений</h3><button class="btn" id="notifmclose">✕</button></div>
+<div class="tabs"><span id="nstab1" class="on">Мои подписки</span><span id="nstab2">○ Каналы и расписание</span></div>
+<div id="nspane1">
+<div style="display:flex;justify-content:flex-end;margin:6px 0"><button class="btn pri" id="subadd">+ Добавить подписку</button></div>
+<div style="display:flex;gap:8px;font-size:12px;color:#4A4A4A;font-weight:700;border-bottom:1px solid #E2E8F0;padding-bottom:6px"><div style="flex:1">Что отслеживаем</div><div style="width:170px">Каналы уведомлений</div><div style="width:150px">Условие</div><div style="width:60px">Статус</div></div>
+<div id="subrows"></div>
+<div class="hint">Web / Email / Telegram — предпочтения доставки. Реальная отправка за пределами модуля.</div>
+<div style="display:flex;gap:10px;margin-top:10px;justify-content:flex-end"><button class="btn" id="subreset">Сбросить</button><button class="btn" id="subclose">Закрыть</button></div>
+</div>
+<div id="nspane2" style="display:none"><p class="hint">Каналы и расписание: Email — ежедневно в 09:00, Telegram — мгновенно, Web — мгновенно. Настройка расписания — в модуле 12.</p></div>
+</div></div>
+<input type="file" id="impfile" accept=".csv" style="display:none">
+<div id="toast"></div>
+
+<script>
+const API='demo_sqlite.php';
+let page=1,perPage=24,lastRows=[],ctxId=null,curId=null,checked=new Set(),sort='sku',dir='ASC';
+let cardMode='create',cardId=null,cardTab='main';
+const $=id=>document.getElementById(id);
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
+const fmtN=v=>{if(v===null||v===undefined||v==='')return '0';const n=Number(v);return isFinite(n)?n.toLocaleString('ru-RU',{maximumFractionDigits:3}):v};
+const dFmt=s=>(s||'').slice(0,16).replace('T',' ');
+function flagVal(id){const e=$(id);return e&&e.checked?'1':''}
+function params(){const p=new URLSearchParams({action:'list',page,per_page:perPage,sort,dir});
+const v=(id,k)=>{const e=$(id);if(e&&e.value!==''&&e.value!==null)p.set(k,e.value)};
+if($('q').value)p.set('search',$('q').value.trim());
+v('f_cf','created_from');v('f_ct','created_to');v('f_uf','updated_from');v('f_ut','updated_to');
+v('f_wh','warehouse_id');v('f_cat','category');v('f_brand','brand');v('f_owner','owner');
+v('f_unit','unit');v('f_stor','storage');v('f_pick','pick');v('f_place','placement');v('f_chz','chz_group');
+v('f_status','status');v('f_img','has_image');
+v('f_lf','len_from');v('f_lt','len_to');v('f_wf','wid_from');v('f_wt','wid_to');
+v('f_hf','hei_from');v('f_ht','hei_to');v('f_wgf','weight_from');v('f_wgt','weight_to');
+v('f_vf','vol_from');v('f_vt','vol_to');v('f_ibf','inbox_from');v('f_ibt','inbox_to');
+v('f_opf','onpal_from');v('f_opt','onpal_to');v('f_qf','qty_from');v('f_qt','qty_to');
+v('f_rf','res_from');v('f_rt','res_to');v('f_shf','shelf_from');v('f_sht','shelf_to');
+v('f_mef','maxexp_from');v('f_met','maxexp_to');
+v('f_markf','mark_from');v('f_markt','mark_to');
+const _tf=$('f_tempf').value;if(_tf!=='')p.set('temp_num_from',parseFloat(_tf));
+const _tt=$('f_tempt').value;if(_tt!=='')p.set('temp_num_to',parseFloat(_tt));
+[['fg_batch','is_batch'],['fg_expiry','is_expiry'],['fg_serial','is_serial'],['fg_chz','is_chz'],['fg_danger','is_danger'],['fg_partial','allow_partial'],['fg_check','need_check'],['fg_pack','need_pack'],['fg_repl','auto_replenish']].forEach(([id,k])=>{const f=flagVal(id);if(f)p.set(k,f)});
+return p}
+function stBadge(o){const m={'active':'st-active','inactive':'st-inactive','archived':'st-archived'};return `<span class="st ${m[o.status]||'st-active'}">● ${o.status_label||o.status}</span>`}
+async function load(){const r=await fetch(API+'?'+params());const j=await r.json();lastRows=j.rows||[];
+$('info').textContent=`Показано ${j.from}–${j.to} из ${j.total}`;
+const n=j.active_filters||0;$('fbadge').textContent=n;$('fbadge2').textContent=n;$('factive').textContent=n;
+const q=params();const chips=[];
+const chip=(key,label)=>chips.push({key,label});
+if(q.get('search'))chip('search','Поиск: '+q.get('search'));
+if(q.get('warehouse_id'))chip('warehouse_id','Все склады');
+if(q.get('category'))chip('category','Категория: '+q.get('category'));
+if(q.get('brand'))chip('brand','Бренд: '+q.get('brand'));
+if(q.get('owner'))chip('owner','Владелец: '+q.get('owner'));
+if(q.get('unit'))chip('unit','Ед. изм.: '+q.get('unit'));
+if(q.get('status'))chip('status','Статус: '+q.get('status'));
+if(q.get('storage'))chip('storage','Хранение: '+q.get('storage'));
+if(q.get('pick'))chip('pick','Отбор: '+q.get('pick'));
+if(q.get('placement'))chip('placement','Размещение: '+q.get('placement'));
+if(q.get('chz_group'))chip('chz_group','Группа ЧЗ: '+q.get('chz_group'));
+if(q.get('has_image'))chip('has_image','Изображение: '+(q.get('has_image')==='1'?'есть':'нет'));
+const FLAG_LABEL={is_batch:'Партийный учет',is_expiry:'Учет сроков годности',is_serial:'Учет серийных номеров',is_chz:'Честный знак',is_danger:'Опасный груз',allow_partial:'Разрешить частичный отбор',need_check:'Требуется проверка после отбора',need_pack:'Требуется упаковка заказа',auto_replenish:'Автопополнение'};
+Object.entries(FLAG_LABEL).forEach(([k,l])=>{if(q.get(k)==='1')chip(k,l)});
+[['qty_from','qty_to','Остаток'],['res_from','res_to','Зарезервировано'],['shelf_from','shelf_to','Срок годности'],['created_from','created_to','Дата создания'],['updated_from','updated_to','Дата редактирования'],['mark_from','mark_to','Маркировка']].forEach(([a,b,l])=>{if(q.get(a)||q.get(b))chip(a,l+': '+(q.get(a)||'…')+'–'+(q.get(b)||'…'))});
+$('chips').innerHTML=chips.map(c=>`<span class="chip">${c.label} <a href="#" data-chip="${c.key}" style="color:#663EB2;text-decoration:none" title="Убрать фильтр">✕</a></span>`).join('')+(n?` <a href="#" id="clrall" style="font-size:12px">Сбросить все</a>`:'');
+const ca=$('clrall');if(ca)ca.onclick=e=>{e.preventDefault();clrF()};
+document.querySelectorAll('[data-chip]').forEach(a=>a.onclick=e=>{e.preventDefault();clearChip(a.dataset.chip)});
+$('rows').innerHTML=lastRows.map(o=>{const ch=checked.has(o.id)?'checked':'';
+const bl=(o.barcode_list&&o.barcode_list.length?o.barcode_list:String(o.barcodes||'').split(/,\s*/).filter(Boolean));
+const bcHtml=bl.length?bl.map(b=>`<span class="chip" style="cursor:pointer" data-bc="${o.id}">${b}</span>`).join(' '):'';
+return `<tr data-id="${o.id}" class="${curId===o.id?'sel':''}"><td><input type="checkbox" data-ch="${o.id}" ${ch}></td>
+<td data-col="code">${o.code||''}</td><td data-col="sku"><a class="num sku-link" data-id="${o.id}">${o.sku||''}</a></td><td data-col="name">${o.name||''}</td>
+<td data-col="unit">${o.unit||''}</td><td data-col="category">${o.category||''}</td><td data-col="qty" style="color:#38A169">${fmtN(o.qty)}</td><td data-col="reserved">${fmtN(o.reserved_qty)}</td>
+<td data-col="status">${stBadge(o)}${o.is_danger?'<br><span class="danger">⚠ Опасный груз</span>':''}</td>
+<td data-col="barcode">${bcHtml}</td><td>⋮</td></tr>`}).join('')||'<tr><td colspan=11>Ничего не найдено</td></tr>';
+applyCols();
+const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
+h+=`<button data-p="1" title="В начало">«</button><button data-p="${Math.max(1,page-1)}" title="Назад">‹</button>`;
+let s=Math.max(1,Math.min(page-1,pages-2));const nums=[];for(let i=s;i<=Math.min(pages,s+2);i++)nums.push(i);
+nums.forEach(i=>{h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`});
+h+=`<button data-p="${Math.min(pages,page+1)}" title="Вперёд">›</button><button data-p="${pages}" title="В конец">»</button>`;
+$('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()});
+document.querySelectorAll('#rows tr').forEach(tr=>{if(!tr.dataset.id)return;
+tr.onclick=e=>{if(e.target.tagName==='INPUT'||e.target.closest('.sku-link')||e.target.closest('[data-bc]'))return;openStock(+tr.dataset.id)};
+tr.oncontextmenu=e=>{e.preventDefault();ctxId=+tr.dataset.id;hidePops();const c=$('ctx');c.style.display='block';c.style.left=Math.min(e.clientX,innerWidth-300)+'px';c.style.top=Math.min(e.clientY,innerHeight-360)+'px'}});
+document.querySelectorAll('[data-ch]').forEach(c=>c.onchange=()=>{const id=+c.dataset.ch;if(c.checked)checked.add(id);else checked.delete(id);massSync()});
+document.querySelectorAll('.sku-link').forEach(a=>a.onclick=e=>{e.preventDefault();openStock(+a.dataset.id)});
+document.querySelectorAll('[data-bc]').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openBarcodes(+a.dataset.bc,e.clientX,e.clientY)});
+applyCols();
+massSync()}
+function massSync(){$('massbar').classList.toggle('open',checked.size>0);$('masscnt').textContent='Выбрано: '+checked.size;$('massn').textContent=checked.size;
+if(checked.size>0)$('stockcard').style.display='none'}
+async function openStock(id){curId=id;
+document.querySelectorAll('#rows tr').forEach(tr=>tr.classList.toggle('sel',+tr.dataset.id===id));
+const head=lastRows.find(x=>x.id===id)||{};
+$('stockcard').style.display='block';
+$('stocktitle').textContent='· '+(head.sku||('№'+id))+' — '+(head.name||'');
+const r=await (await fetch(`${API}?action=stock&id=${id}`)).json();
+$('stockrows').innerHTML=(r||[]).map(s=>`<tr><td>${s.warehouse||('Склад '+s.warehouse_id)}</td><td style="color:var(--vio)"><u>${s.cell||''}</u></td><td>${s.pallet||''}</td><td>${fmtN(s.qty)}</td><td>${s.receipt_no||'—'}</td><td class="rsv" style="color:var(--mut)">—</td></tr>`).join('')||'<tr><td colspan=6>Нет остатков в ячейках</td></tr>';
+try{const sku=head.sku||'';if(sku){const rs=await (await fetch(`${API}?action=sku_reserve&sku=${encodeURIComponent(sku)}`)).json();
+const links=(rs||[]).map(x=>{const pal=x.pallet||'—';const qty=(+x.qty||0);
+return `<a href="../03-otgruzki/app.html?doc_no=${encodeURIComponent(x.doc_no)}" target="_blank" style="color:var(--vio)" title="Задания: ${(x.tasks||[]).join(', ')||'—'}">${x.doc_no}</a> <span style="color:var(--mut);font-size:12px">· ${pal} · ${qty} шт</span>`}).join('<br>');
+document.querySelectorAll('#stockrows .rsv').forEach(td=>{td.innerHTML=links||'—';td.style.color=links?'':'var(--mut)'})}}catch(e){}
+$('rdoc').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('rgo').click()}};
+$('rgo').onclick=async()=>{const d=$('rdoc').value.trim();if(!d){toast('Введи код прихода');return}
+const r=await (await fetch(`${API}?action=stock_by_receipt&doc_no=${encodeURIComponent(d)}`)).json();
+$('rrows').innerHTML=(r||[]).map(s=>`<tr><td>${s.receipt_no||''}</td><td>${s.sku||''}</td><td>${s.product_name||''}</td><td>${s.warehouse||('Склад '+s.warehouse_id)}</td><td>${s.cell||''}</td><td>${s.pallet||''}</td><td>${fmtN(s.qty)}</td></tr>`).join('')||'<tr><td colspan=7>По этому приходу запаса нет</td></tr>'};
+$('rclr').onclick=()=>{$('rdoc').value='';$('rrows').innerHTML='<tr><td colspan="7" style="color:var(--mut)">Введи код прихода и нажми «Найти»</td></tr>'};
+$('stockcard').scrollIntoView({behavior:'smooth',block:'nearest'})}
+async function openBarcodes(id,x,y){const r=await (await fetch(`${API}?action=show&id=${id}`)).json();
+const list=(r.barcode_list&&r.barcode_list.length?r.barcode_list:(r.barcodes||'').split(/,\s*/).filter(Boolean));
+$('bclist').innerHTML=list.map(b=>`<code>${b}</code>`).join('')||'—';
+const p=$('bcpop');p.style.display='block';p.style.left=Math.min(x||300,innerWidth-340)+'px';p.style.top=(y||200)+'px'}
+function hidePops(){['ctx','printctx','sendctx','docctx','notifpanel'].forEach(i=>{const e=$(i);if(e)e.style.display='none'});$('bcpop').style.display='none'}
+$('bcclose').onclick=e=>{e.preventDefault();$('bcpop').style.display='none'};
+$('fbtn').onclick=()=>$('fp').classList.add('open');
+$('fclose').onclick=()=>$('fp').classList.remove('open');
+$('fok').onclick=()=>{page=1;$('fp').classList.remove('open');load()};
+function clrF(){['q','f_cf','f_ct','f_uf','f_ut','f_lf','f_lt','f_wf','f_wt','f_hf','f_ht','f_wgf','f_wgt','f_vf','f_vt','f_ibf','f_ibt','f_opf','f_opt','f_qf','f_qt','f_rf','f_rt','f_shf','f_sht','f_mef','f_met','f_markf','f_markt'].forEach(i=>{if($(i))$(i).value=''});['f_wh','f_cat','f_owner','f_brand','f_unit','f_stor','f_pick','f_place','f_tempf','f_tempt','f_chz','f_status','f_img'].forEach(i=>{if($(i))$(i).value=''});['fg_batch','fg_expiry','fg_serial','fg_chz','fg_danger','fg_partial','fg_check','fg_pack','fg_repl'].forEach(i=>{if($(i))$(i).checked=false});page=1;load()}
+function clearChip(key){
+const FLAG2ID={is_batch:'fg_batch',is_expiry:'fg_expiry',is_serial:'fg_serial',is_chz:'fg_chz',is_danger:'fg_danger',allow_partial:'fg_partial',need_check:'fg_check',need_pack:'fg_pack',auto_replenish:'fg_repl'};
+if(key==='search')$('q').value='';
+else if(key==='warehouse_id')$('f_wh').value='';
+else if(key==='category')$('f_cat').value='';
+else if(key==='brand')$('f_brand').value='';
+else if(key==='owner')$('f_owner').value='';
+else if(key==='unit')$('f_unit').value='';
+else if(key==='status')$('f_status').value='';
+else if(key==='storage')$('f_stor').value='';
+else if(key==='pick')$('f_pick').value='';
+else if(key==='placement')$('f_place').value='';
+else if(key==='chz_group')$('f_chz').value='';
+else if(key==='has_image')$('f_img').value='';
+else if(FLAG2ID[key])$(FLAG2ID[key]).checked=false;
+else if(key==='qty_from'||key==='qty_to'){$('f_qf').value='';$('f_qt').value=''}
+else if(key==='res_from'||key==='res_to'){$('f_rf').value='';$('f_rt').value=''}
+else if(key==='shelf_from'||key==='shelf_to'){$('f_shf').value='';$('f_sht').value=''}
+else if(key==='created_from'||key==='created_to'){$('f_cf').value='';$('f_ct').value=''}
+else if(key==='updated_from'||key==='updated_to'){$('f_uf').value='';$('f_ut').value=''}
+else if(key==='mark_from'||key==='mark_to'){$('f_markf').value='';$('f_markt').value=''}
+else return clrF();
+page=1;load()}
+$('fclr').onclick=clrF;$('freset').onclick=e=>{e.preventDefault();clrF()};
+$('q').onchange=()=>{page=1;load()};$('pp').onchange=e=>{perPage=+e.target.value;page=1;load()};
+$('thsku').onclick=()=>{if(sort==='sku'){dir=dir==='ASC'?'DESC':'ASC'}else{sort='sku';dir='ASC'}$('thsku').textContent='Артикул '+(dir==='ASC'?'▲':'▼');page=1;load()};
+const ALLCOLS=[['code','Код'],['sku','Артикул'],['name','Наименование'],['unit','Единица измерения'],['category','Категория'],['qty','Остаток'],['reserved','Зарезервировано'],['status','Статус товара'],['barcode','Штрихкод']];
+const COLFORM='products';
+let colCfg=null;
+function colDefaults(){return{code:1,sku:1,name:1,unit:1,category:1,qty:1,reserved:1,status:1,barcode:1}}
+function getCols(){return (colCfg&&typeof colCfg==='object')?colCfg:colDefaults()}
+async function colFetch(){try{const r=await (await fetch(API+'?action=columns_get&form='+COLFORM)).json();let c=(r&&r.cols)||null;
+if((!c||!Object.keys(c).length)){try{const s=JSON.parse(localStorage.getItem('nomen_cols')||'null');if(s&&typeof s==='object'&&Object.keys(s).length){c=s;await fetch(API+'?action=columns_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:COLFORM,cols:c})})}}catch(e){}}
+if(c&&typeof c==='object'&&Object.keys(c).length)colCfg=c}catch(e){}if(!colCfg)colCfg=colDefaults();applyCols()}
+function applyCols(){const cfg=getCols();document.querySelectorAll('th[data-col]').forEach(th=>{th.style.display=cfg[th.dataset.col]?'':'none'});document.querySelectorAll('td[data-col]').forEach(td=>{td.style.display=cfg[td.dataset.col]?'':'none'})}
+function renderColChecks(){const cfg=getCols();$('colchecks').innerHTML=ALLCOLS.map(([k,l])=>`<label class="chk"><input type="checkbox" data-colk="${k}" ${cfg[k]?'checked':''}> ${l}</label>`).join('')}
+$('colset').onclick=()=>{renderColChecks();$('colmodal').classList.add('open')};
+$('colcancel').onclick=()=>$('colmodal').classList.remove('open');
+$('colok').onclick=async()=>{const cfg={};document.querySelectorAll('[data-colk]').forEach(c=>cfg[c.dataset.colk]=c.checked?1:0);colCfg=cfg;try{await fetch(API+'?action=columns_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:COLFORM,cols:cfg})})}catch(e){}$('colmodal').classList.remove('open');applyCols()};
+$('defbtn').onclick=async()=>{try{const d=await (await fetch(API+'?action=defaults')).json();if(d.unit)$('d_unit').value=d.unit;if(d.category)$('d_cat').value=d.category;if(d.warehouse_id)$('d_wh').value=d.warehouse_id;if(d.storage_strategy)$('d_stor').value=d.storage_strategy;if(d.pick_strategy)$('d_pick').value=d.pick_strategy;if(d.placement_strategy)$('d_place').value=d.placement_strategy}catch(e){}$('defmodal').classList.add('open')};
+$('defcancel').onclick=()=>$('defmodal').classList.remove('open');
+$('defok').onclick=async()=>{const body={unit:$('d_unit').value,category:$('d_cat').value,warehouse_id:$('d_wh').value,storage_strategy:$('d_stor').value,pick_strategy:$('d_pick').value,placement_strategy:$('d_place').value,role:'admin'};const r=await fetch(API+'?action=defaults_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(r.ok){$('defmodal').classList.remove('open');toast('Значения по умолчанию сохранены (Админ)')}else toast('Ошибка: '+(j.error||''))};
+$('chall').onchange=e=>{checked=new Set();if(e.target.checked)lastRows.forEach(o=>checked.add(o.id));load()};
+$('faqmore').onclick=e=>{e.preventDefault();$('faq').classList.toggle('open');e.target.textContent=$('faq').classList.contains('open')?'Скрыть ↑':'Показать все →'};
+// --- карточка ---
+function setTab(t){cardTab=t;[['tabmain','main'],['tabrules','rules'],['tabhist','hist']].forEach(([id,k])=>{$(id).textContent=(t===k?'● ':'○ ')+$(id).textContent.slice(2)});
+$('pane-main').style.display=t==='main'?'block':'none';$('pane-rules').style.display=t==='rules'?'block':'none';$('pane-hist').style.display=t==='hist'?'block':'none'}
+[['tabmain','main'],['tabrules','rules'],['tabhist','hist']].forEach(([id,k])=>$(id).onclick=()=>setTab(k));
+function cardReset(){['c_sku','c_code','c_name','c_descr','c_barcodes','c_len','c_wid','c_hei','c_wgt','c_vol','c_inbox','c_onpal','c_shelf','c_mark','c_maxexp','c_maxexp2'].forEach(i=>{if($(i))$(i).value=''});['c_cat','c_brand','c_owner'].forEach(i=>$(i).value='');$('c_wh').value='1';$('c_unit').value='шт';$('c_stor').value='FEFO';$('c_pick').value='FEFO';if($('c_place'))$('c_place').value='FEFO';$('c_tempf').value='';$('c_tempt').value='';$('c_chz').value='';['r_batch','r_expiry','r_serial','r_chz','r_danger','r_partial','r_check','r_pack','r_repl'].forEach(i=>$(i).checked=false);$('histrows').innerHTML='<tr><td colspan=5>—</td></tr>';$('movrows').innerHTML='<tr><td colspan=5>—</td></tr>'}
+async function openCreate(prefill){cardReset();cardMode='create';cardId=null;setTab('main');setEditable(true);
+$('ctitle').textContent='Создание новой номенклатуры';$('ccode').textContent='';$('csave').textContent='Создать';$('csave').style.display='';$('cdel').style.display='none';
+try{const d=await (await fetch(API+'?action=defaults')).json();if(d.unit)$('c_unit').value=d.unit;if(d.category)$('c_cat').value=d.category;if(d.warehouse_id)$('c_wh').value=d.warehouse_id;if(d.storage_strategy)$('c_stor').value=d.storage_strategy;if(d.pick_strategy)$('c_pick').value=d.pick_strategy;if(d.placement_strategy&&$('c_place'))$('c_place').value=d.placement_strategy}catch(e){}
+if(prefill)Object.entries(prefill).forEach(([k,v])=>{const m={sku:'c_sku',name:'c_name',category:'c_cat',brand:'c_brand',owner:'c_owner'}[k];if(m&&$(m))$(m).value=v});
+$('card').classList.add('open')}
+async function openEdit(id){const r=await (await fetch(`${API}?action=show&id=${id}`)).json();if(!r||r.error){toast('Карточка не найдена');return}
+cardReset();cardMode='edit';cardId=id;setTab('main');setEditable(true);
+$('ctitle').textContent=(r.sku||'')+' — '+(r.name||'');$('ccode').textContent=r.code||'';$('csave').textContent='Сохранить';$('csave').style.display='';$('cdel').style.display='';
+$('c_sku').value=r.sku||'';$('c_code').value=r.code||'';$('c_name').value=r.name||'';$('c_cat').value=r.category||'';
+$('c_unit').value=r.unit||'шт';$('c_brand').value=r.brand||'';$('c_owner').value=r.owner||'';
+$('c_wh').value=r.warehouse_id||'1';$('c_descr').value=r.description||'';
+$('c_len').value=r.length_mm||'';$('c_wid').value=r.width_mm||'';$('c_hei').value=r.height_mm||'';
+$('c_wgt').value=r.weight_g||'';$('c_vol').value=r.volume_m3||'';
+$('c_inbox').value=r.qty_in_box||'';$('c_onpal').value=r.boxes_per_pallet||'';
+$('c_barcodes').value=(r.barcode_list||[]).join(', ');
+$('c_stor').value=r.storage_strategy||'FEFO';$('c_pick').value=r.pick_strategy||'FEFO';
+if($('c_place'))$('c_place').value=r.placement_strategy||'FEFO';
+const _tf=r.temp_from;const _tt=r.temp_to;
+$('c_tempf').value=(_tf===null||_tf===''||_tf===undefined)?'':(_tf>0?'+'+_tf:''+_tf);
+$('c_tempt').value=(_tt===null||_tt===''||_tt===undefined)?'':(_tt>0?'+'+_tt:''+_tt);
+$('c_shelf').value=r.shelf_life_days||'';$('c_mark').value=r.marking_start||'';
+$('c_chz').value=r.chz_group||'';$('c_qual').value=r.quality||'';$('c_maxexp').value=r.max_expiry_pct||'';if($('c_maxexp2'))$('c_maxexp2').value=r.max_expiry_pct||'';
+[['r_batch','is_batch'],['r_expiry','is_expiry'],['r_serial','is_serial'],['r_chz','is_chz'],['r_danger','is_danger'],['r_partial','allow_partial_pick'],['r_check','need_check'],['r_pack','need_pack'],['r_repl','auto_replenish']].forEach(([id,k])=>$(id).checked=!!+((r[k]??0)));
+$('c_active').value=r.is_active?'1':'0';
+const h=await (await fetch(`${API}?action=history&id=${id}`)).json();
+$('histrows').innerHTML=(h||[]).map(x=>`<tr><td>${dFmt(x.created_at)}</td><td>${x.user_fio||''}</td><td>${x.field_label||x.field||''}</td><td>${x.old_value||''}</td><td>${x.new_value||''}</td></tr>`).join('')||'<tr><td colspan=5>Нет изменений</td></tr>';
+const m=await (await fetch(`${API}?action=movements&id=${id}`)).json();
+$('movrows').innerHTML=(m||[]).map(x=>`<tr><td>${dFmt(x.doc_date)}</td><td>${x.doc_no||''}</td><td>${x.cell||''}</td><td>${x.qty_change>0?'+ ':''}${fmtN(x.qty_change)}</td><td>${fmtN(x.balance)}</td></tr>`).join('')||'<tr><td colspan=5>Нет движений</td></tr>';
+$('card').classList.add('open')}
+$('mk').onclick=()=>openCreate();
+$('cclose').onclick=$('cclose2').onclick=()=>$('card').classList.remove('open');
+function setEditable(on){document.querySelectorAll('#card input,#card select,#card textarea').forEach(e=>{if(e.id==='pp')return;e.disabled=!on});if($('cprint'))$('cprint').disabled=false}
+async function openView(id){await openEdit(id);cardMode='view';setEditable(false);$('csave').style.display='none';setTab('main')}
+$('cdel').onclick=async()=>{if(!cardId){toast('Нечего удалять');return}if(!confirm('Удалить карточку? Возможно только при нулевом остатке и резерве.'))return;const r=await fetch(`${API}?action=delete&id=${cardId}`,{method:'POST'});const j=await r.json();if(r.ok){$('card').classList.remove('open');toast('Удалено');load()}else toast('Ошибка: '+(j.error||''))};
+$('cprint').onclick=e=>{if(!cardId){toast('Сначала выберите карточку');return}ctxId=cardId;const p=$('printctx');p.style.display='block';p.style.left=(e.clientX||innerWidth-260)+'px';p.style.top=(e.clientY||200)+'px'};
+$('creset').onclick=()=>{if(cardMode==='edit'&&cardId)openEdit(cardId);else cardReset()};
+function calcVol(){const l=+$('c_len').value,w=+$('c_wid').value,h=+$('c_hei').value;if(l&&w&&h)$('c_vol').value=(l/1000*(w/1000)*(h/1000)).toFixed(6)}
+;['c_len','c_wid','c_hei'].forEach(i=>$(i).oninput=calcVol);
+$('histall').onclick=e=>{e.preventDefault();toast('Полная история — в карточке товара (демо: последние 100)')};
+function cardBody(){const num=(id)=>{const v=$(id).value;return v===''||v===null?null:+v};
+return {sku:$('c_sku').value.trim(),code:$('c_code').value.trim()||null,name:$('c_name').value.trim(),
+category:$('c_cat').value,unit:$('c_unit').value,brand:$('c_brand').value,owner:$('c_owner').value,
+warehouse_id:+$('c_wh').value||null,description:$('c_descr').value||null,
+length_mm:num('c_len'),width_mm:num('c_wid'),height_mm:num('c_hei'),weight_g:num('c_wgt'),
+volume_m3:$('c_vol').value===''||$('c_vol').value===null?null:+$('c_vol').value,
+qty_in_box:num('c_inbox'),boxes_per_pallet:num('c_onpal'),
+barcodes:$('c_barcodes').value.split(/[,\s;]+/).map(s=>s.trim()).filter(Boolean),
+storage_strategy:$('c_stor').value,pick_strategy:$('c_pick').value,
+placement_strategy:$('c_place')?$('c_place').value:'FEFO',
+temp_from:$('c_tempf').value||null,temp_to:$('c_tempt').value||null,
+shelf_life_days:num('c_shelf'),marking_start:$('c_mark').value||null,chz_group:$('c_chz').value||null,quality:$('c_qual').value||null,
+max_expiry_pct:($('c_maxexp2')&&$('c_maxexp2').value!==''?+$('c_maxexp2').value:($('c_maxexp').value===''||$('c_maxexp').value===null?null:+$('c_maxexp').value)),
+is_batch:$('r_batch').checked?1:0,is_expiry:$('r_expiry').checked?1:0,is_serial:$('r_serial').checked?1:0,
+is_chz:$('r_chz').checked?1:0,is_danger:$('r_danger').checked?1:0,
+allow_partial_pick:$('r_partial').checked?1:0,need_check:$('r_check').checked?1:0,
+need_pack:$('r_pack').checked?1:0,auto_replenish:$('r_repl').checked?1:0,
+is_active:+$('c_active').value}}
+$('csave').onclick=async()=>{
+let ok=true;[['c_sku',v=>v.trim()!==''],['c_name',v=>v.trim()!==''],['c_cat',v=>v!==''],['c_brand',v=>v!==''],['c_owner',v=>v!==''],['c_len',v=>v!==''&&+v>0],['c_wid',v=>v!==''&&+v>0],['c_hei',v=>v!==''&&+v>0],['c_wgt',v=>v!==''&&+v>0]].forEach(([id,fn])=>{const e=$(id);const good=fn(e.value);e.classList.toggle('bad',!good);if(!good)ok=false});
+if(!ok){toast('Заполните обязательные поля *');setTab('main');return}
+const body=cardBody();
+const url=cardMode==='create'?API+'?action=store':API+'?action=update&id='+cardId;
+const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const j=await r.json();
+if(r.ok){$('card').classList.remove('open');toast(cardMode==='create'?'Создано: #'+j.id:'Сохранено');load()}else toast('Ошибка: '+(j.error||''))};
+// --- импорт/экспорт ---
+$('exp').onclick=()=>{const h=['Код','Артикул','Наименование','Ед.изм','Категория','Бренд','Владелец','Остаток','Зарезервировано','Статус','Штрихкоды'];
+const csv='﻿'+h.join(';')+'\n'+lastRows.map(o=>[o.code,o.sku,'"'+String(o.name||'').replace(/"/g,'""')+'"',o.unit,o.category,o.brand||'',o.owner||'',o.qty,o.reserved_qty,o.status_label||'',(o.barcodes||'')].join(';')).join('\n');
+const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='nomenclature.csv';a.click()};
+$('imp').onclick=()=>$('impfile').click();
+$('impfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+const fd=new FormData();fd.append('file',f);
+const r=await fetch(API+'?action=import',{method:'POST',body:fd});const j=await r.json();
+if(r.ok){toast('Импорт: создано '+j.created+(j.errors&&j.errors.length?' · ошибок '+j.errors.length:''));load()}else toast('Ошибка импорта: '+(j.error||''));e.target.value=''};
+$('c_img').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{$('imgprev').innerHTML=`<img src="${rd.result}" alt="">`};rd.readAsDataURL(f);toast('Изображение прикреплено (демо, без сохранения на сервер)')};
+// --- массовые действия ---
+$('massclear').onclick=()=>{checked=new Set();$('chall').checked=false;load()};
+$('massedit').onclick=()=>$('massmodal').classList.add('open');
+$('masscancel').onclick=()=>$('massmodal').classList.remove('open');
+$('massok').onclick=async()=>{const f=$('massfield').value;let v=$('massval').value.trim();
+const FLAGS=['need_pack','need_check','allow_partial_pick','auto_replenish','is_danger','is_active','is_batch','is_expiry','is_serial','is_chz'];
+const patch={};if(FLAGS.includes(f))patch[f]=v==='1'?1:0;else if(f==='warehouse_id')patch[f]=+v||null;else patch[f]=v;
+if(v===''&&!FLAGS.includes(f)){toast('Укажите значение');return}
+const r=await fetch(API+'?action=mass',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[...checked],patch})});
+const j=await r.json();$('massmodal').classList.remove('open');toast(r.ok?'Обновлено: '+j.updated:'Ошибка');load()};
+async function massPrint(kind){for(const id of checked){const r=await (await fetch(`${API}?action=print&id=${id}&kind=${kind}`)).json();toast((kind==='barcode'?'ШК ':'Этикетка ')+(r.sku||'')+': '+(r.barcode||'—'))}}
+$('massbc').onclick=()=>massPrint('barcode');$('masslabel').onclick=()=>massPrint('label');
+// --- контекстное меню ---
+document.addEventListener('click',e=>{
+if(!$('ctx').contains(e.target))$('ctx').style.display='none';
+if(!$('printctx').contains(e.target))$('printctx').style.display='none';
+if(!$('sendctx').contains(e.target))$('sendctx').style.display='none';
+if(!$('docctx').contains(e.target))$('docctx').style.display='none';
+if($('notifpanel').style.display==='block'&&!$('notifpanel').contains(e.target)&&!$('bellbtn').contains(e.target))$('notifpanel').style.display='none';
+if(!$('bcpop').contains(e.target)&&!e.target.closest('[data-bc]'))$('bcpop').style.display='none'});
+$('ctx').onclick=async e=>{const a=e.target.dataset.a;if(!a)return;const id=ctxId;
+const post=async(url,body)=>{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});const j=await r.json();toast(r.ok?'Готово':'Ошибка: '+(j.error||''));load();return j};
+if(a==='open'){openView(id)}
+else if(a==='edit'){openEdit(id)}
+else if(a==='copy'||a==='based'){const r=await fetch(`${API}?action=copy&id=${id}`,{method:'POST'});const j=await r.json();if(r.ok){if(a==='based'){openEdit(j.id)}else{toast('Скопировано: #'+j.id);load()}}else toast('Ошибка: '+(j.error||''))}
+else if(a==='print'){$('ctx').style.display='none';const p=$('printctx');p.style.display='block';p.style.left=(event.clientX)+'px';p.style.top=(event.clientY)+'px';return}
+else if(a==='send'){$('ctx').style.display='none';const p=$('sendctx');p.style.display='block';p.style.left=(event.clientX)+'px';p.style.top=(event.clientY)+'px';return}
+else if(a==='docs'){$('ctx').style.display='none';const p=$('docctx');p.style.display='block';p.style.left=(event.clientX)+'px';p.style.top=(event.clientY)+'px';return}
+else if(a==='mov'){openEdit(id).then(()=>setTab('hist'))}
+else if(a==='hist'){openEdit(id).then(()=>setTab('hist'))}
+else if(a==='tasks'){const o=lastRows.find(x=>x.id===id);const sku=o?o.sku:'';const r=await (await fetch(`${API}?action=tasks&id=${id}`)).json();const n=Array.isArray(r)?r.length:0;toast(n?('Заданий: '+n+' — '+r.map(x=>x.name||x.title||('#'+x.id)).join(', ')):(sku?('Задания по '+sku+' — переход в модуль 7'):('Задания')));if(!n&&sku)location.href='../07-zadaniya/app.html?sku='+encodeURIComponent(sku)}
+else if(a==='block')post(`${API}?action=block&id=${id}`);
+else if(a==='unblock')post(`${API}?action=unblock&id=${id}`);
+else if(a==='archive')post(`${API}?action=archive&id=${id}`);
+if(!['print','send','docs'].includes(a))$('ctx').style.display='none'};
+$('printctx').onclick=e=>{const k=e.target.dataset.p;if(!k)return;$('printctx').style.display='none';
+window.open(`${API}?action=print&id=${ctxId}&kind=${k==='barcode'?'barcode':'label'}&format=pdf`,'_blank')};
+$('sendctx').onclick=e=>{const s=e.target.dataset.s;if(!s)return;$('sendctx').style.display='none';toast(s==='mail'?'Письмо отправлено (демо)':'Ссылка скопирована (демо)')};
+$('docctx').onclick=async e=>{const d=e.target.dataset.d;if(!d)return;$('docctx').style.display='none';
+const kinds={receipt:'Поступления',shipment:'Отгрузки',move:'Перемещения',inventory:'Инвентаризации',return:'Возвраты'};
+const o=lastRows.find(x=>x.id===ctxId);const sku=o?o.sku:'';
+if(d==='receipt'&&sku){location.href='../02-postupleniya/app.html?sku='+encodeURIComponent(sku);return}
+if(d==='shipment'&&sku){location.href='../03-otgruzki/app.html?sku='+encodeURIComponent(sku);return}
+const r=await (await fetch(`${API}?action=documents&id=${ctxId}`)).json();
+toast(kinds[d]+': '+((r||[]).map(x=>x.name).join(', ')||'—'))};
+// --- уведомления (схема 8 v31: колокол в шапке) ---
+let ntab='all';
+const KIND_META={receipt:{t:'Поступления',i:'📥',bg:'#E0EEFF'},shipment:{t:'Отгрузки',i:'📦',bg:'#DCE6D1'},task:{t:'Задания',i:'📝',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'}};
+const KIND_CONDS={receipt:['Все статусы','Принято','Принято с отклонениями','Отменено'],shipment:['Все статусы','Расхождение, Отменено','Доставлена'],task:['Все статусы','Просрочено','Назначено','Выполнено'],nomenclature:['Все статусы','Любое изменение']};
+function nTime(s){s=String(s||'');return s.length>=16?s.slice(11,16)+' · '+s.slice(8,10)+'.'+s.slice(5,7):s}
+async function notifCounts(){try{const r=await (await fetch(API+'?action=notif_counts')).json();$('bellbadge').textContent=r.unread||0;$('bellbadge').style.display=r.unread?'flex':'none';$('nc_all').textContent=r.all||0;$('nc_unread').textContent=r.unread||0;$('nc_imp').textContent=r.important||0}catch(e){}}
+async function notifLoad(){try{const r=await (await fetch(`${API}?action=notif_list&tab=${ntab}&limit=20`)).json();const rows=r.rows||[];const c=r.counts||{};$('nc_all').textContent=c.all||0;$('nc_unread').textContent=c.unread||0;$('nc_imp').textContent=c.important||0;$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
+$('notiflist').innerHTML=rows.map(x=>{const m=KIND_META[x.kind]||{t:x.kind,i:'🔔',bg:'#F4F0FB'};return `<div class="ntf ${+x.is_read?'read':''}" data-nid="${x.id}" data-kind="${x.kind||''}" data-sku="${x.sku||''}"><div class="ic" style="background:${m.bg}">${m.i}</div><div class="tx"><div class="sub">${m.t}</div><b>${x.title||''}</b><div class="body">${x.body||''}</div></div><div class="tm">${nTime(x.created_at)}</div>${+x.is_read?'':'<div class="dot"></div>'}</div>`}).join('')||'<p class="hint">Нет уведомлений</p>';
+document.querySelectorAll('#notiflist .ntf').forEach(el=>el.onclick=async()=>{const id=+el.dataset.nid;await fetch(API+'?action=notif_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});if(el.dataset.kind==='nomenclature'&&el.dataset.sku){$('notifpanel').style.display='none';$('q').value=el.dataset.sku;page=1;load()}else notifLoad()})}catch(e){}}
+function setNtab(t){ntab=t;[['nt_all','all'],['nt_unread','unread'],['nt_imp','important']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));notifLoad()}
+$('nt_all').onclick=()=>setNtab('all');$('nt_unread').onclick=()=>setNtab('unread');$('nt_imp').onclick=()=>setNtab('important');
+$('bellbtn').onclick=e=>{e.stopPropagation();const p=$('notifpanel');const open=p.style.display==='block';hidePops();if(!open){p.style.display='block';p.style.top='64px';p.style.right='16px';notifLoad()}};
+$('notifreadall').onclick=async e=>{e.preventDefault();await fetch(API+'?action=notif_read_all',{method:'POST'});notifLoad();toast('Все отмечены как прочитанные')};
+$('notifset').onclick=e=>{e.preventDefault();$('notifpanel').style.display='none';$('notifmodal').classList.add('open');subLoad()};
+$('notifmclose').onclick=$('subclose').onclick=()=>$('notifmodal').classList.remove('open');
+$('nstab1').onclick=()=>{$('nstab1').textContent='Мои подписки';$('nstab2').textContent='○ Каналы и расписание';$('nspane1').style.display='block';$('nspane2').style.display='none'};
+$('nstab2').onclick=()=>{$('nstab1').textContent='○ Мои подписки';$('nstab2').textContent='Каналы и расписание';$('nspane1').style.display='none';$('nspane2').style.display='block'};
+async function subLoad(){try{const rows=await (await fetch(API+'?action=notif_subs')).json();const byK={};(rows||[]).forEach(r=>byK[r.event_kind]=r);
+$('subrows').innerHTML=Object.keys(KIND_META).map(k=>{const m=KIND_META[k];const s=byK[k]||{ch_web:0,ch_email:0,ch_tg:0,cond_label:'Все статусы',is_on:1};const conds=(KIND_CONDS[k]||['Все статусы']).map(c=>`<option ${c===(s.cond_label||'Все статусы')?'selected':''}>${c}</option>`).join('');
+return `<div class="subrow" data-kind="${k}"><div class="nm"><b>${m.t}</b><span class="hint">${m.i}</span></div><div style="width:170px"><label><input type="checkbox" data-f="ch_web" ${+s.ch_web?'checked':''}> Web</label><label><input type="checkbox" data-f="ch_email" ${+s.ch_email?'checked':''}> Email</label><label><input type="checkbox" data-f="ch_tg" ${+s.ch_tg?'checked':''}> Telegram</label></div><div style="width:150px"><select data-f="cond_label">${conds}</select></div><div style="width:60px"><button class="tgl ${+s.is_on?'on':''}" data-f="is_on" title="Вкл/выкл"></button></div></div>`}).join('');
+document.querySelectorAll('#subrows .subrow input[type=checkbox],#subrows .subrow select').forEach(e=>e.onchange=subSave);
+document.querySelectorAll('#subrows .tgl').forEach(b=>b.onclick=()=>{b.classList.toggle('on');subSave()})}catch(e){}}
+async function subSave(){const rows=[...document.querySelectorAll('#subrows .subrow')];for(const r of rows){const k=r.dataset.kind;const g=f=>r.querySelector(`[data-f="${f}"]`);const body={event_kind:k,ch_web:g('ch_web').checked?1:0,ch_email:g('ch_email').checked?1:0,ch_tg:g('ch_tg').checked?1:0,cond_label:g('cond_label').value,is_on:g('is_on').classList.contains('on')?1:0};await fetch(API+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}toast('Подписки сохранены')}
+$('subadd').onclick=async()=>{const rows=await (await fetch(API+'?action=notif_subs')).json();const has=new Set((rows||[]).map(r=>r.event_kind));const miss=Object.keys(KIND_META).find(k=>!has.has(k));if(!miss){toast('Все типы уже подписаны');return}await fetch(API+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:miss,ch_web:1,ch_email:0,ch_tg:0,cond_label:'Все статусы',is_on:1})});subLoad()};
+$('subreset').onclick=async()=>{const defs=[['receipt',0,0,0,'Все статусы',1],['shipment',0,1,0,'Расхождение, Отменено',1],['task',1,0,1,'Просрочено',1],['nomenclature',0,1,0,'Любое изменение',0]];for(const [k,w,e,t,c,on] of defs)await fetch(API+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:k,ch_web:w,ch_email:e,ch_tg:t,cond_label:c,is_on:on})});subLoad();toast('Сброшено к значениям по схеме')};
+// предфильтр из смежных модулей: ?sku=MK-ASM-1315
+(function(){const u=new URLSearchParams(location.search);const s=u.get('sku')||u.get('search');if(s){$('q').value=s;}})();
+notifCounts();setInterval(notifCounts,60000);
+// --- Скрываемое левое меню (стрелка вверху) ---
+if(localStorage.getItem('navhide')==='1')document.body.classList.add('navhide');
+$('navhidebtn').onclick=()=>{document.body.classList.add('navhide');try{localStorage.setItem('navhide','1')}catch(e){}};
+$('navshowbtn').onclick=()=>{document.body.classList.remove('navhide');try{localStorage.setItem('navhide','0')}catch(e){}};
+colFetch().finally(load);
+</script>
+<script data-shift-select>
+/* Shift+клик по галкам: выделение диапазона подряд, как в Windows/проводнике.
+   Обычный клик запоминает якорь, Shift+клик отмечает/снимает все строки между якорем и текущей. */
+(function(){
+  var anchorTbl=null, anchorIdx=-1;
+  function boxesOf(tbl){
+    var all=tbl.querySelectorAll('input[type=checkbox]');
+    var out=[];
+    for(var i=0;i<all.length;i++){ if(all[i].id!=='chall'&&all[i].id!=='ochall') out.push(all[i]); }
+    return out;
+  }
+  function syncSet(c,state){
+    try{
+      var k=c.getAttribute('data-ch')||c.getAttribute('data-id');
+      if(k===null||k===undefined||k==='') return;
+      if(typeof checked!=='undefined'&&checked&&checked instanceof Set){
+        var id=+k;
+        if(state) checked.add(id); else checked.delete(id);
+      }
+    }catch(e){}
+  }
+  function refreshHead(tbl){
+    try{
+      var boxes=boxesOf(tbl);
+      var allOn=boxes.length>0&&boxes.every(function(x){return x.checked;});
+      var h=tbl.querySelector('#chall'); if(h) h.checked=allOn;
+      var h2=tbl.querySelector('#ochall'); if(h2) h2.checked=allOn;
+      if(tbl.contains(document.getElementById('rows'))){
+        var g=document.getElementById('chall'); if(g) g.checked=allOn;
+      }
+    }catch(e){}
+    try{ if(typeof massSync==='function') massSync(); }catch(e){}
+  }
+  document.addEventListener('click',function(e){
+    var t=e.target;
+    if(!t||!t.closest) return;
+    if(t.id==='chall'||t.id==='ochall'){ anchorTbl=null; anchorIdx=-1; return; }
+    var cb=t.closest('table input[type=checkbox]');
+    if(!cb||cb.id==='chall'||cb.id==='ochall') return;
+    var tbl=cb.closest('table');
+    if(!tbl) return;
+    var boxes=boxesOf(tbl);
+    var idx=boxes.indexOf(cb);
+    if(idx<0) return;
+    if(e.shiftKey&&tbl===anchorTbl&&anchorIdx>=0&&anchorIdx<boxes.length){
+      var state=cb.checked;
+      var a=anchorIdx<idx?anchorIdx:idx, b=anchorIdx<idx?idx:anchorIdx;
+      for(var i=a;i<=b;i++){
+        var c=boxes[i];
+        if(c.checked!==state){
+          c.checked=state;
+          syncSet(c,state);
+          try{ if(typeof c.onchange==='function') c.onchange.call(c,{target:c}); }catch(err){}
+        }
+      }
+      try{ if(typeof massSync==='function') massSync(); }catch(err){}
+      refreshHead(tbl);
+      try{ if(window.getSelection) window.getSelection().removeAllRanges(); }catch(err){}
+      anchorIdx=idx;
+    }else{
+      anchorTbl=tbl; anchorIdx=idx;
+    }
+  });
+  try{
+    var obs=new MutationObserver(function(){ anchorTbl=null; anchorIdx=-1; });
+    document.querySelectorAll('table tbody').forEach(function(tb){ obs.observe(tb,{childList:true}); });
+  }catch(e){}
+})();
+</script>
+<script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>
+</html>
