@@ -59,7 +59,7 @@ a.bc{color:var(--ink);text-decoration:none;border-bottom:1px dashed #B3B3B3;curs
 .tabs span{padding-bottom:8px;cursor:pointer;color:#999}
 .tabs span.on{color:var(--vio);font-weight:700;border-bottom:3px solid var(--vio)}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:60}
-.modal.open{display:flex}.mbox{background:#fff;border-radius:12px;padding:20px;width:460px;max-width:94vw}
+.modal.open{display:flex}.mbox{background:#fff;border-radius:12px;padding:20px;width:460px;max-width:94vw;max-height:92vh;overflow:auto}
 .mbox input,.mbox select{width:100%;padding:9px;margin:6px 0;border:1px solid var(--line);border-radius:8px}
 #bcpop{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:95;padding:12px 16px;font-size:13px;max-width:320px}
 #bcpop .t{font-weight:700;margin-bottom:6px}
@@ -349,6 +349,41 @@ body.navhide main{max-width:none}
 <div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="defcancel">Отмена</button><button class="btn pri" id="defok">Сохранить</button></div>
 </div></div>
 
+<div class="modal" id="bcmodal"><div class="mbox" style="width:680px;max-width:96vw">
+<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Штрихкод EAN-13 — термопринтер</h3><button class="btn" id="bcclose2">✕</button></div>
+<div class="hint">Вверху — артикул, далее — наименование, внизу — EAN-13. Один макет, размер этикетки выбирается ниже. Два тракта: HTML — печать из браузера (термо через драйвер или обычный принтер), ZPL — файл для Zebra-совместимых термопринтеров.</div>
+<div class="frow"><div><label>Артикул</label><input id="bc_sku" disabled></div><div><label>Штрихкод товара (EAN-13)</label><select id="bc_sel"></select></div></div>
+<div><label>Наименование</label><input id="bc_name" disabled></div>
+<div><label>Размер этикетки</label><select id="bc_size">
+<option value="58x40" selected>58 × 40 мм — маркетплейсы (WB/Ozon)</option>
+<option value="58x60">58 × 60 мм</option>
+<option value="58x30">58 × 30 мм</option>
+<option value="40x30">40 × 30 мм</option>
+<option value="43x25">43 × 25 мм — мелкая</option>
+<option value="30x20">30 × 20 мм — мини</option>
+<option value="100x150">100 × 150 мм — транспортная</option>
+<option value="custom">Произвольный…</option>
+</select></div>
+<div class="frow"><div><label>Ширина, мм</label><input id="bc_w" type="number" min="20" max="250" step="1" value="58"></div>
+<div><label>Высота, мм</label><input id="bc_h" type="number" min="15" max="250" step="1" value="40"></div>
+<div><label>Копий</label><input id="bc_n" type="number" min="1" max="999" step="1" value="1"></div></div>
+<div><label>Куда печатаем</label><select id="bc_dpi">
+<option value="html" selected>Браузер (HTML) — термо через драйвер / обычный принтер</option>
+<option value="203">Zebra 203 dpi (ZPL-файл)</option>
+<option value="300">Zebra 300 dpi (ZPL-файл)</option>
+</select></div>
+<div class="hint" id="bc_drvhint">В диалоге печати выбери термопринтер и тот же размер (58×40). Поля без масштабирования, размер страницы — из этикетки.</div>
+<label>Предпросмотр</label>
+<div style="background:#F4F5F7;border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;justify-content:center"><div id="bc_prev" style="background:#fff;border:1px dashed #999;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden"></div></div>
+<label>ZPL (Zebra)</label>
+<textarea id="bc_zpl" rows="7" readonly style="width:100%;font-family:monospace;font-size:11px" placeholder="ZPL появится после загрузки товара"></textarea>
+<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;justify-content:flex-end">
+<button class="btn" id="bc_copy">Копировать ZPL</button>
+<button class="btn" id="bc_dl">Скачать ZPL</button>
+<button class="btn pri" id="bc_go">Печать</button>
+</div>
+</div></div>
+
 <div id="bcpop"><div class="t">Штрихкоды</div><div id="bclist"></div><div><a href="#" id="bcclose" style="font-size:12px">Закрыть</a></div></div>
 
 <div id="notifpanel">
@@ -468,7 +503,8 @@ $('rclr').onclick=()=>{$('rdoc').value='';$('rrows').innerHTML='<tr><td colspan=
 $('stockcard').scrollIntoView({behavior:'smooth',block:'nearest'})}
 async function openBarcodes(id,x,y){const r=await (await fetch(`${API}?action=show&id=${id}`)).json();
 const list=(r.barcode_list&&r.barcode_list.length?r.barcode_list:(r.barcodes||'').split(/,\s*/).filter(Boolean));
-$('bclist').innerHTML=list.map(b=>`<code>${b}</code>`).join('')||'—';
+$('bclist').innerHTML=list.map(b=>`<code>${b} <a href="#" data-printbc="${b}" data-pid="${id}" title="Печать этикетки EAN-13 на термопринтер">🖨</a></code>`).join('')||'—';
+document.querySelectorAll('[data-printbc]').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();$('bcpop').style.display='none';openBcPrint(+a.dataset.pid,a.dataset.printbc)});
 const p=$('bcpop');p.style.display='block';p.style.left=Math.min(x||300,innerWidth-340)+'px';p.style.top=(y||200)+'px'}
 function hidePops(){['ctx','printctx','sendctx','docctx','notifpanel'].forEach(i=>{const e=$(i);if(e)e.style.display='none'});$('bcpop').style.display='none'}
 $('bcclose').onclick=e=>{e.preventDefault();$('bcpop').style.display='none'};
@@ -559,7 +595,7 @@ $('cclose').onclick=$('cclose2').onclick=()=>$('card').classList.remove('open');
 function setEditable(on){document.querySelectorAll('#card input,#card select,#card textarea').forEach(e=>{if(e.id==='pp')return;e.disabled=!on});if($('cprint'))$('cprint').disabled=false}
 async function openView(id){await openEdit(id);cardMode='view';setEditable(false);$('csave').style.display='none';setTab('main')}
 $('cdel').onclick=async()=>{if(!cardId){toast('Нечего удалять');return}if(!confirm('Удалить карточку? Возможно только при нулевом остатке и резерве.'))return;const r=await fetch(`${API}?action=delete&id=${cardId}`,{method:'POST'});const j=await r.json();if(r.ok){$('card').classList.remove('open');toast('Удалено');load()}else toast('Ошибка: '+(j.error||''))};
-$('cprint').onclick=e=>{if(!cardId){toast('Сначала выберите карточку');return}ctxId=cardId;const p=$('printctx');p.style.display='block';p.style.left=(e.clientX||innerWidth-260)+'px';p.style.top=(e.clientY||200)+'px'};
+$('cprint').onclick=e=>{e.stopPropagation();if(!cardId){toast('Сначала выберите карточку');return}ctxId=cardId;submenuNear($('printctx'),e.clientX||innerWidth-260,e.clientY||200)};
 $('creset').onclick=()=>{if(cardMode==='edit'&&cardId)openEdit(cardId);else cardReset()};
 function calcVol(){const l=+$('c_len').value,w=+$('c_wid').value,h=+$('c_hei').value;if(l&&w&&h)$('c_vol').value=(l/1000*(w/1000)*(h/1000)).toFixed(6)}
 ;['c_len','c_wid','c_hei'].forEach(i=>$(i).oninput=calcVol);
@@ -611,23 +647,89 @@ if(v===''&&!FLAGS.includes(f)){toast('Укажите значение');return}
 const r=await fetch(API+'?action=mass',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[...checked],patch})});
 const j=await r.json();$('massmodal').classList.remove('open');toast(r.ok?'Обновлено: '+j.updated:'Ошибка');load()};
 async function massPrint(kind){for(const id of checked){const r=await (await fetch(`${API}?action=print&id=${id}&kind=${kind}`)).json();toast((kind==='barcode'?'ШК ':'Этикетка ')+(r.sku||'')+': '+(r.barcode||'—'))}}
-$('massbc').onclick=()=>massPrint('barcode');$('masslabel').onclick=()=>massPrint('label');
+$('massbc').onclick=()=>{const ids=[...checked];if(!ids.length)return;openBcPrint(ids[0],null,ids.length)};$('masslabel').onclick=()=>massPrint('label');
+// --- печать этикетки EAN-13 на термопринтер (ПКМ -> Печать -> Штрихкод) ---
+let bcId=null;
+const EAN_L={'0':'0001101','1':'0011001','2':'0010011','3':'0111101','4':'0100011','5':'0110001','6':'0101111','7':'0111011','8':'0110111','9':'0001011'};
+const EAN_G={'0':'0100111','1':'0110011','2':'0011011','3':'0100001','4':'0011101','5':'0111001','6':'0000101','7':'0010001','8':'0001001','9':'0010111'};
+const EAN_R={'0':'1110010','1':'1100110','2':'1101100','3':'1000010','4':'1011100','5':'1001110','6':'1010000','7':'1000100','8':'1001000','9':'1110100'};
+const EAN_PAR={'0':'LLLLLL','1':'LLGLGG','2':'LLGGLG','3':'LLGGGL','4':'LGLLGG','5':'LGGLLG','6':'LGGGLL','7':'LGLGLG','8':'LGLGGL','9':'LGGLGL'};
+function eanLoose(raw){const d=String(raw||'').replace(/\D/g,'');if(d.length===12){let s=0;for(let i=0;i<12;i++)s+=(i%2===0)?+d[i]:(+d[i])*3;return d+((10-(s%10))%10)}if(d.length===13)return d;return null}
+function eanBits(raw){const d=eanLoose(raw);if(!d)return null;const par=EAN_PAR[d[0]];let out='101';for(let i=1;i<=6;i++)out+=(par[i-1]==='G'?EAN_G:EAN_L)[d[i]];out+='01010';for(let i=7;i<=12;i++)out+=EAN_R[d[i]];return out+'101'}
+function eanHuman(raw){const d=eanLoose(raw);return d?d[0]+' '+d.slice(1,7)+' '+d.slice(7):String(raw||'')}
+function eanSvg(bits,pxW,pxH){const qz=9,n=bits.length,tot=n+2*qz,H=100,gx=8;let r='',rs=-1,rl=0,rg=false;const fl=()=>{if(rs>=0){r+=`<rect x="${qz+rs}" y="0" width="${rl}" height="${H+(rg?gx:0)}"/>`;rs=-1;rl=0}};for(let i=0;i<n;i++){const g=(i<3||i>=n-3||(i>=45&&i<50));if(bits[i]==='1'){if(rs<0){rs=i;rl=1;rg=g}else if(rg===g)rl++;else{fl();rs=i;rl=1;rg=g}}else fl()}fl();return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${tot} ${H+gx}" width="${pxW}" height="${pxH}" preserveAspectRatio="xMidYMid meet" shape-rendering="crispEdges" fill="#000">${r}</svg>`}
+function zplSan(s){return String(s||'').replace(/[\^~]/g,' ').replace(/\s+/g,' ').trim()||'-'}
+function buildZpl(sku,name,bc,wMm,hMm,copies,dpi){const k=dpi/25.4,w=Math.round(wMm*k),h=Math.round(hMm*k),m=Math.max(12,Math.round(3*k)),inw=Math.max(60,w-2*m);
+const skuH=Math.min(52,Math.max(22,w/13)),nmH=Math.min(40,Math.max(18,w/17)),cpH=Math.min(36,Math.max(18,w/18));
+const by=Math.max(1,Math.min(4,Math.floor(inw/95)));let barH=Math.min(250,h*0.45,Math.max(45,(h-2*m-skuH-2*nmH-cpH-30)*0.6));barH=Math.max(40,Math.round(barH));
+const S=zplSan(sku),N=zplSan(name);let y=Math.round(m);const L=['^XA','^CI28',`^PW${w}`,`^LL${h}`,'^LH0,0','^LT0',
+`^FO0,${y}^A0N,${Math.round(skuH)},${Math.round(skuH)}^FB${w},1,0,C,0^FD${S}^FS`];y+=Math.round(skuH)+8;
+L.push(`^FO0,${y}^A0N,${Math.round(nmH)},${Math.round(nmH)}^FB${w},2,0,C,0^FD${N}^FS`);y+=2*Math.round(nmH)+10;
+const ean=eanLoose(bc);
+if(ean)L.push(`^FO0,${y}^BY${by},3^BEN,${barH},Y^FD${ean}^FS`);
+else L.push(`^FO0,${y}^BY${by},3^BCN,${barH},Y,N,N^FD${zplSan(bc)}^FS`);
+y+=barH+10;L.push(`^FO0,${y}^A0N,${Math.round(cpH)},${Math.round(cpH)}^FB${w},1,0,C,0^FD${zplSan(ean?eanHuman(bc):bc)}^FS`,`^PQ${copies}`,'^XZ');return L.join('\n')+'\n'}
+async function openBcPrint(id,presetBc,copiesHint){bcId=id;
+try{const r=await (await fetch(`${API}?action=print&id=${id}&kind=barcode`)).json();
+if(r.error){toast('Ошибка: '+r.error);return}
+const list=(r.barcode_list&&r.barcode_list.length?r.barcode_list:(r.barcode?[r.barcode]:[]));
+$('bc_sku').value=r.sku||'';$('bc_name').value=r.name||'';
+$('bc_sel').innerHTML=list.map(b=>`<option ${b===(presetBc||r.barcode)?'selected':''}>${b}</option>`).join('')||'<option value="">— нет штрихкода —</option>';
+if(copiesHint&&copiesHint>1)$('bc_n').value=copiesHint;
+renderBc();$('bcmodal').classList.add('open');document.body.style.overflow='hidden'}catch(err){toast('Не удалось загрузить данные печати')}}
+function bcDims(){let w=parseFloat($('bc_w').value)||58,h=parseFloat($('bc_h').value)||40;
+w=Math.min(250,Math.max(20,w));h=Math.min(250,Math.max(15,h));return[w,h]}
+function renderBc(){const sku=$('bc_sku').value, nm=$('bc_name').value, bc=$('bc_sel').value||'';
+const[w,h]=bcDims();const n=Math.min(999,Math.max(1,parseInt($('bc_n').value)||1));
+const dpi=$('bc_dpi').value;
+$('bc_drvhint').textContent=dpi==='html'
+?`В диалоге печати выбери термопринтер и тот же размер (${w}×${h} мм). Поля без масштабирования, размер страницы — из этикетки.`
+:'Скачай ZPL и отправь на Zebra (драйвер / Zebra Setup Utilities / Bartender). Размер вшит в ^PW/^LL, копий (^PQ): '+n+'.';
+const sc=Math.min(3.2,260/Math.max(w,h*1.4));
+const pv=$('bc_prev');pv.style.width=(w*sc)+'px';pv.style.height=(h*sc)+'px';pv.style.padding=(Math.min(w,h)*0.05*sc)+'px';
+const fsS=(w*0.095*sc),fsN=(w*0.068*sc),fsC=(w*0.075*sc);
+const bits=eanBits(bc);
+const bars=bits?eanSvg(bits,Math.round(w*0.92*sc),Math.round(h*0.42*sc)):`<b style="font-size:${fsC}px">${bc||'— нет ШК —'}</b>`;
+pv.innerHTML=`<div style="font-weight:700;font-size:${fsS}px;line-height:1.15;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis">${sku}</div>`
++`<div style="font-size:${fsN}px;line-height:1.2;max-height:${fsN*2.5}px;overflow:hidden;max-width:100%">${nm}</div>`
++`<div style="margin-top:${2*sc}px">${bars}</div>`
++`<div style="font-size:${fsC}px;letter-spacing:.4px;margin-top:${1*sc}px;white-space:nowrap">${eanHuman(bc)}</div>`;
+const dd=dpi==='html'?'203':parseInt(dpi);
+$('bc_zpl').value=bc?buildZpl(sku,nm,bc,w,h,n,dd):''}
+$('bc_size').onchange=()=>{const v=$('bc_size').value;if(v==='custom')return;const[a,b]=v.split('x');$('bc_w').value=a;$('bc_h').value=b;renderBc()};
+['bc_w','bc_h','bc_n','bc_sel','bc_dpi'].forEach(id=>$(id).onchange=renderBc);
+['bc_w','bc_h','bc_n'].forEach(id=>$(id).oninput=renderBc);
+$('bcclose2').onclick=()=>{$('bcmodal').classList.remove('open');document.body.style.overflow=''};
+$('bc_go').onclick=()=>{if(!bcId){toast('Нет товара');return}
+const[w,h]=bcDims();const n=Math.min(999,Math.max(1,parseInt($('bc_n').value)||1));const bc=$('bc_sel').value||'';
+if(!bc){toast('У товара нет штрихкода');return}
+const dpi=$('bc_dpi').value;
+if(dpi==='html'){window.open(`${API}?action=print&id=${bcId}&kind=barcode&format=label&w=${w}&h=${h}&copies=${n}&bc=${encodeURIComponent(bc)}&autoprint=1`,'_blank')}
+else{window.open(`${API}?action=print&id=${bcId}&kind=barcode&format=zpl&w=${w}&h=${h}&copies=${n}&dpi=${dpi}&bc=${encodeURIComponent(bc)}`,'_blank')}};
+$('bc_dl').onclick=()=>{const z=$('bc_zpl').value;if(!z){toast('Нет ZPL');return}
+const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([z],{type:'text/plain'}));a.download='barcode_'+($('bc_sku').value||bcId)+'.zpl';a.click()};
+$('bc_copy').onclick=async()=>{try{await navigator.clipboard.writeText($('bc_zpl').value);toast('ZPL скопирован')}catch(e){$('bc_zpl').select();document.execCommand('copy');toast('ZPL скопирован')}};
 // --- контекстное меню ---
+// Клик внутри ctx, открывающий подменю, не должен тут же гасить подменю:
+// клики из ctx игнорируем для printctx/sendctx/docctx.
 document.addEventListener('click',e=>{
-if(!$('ctx').contains(e.target))$('ctx').style.display='none';
-if(!$('printctx').contains(e.target))$('printctx').style.display='none';
-if(!$('sendctx').contains(e.target))$('sendctx').style.display='none';
-if(!$('docctx').contains(e.target))$('docctx').style.display='none';
-if($('notifpanel').style.display==='block'&&!$('notifpanel').contains(e.target)&&!$('bellbtn').contains(e.target))$('notifpanel').style.display='none';
-if(!$('bcpop').contains(e.target)&&!e.target.closest('[data-bc]'))$('bcpop').style.display='none'});
-$('ctx').onclick=async e=>{const a=e.target.dataset.a;if(!a)return;const id=ctxId;
+const t=e.target;
+const inCtx=$('ctx')&&$('ctx').contains(t);
+if(!inCtx)$('ctx').style.display='none';
+if(!$('printctx').contains(t)&&!inCtx)$('printctx').style.display='none';
+if(!$('sendctx').contains(t)&&!inCtx)$('sendctx').style.display='none';
+if(!$('docctx').contains(t)&&!inCtx)$('docctx').style.display='none';
+if($('notifpanel').style.display==='block'&&!$('notifpanel').contains(t)&&!$('bellbtn').contains(t))$('notifpanel').style.display='none';
+if(!$('bcpop').contains(t)&&!t.closest('[data-bc]'))$('bcpop').style.display='none'});
+function submenuNear(p,x,y){p.style.display='block';p.style.left=Math.min(x||100,innerWidth-230)+'px';p.style.top=Math.min(y||100,innerHeight-160)+'px'}
+$('ctx').onclick=async e=>{e.stopPropagation();const a=e.target.dataset.a;if(!a)return;const id=ctxId;
 const post=async(url,body)=>{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});const j=await r.json();toast(r.ok?'Готово':'Ошибка: '+(j.error||''));load();return j};
 if(a==='open'){openView(id)}
 else if(a==='edit'){openEdit(id)}
 else if(a==='copy'||a==='based'){const r=await fetch(`${API}?action=copy&id=${id}`,{method:'POST'});const j=await r.json();if(r.ok){if(a==='based'){openEdit(j.id)}else{toast('Скопировано: #'+j.id);load()}}else toast('Ошибка: '+(j.error||''))}
-else if(a==='print'){$('ctx').style.display='none';const p=$('printctx');p.style.display='block';p.style.left=(event.clientX)+'px';p.style.top=(event.clientY)+'px';return}
-else if(a==='send'){$('ctx').style.display='none';const p=$('sendctx');p.style.display='block';p.style.left=(event.clientX)+'px';p.style.top=(event.clientY)+'px';return}
-else if(a==='docs'){$('ctx').style.display='none';const p=$('docctx');p.style.display='block';p.style.left=(event.clientX)+'px';p.style.top=(event.clientY)+'px';return}
+else if(a==='print'){$('ctx').style.display='none';submenuNear($('printctx'),e.clientX,e.clientY);return}
+else if(a==='send'){$('ctx').style.display='none';submenuNear($('sendctx'),e.clientX,e.clientY);return}
+else if(a==='docs'){$('ctx').style.display='none';submenuNear($('docctx'),e.clientX,e.clientY);return}
 else if(a==='mov'){openEdit(id).then(()=>setTab('hist'))}
 else if(a==='hist'){openEdit(id).then(()=>setTab('hist'))}
 else if(a==='tasks'){const o=lastRows.find(x=>x.id===id);const sku=o?o.sku:'';const r=await (await fetch(`${API}?action=tasks&id=${id}`)).json();const n=Array.isArray(r)?r.length:0;toast(n?('Заданий: '+n+' — '+r.map(x=>x.name||x.title||('#'+x.id)).join(', ')):(sku?('Задания по '+sku+' — переход в модуль 7'):('Задания')));if(!n&&sku)location.href='../07-zadaniya/app.html?sku='+encodeURIComponent(sku)}
@@ -635,8 +737,9 @@ else if(a==='block')post(`${API}?action=block&id=${id}`);
 else if(a==='unblock')post(`${API}?action=unblock&id=${id}`);
 else if(a==='archive')post(`${API}?action=archive&id=${id}`);
 if(!['print','send','docs'].includes(a))$('ctx').style.display='none'};
-$('printctx').onclick=e=>{const k=e.target.dataset.p;if(!k)return;$('printctx').style.display='none';
-window.open(`${API}?action=print&id=${ctxId}&kind=${k==='barcode'?'barcode':'label'}&format=pdf`,'_blank')};
+$('printctx').onclick=e=>{e.stopPropagation();const k=e.target.dataset.p;if(!k)return;$('printctx').style.display='none';
+if(k==='barcode'){openBcPrint(ctxId);return}
+window.open(`${API}?action=print&id=${ctxId}&kind=label&format=pdf`,'_blank')};
 $('sendctx').onclick=e=>{const s=e.target.dataset.s;if(!s)return;$('sendctx').style.display='none';toast(s==='mail'?'Письмо отправлено (демо)':'Ссылка скопирована (демо)')};
 $('docctx').onclick=async e=>{const d=e.target.dataset.d;if(!d)return;$('docctx').style.display='none';
 const kinds={receipt:'Поступления',shipment:'Отгрузки',move:'Перемещения',inventory:'Инвентаризации',return:'Возвраты'};
@@ -670,14 +773,15 @@ document.querySelectorAll('#subrows .tgl').forEach(b=>b.onclick=()=>{b.classList
 async function subSave(){const rows=[...document.querySelectorAll('#subrows .subrow')];for(const r of rows){const k=r.dataset.kind;const g=f=>r.querySelector(`[data-f="${f}"]`);const body={event_kind:k,ch_web:g('ch_web').checked?1:0,ch_email:g('ch_email').checked?1:0,ch_tg:g('ch_tg').checked?1:0,cond_label:g('cond_label').value,is_on:g('is_on').classList.contains('on')?1:0};await fetch(API+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}toast('Подписки сохранены')}
 $('subadd').onclick=async()=>{const rows=await (await fetch(API+'?action=notif_subs')).json();const has=new Set((rows||[]).map(r=>r.event_kind));const miss=Object.keys(KIND_META).find(k=>!has.has(k));if(!miss){toast('Все типы уже подписаны');return}await fetch(API+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:miss,ch_web:1,ch_email:0,ch_tg:0,cond_label:'Все статусы',is_on:1})});subLoad()};
 $('subreset').onclick=async()=>{const defs=[['receipt',0,0,0,'Все статусы',1],['shipment',0,1,0,'Расхождение, Отменено',1],['task',1,0,1,'Просрочено',1],['nomenclature',0,1,0,'Любое изменение',0]];for(const [k,w,e,t,c,on] of defs)await fetch(API+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:k,ch_web:w,ch_email:e,ch_tg:t,cond_label:c,is_on:on})});subLoad();toast('Сброшено к значениям по схеме')};
-// предфильтр из смежных модулей: ?sku=MK-ASM-1315
-(function(){const u=new URLSearchParams(location.search);const s=u.get('sku')||u.get('search');if(s){$('q').value=s;}})();
+// переход из смежных модулей (08.1): ?sku=MK-ASM-1315 или ?code=T-101 — ищем и открываем карточку товара
+let openAfterLoad=null;
+(function(){const u=new URLSearchParams(location.search);const s=u.get('sku')||u.get('code')||u.get('search');if(s){$('q').value=s;openAfterLoad=s;}})();
 notifCounts();setInterval(notifCounts,60000);
 // --- Скрываемое левое меню (стрелка вверху) ---
 if(localStorage.getItem('navhide')==='1')document.body.classList.add('navhide');
 $('navhidebtn').onclick=()=>{document.body.classList.add('navhide');try{localStorage.setItem('navhide','1')}catch(e){}};
 $('navshowbtn').onclick=()=>{document.body.classList.remove('navhide');try{localStorage.setItem('navhide','0')}catch(e){}};
-colFetch().finally(load);
+colFetch().finally(()=>load().then(()=>{if(!openAfterLoad)return;const s=openAfterLoad;openAfterLoad=null;const hit=lastRows.find(x=>String(x.sku)===s||String(x.code)===s)||(lastRows.length===1?lastRows[0]:null);if(hit)openView(hit.id)}));
 </script>
 <script data-shift-select>
 /* Shift+клик по галкам: выделение диапазона подряд, как в Windows/проводнике.

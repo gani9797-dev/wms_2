@@ -15,6 +15,7 @@ final class CellService
         'building', 'row_no', 'level_no', 'place_no', 'coord_x', 'coord_y',
         'temp_from', 'temp_to', 'allowed_goods', 'max_weight_kg', 'max_pallets',
         'hazmat_allowed', 'comment',
+        'beam_width', 'cell_height_mm', 'allowed_pallet_types', 'pallet_type',
     ];
 
     private const LABELS = [
@@ -25,8 +26,40 @@ final class CellService
         'temp_from' => 'Темп. от', 'temp_to' => 'Темп. до', 'allowed_goods' => 'Разрешено',
         'max_weight_kg' => 'Макс вес', 'max_pallets' => 'Макс паллет',
         'hazmat_allowed' => 'Опасный груз', 'comment' => 'Комментарий',
+        'beam_width' => 'Ширина балки', 'cell_height_mm' => 'Высота ячейки',
+        'allowed_pallet_types' => 'Типы тары', 'pallet_type' => 'Тип паллеты',
         'status' => 'Статус', 'is_locked' => 'Блокировка',
     ];
+
+    public const BEAMS = [3.2, 3.6];
+
+    public static function normalizeBeam(mixed $v): float
+    {
+        $f = (float)($v ?? 3.2);
+        return $f <= 3.4 ? 3.2 : 3.6;
+    }
+
+    public static function normalizePalletTypes(mixed $v): string
+    {
+        $raw = trim((string)($v ?? 'euro,fin'));
+        if ($raw === '' || $raw === 'Все' || $raw === '*') {
+            return 'euro,fin';
+        }
+        $parts = [];
+        foreach (preg_split('/[,\s;\/]+/', $raw, -1, PREG_SPLIT_NO_EMPTY) as $p) {
+            $s = function_exists('mb_strtolower') ? mb_strtolower(trim($p), 'UTF-8') : strtolower(trim($p));
+            if (in_array($s, ['евро', 'euro', 'eur', 'е'], true)) {
+                $parts[] = 'euro';
+            } elseif (in_array($s, ['фин', 'финская', 'fin', 'fan', 'ф'], true)) {
+                $parts[] = 'fin';
+            }
+        }
+        $parts = array_values(array_unique($parts));
+        if (!$parts) {
+            throw new RuntimeException('Типы тары: euro (евро) и/или fin (фин)');
+        }
+        return implode(',', $parts);
+    }
 
     private function now(): string
     {
@@ -52,6 +85,7 @@ final class CellService
         }
         // Вместимость 0 (или пусто) = безразмерная ячейка, без лимита. Отрицательная запрещена.
         $this->assertCapacity($b['capacity'] ?? 0);
+        $b = $this->normalizePlacementFields($b);
         $cols = [
             'code' => $code, 'warehouse_id' => (int)$b['warehouse_id'], 'zone' => $zone,
             'cell_type' => $type, 'status' => 'free', 'is_locked' => 0, 'is_archived' => 0,
@@ -95,6 +129,10 @@ final class CellService
             throw new RuntimeException('Ячейка не найдена');
         }
         $realCols = array_flip($this->tableColumns());
+        $b = $this->normalizePlacementFields($b, true);
+        if (array_key_exists('capacity', $b)) {
+            $this->assertCapacity($b['capacity']);
+        }
         $set = [];
         $params = [':id' => $id];
         foreach (self::EDITABLE as $c) {
@@ -307,6 +345,18 @@ final class CellService
             );
             $mv->execute([':c' => $src['id'], ':d' => $docNo, ':s' => $sku, ':q' => -$qty, ':b' => $newSrc, ':f' => $src['code'], ':t' => $dst['code']]);
             $mv->execute([':c' => $dst['id'], ':d' => $docNo, ':s' => $sku, ':q' => $qty, ':b' => $newDst, ':f' => $src['code'], ':t' => $dst['code']]);
+            // Освободили ячейку полностью — сбрасываем тип паллеты и пересчитываем
+            // временные блокировки яруса ("временно занята" при 3 финах на 3.6).
+            if ($newSrc <= 0) {
+                $this->pdo->prepare("UPDATE storage_cells SET pallet_type = NULL, pallet_count = 0 WHERE id = :id")
+                    ->execute([':id' => $src['id']]);
+                try {
+                    require_once __DIR__ . '/CellPlacement.php';
+                    CellPlacement::syncTempBlocks($this->pdo, (int)$src['warehouse_id'],
+                        $src['building'] ?? null, $src['row_no'] ?? null, $src['level_no'] ?? null);
+                } catch (Throwable) {
+                }
+            }
             $this->hist((int)$src['id'], $userId, $userFio, 'move', 'Перемещение', $src['code'], $dst['code'] . ' · ' . $sku . ' x' . $qty);
             $this->pdo->commit();
         } catch (Throwable $e) {
@@ -338,7 +388,8 @@ final class CellService
     /** @param int[] $ids */
     public function massUpdate(array $ids, array $patch, int $userId, string $userFio = 'Иванов И.И.'): int
     {
-        $allowed = ['status', 'zone', 'cell_type', 'category', 'allowed_goods', 'is_locked'];
+        $allowed = ['status', 'zone', 'cell_type', 'category', 'allowed_goods', 'is_locked',
+            'beam_width', 'cell_height_mm', 'allowed_pallet_types'];
         $patch = array_intersect_key($patch, array_flip($allowed));
         if (!$ids || !$patch) {
             return 0;
@@ -391,12 +442,13 @@ final class CellService
         $f->page = 1;
         $f->perPage = 5000;
         $data = $repo->paginate($f);
-        $head = ['Адрес', 'Склад', 'Зона', 'Тип', 'Категория', 'Статус', 'Заполненность %', 'В ячейке', 'Резерв', 'Остаток', 'Паллет', 'Темп. режим', 'Блокировка'];
+        $head = ['Адрес', 'Склад', 'Зона', 'Тип', 'Балка', 'Высота', 'Тара', 'Категория', 'Статус', 'Заполненность %', 'В ячейке', 'Резерв', 'Остаток', 'Паллет', 'Темп. режим', 'Блокировка'];
         $lines = ["\xEF\xBB\xBF" . implode(';', $head)];
         foreach ($data['rows'] as $r) {
             $lines[] = implode(';', [
                 $r['code'] ?? '', str_replace(';', ',', (string)($r['warehouse'] ?? '')),
                 $r['zone_label'] ?? '', $r['type_label'] ?? '',
+                $r['beam_label'] ?? '', $r['height_label'] ?? '', $r['pallet_types_label'] ?? '',
                 str_replace(';', ',', (string)($r['category'] ?? '')),
                 $r['status_label'] ?? '', !empty($r['is_unlimited']) ? '∞' : (string)($r['fill_pct'] ?? 0),
                 (string)($r['qty'] ?? 0), (string)($r['reserved_qty'] ?? 0),
@@ -499,6 +551,9 @@ final class CellService
 
         // Вместимость 0 (или пусто) = безразмерная ячейка, без лимита.
         $this->assertCapacity($b['capacity'] ?? 0);
+        // Ширина балки — одна на всё создание (около ряда): 3.2 или 3.6.
+        $beam = self::normalizeBeam($b['beam_width'] ?? 3.2);
+        $norm = $this->normalizePlacementFields($b, true);
         $realCols = array_flip($this->tableColumns());
         $base = [
             'warehouse_id' => $warehouseId, 'zone' => $zone, 'cell_type' => $type,
@@ -508,6 +563,9 @@ final class CellService
             'temp_from' => isset($b['temp_from']) && $b['temp_from'] !== '' ? $b['temp_from'] : null,
             'temp_to' => isset($b['temp_to']) && $b['temp_to'] !== '' ? $b['temp_to'] : null,
             'comment' => isset($b['comment']) && $b['comment'] !== '' ? $b['comment'] : null,
+            'beam_width' => $beam,
+            'cell_height_mm' => $norm['cell_height_mm'] ?? null,
+            'allowed_pallet_types' => $norm['allowed_pallet_types'] ?? 'euro,fin',
         ];
         $base = array_intersect_key($base, $realCols);
 
@@ -592,6 +650,51 @@ final class CellService
         if (!is_numeric($v) || (float)$v < 0) {
             throw new RuntimeException('Вместимость не может быть отрицательной (0 — безразмерная)');
         }
+    }
+
+    /**
+     * Нормализация полей размещения: ширина балки (3.2/3.6), высота ячейки (мм),
+     * разрешенные типы тары (euro/fin), фактический тип паллеты.
+     * $partial=true — нормализовать только переданные ключи (для update).
+     */
+    private function normalizePlacementFields(array $b, bool $partial = false): array
+    {
+        $out = $b;
+        if (!$partial || array_key_exists('beam_width', $b)) {
+            $out['beam_width'] = self::normalizeBeam($b['beam_width'] ?? 3.2);
+        }
+        if (!$partial || array_key_exists('allowed_pallet_types', $b)) {
+            if (!$partial || ($b['allowed_pallet_types'] ?? null) !== null) {
+                $out['allowed_pallet_types'] = self::normalizePalletTypes($b['allowed_pallet_types'] ?? 'euro,fin');
+            }
+        }
+        if (array_key_exists('cell_height_mm', $b)) {
+            $v = $b['cell_height_mm'];
+            if ($v === '' || $v === null) {
+                $out['cell_height_mm'] = null;
+            } else {
+                if (!is_numeric($v) || (int)$v <= 0) {
+                    throw new RuntimeException('Высота ячейки должна быть > 0 мм');
+                }
+                $out['cell_height_mm'] = (int)$v;
+            }
+        }
+        if (array_key_exists('pallet_type', $b)) {
+            $v = trim((string)($b['pallet_type'] ?? ''));
+            if ($v === '' || $v === null) {
+                $out['pallet_type'] = null;
+            } else {
+                $s = function_exists('mb_strtolower') ? mb_strtolower($v, 'UTF-8') : strtolower($v);
+                if (in_array($s, ['евро', 'euro', 'eur', 'е'], true)) {
+                    $out['pallet_type'] = 'euro';
+                } elseif (in_array($s, ['фин', 'финская', 'fin', 'fan', 'ф'], true)) {
+                    $out['pallet_type'] = 'fin';
+                } else {
+                    throw new RuntimeException('Тип паллеты: euro (евро) или fin (фин)');
+                }
+            }
+        }
+        return $out;
     }
 
     private ?array $colsCache = null;

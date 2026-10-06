@@ -629,9 +629,9 @@ async function subSave(){const rows=[...document.querySelectorAll('#subrows .sub
 $('subadd').onclick=async()=>{const rows=await (await fetch(NAPI+'?action=notif_subs')).json();const has=new Set((rows||[]).map(r=>r.event_kind));const miss=Object.keys(KIND_META).find(k=>!has.has(k));if(!miss){toast('Все типы уже подписаны');return}await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:miss,ch_web:1,ch_email:0,ch_tg:0,cond_label:'Все статусы',is_on:1})});subLoad()};
 $('subreset').onclick=async()=>{const defs=[['receipt',0,0,0,'Все статусы',1],['shipment',0,1,0,'Расхождение, Отменено',1],['task',1,0,1,'Просрочено',1],['nomenclature',0,1,0,'Любое изменение',0]];for(const [k,w,e,t,c,on] of defs)await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:k,ch_web:w,ch_email:e,ch_tg:t,cond_label:c,is_on:on})});subLoad();toast('Сброшено к значениям по схеме')};
 notifCounts();setInterval(notifCounts,60000);
-// предфильтр по ссылке (напр. из 08-детализации): ?doc_no=S-205109 — ищем и открываем карточку
+// переход по ссылке (напр. из 08.1): ?doc_no=S-205109 — ищем и открываем сразу доп. форму отгрузки
 (function(){const u=new URLSearchParams(location.search);const d=u.get('doc_no')||u.get('doc');if(!d){load();return}
-$('q').value=d;page=1;load().then(()=>{if(lastRows.length===1&&String(lastRows[0].doc_no)===d)open(lastRows[0].id)})})();
+$('q').value=d;page=1;load().then(()=>{const hit=lastRows.find(x=>String(x.doc_no)===d)||(lastRows.length===1?lastRows[0]:null);if(hit)open(hit.id)})})();
 // --- Скрываемое левое меню (стрелка вверху) ---
 if(localStorage.getItem('navhide')==='1')document.body.classList.add('navhide');
 $('navhidebtn').onclick=()=>{document.body.classList.add('navhide');try{localStorage.setItem('navhide','1')}catch(e){}};

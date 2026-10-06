@@ -20,15 +20,43 @@ final class TaskService
         return $this->isSqlite() ? "datetime('now')" : 'NOW()';
     }
 
-    public function nextDocNo(): string
+    /**
+     * Префикс номера задания по типу операции:
+     * отбор/сбор -> SE-, перемещение -> RE-, размещение -> PL-.
+     * Остальные типы (комплектация, пополнение, ...) -> TASK-.
+     */
+    public static function prefixForType(string $type): string
     {
-        $prefix = 'TASK-' . date('Ym') . '-';
-        $st = $this->pdo->prepare("SELECT doc_no FROM tasks WHERE doc_no LIKE :p ORDER BY doc_no DESC LIMIT 1");
-        $st->execute([':p' => $prefix . '%']);
-        $last = (string)($st->fetchColumn() ?: '');
-        $n = 1;
-        if (preg_match('/(\d+)$/', $last, $m)) {
-            $n = ((int)$m[1]) + 1;
+        $t = function_exists('mb_strtolower') ? mb_strtolower(trim($type), 'UTF-8') : strtolower(trim($type));
+        return match ($t) {
+            'отбор', 'сбор' => 'SE-',
+            'перемещение' => 'RE-',
+            'размещение' => 'PL-',
+            default => 'TASK-',
+        };
+    }
+
+    public function nextDocNo(?string $type = null): string
+    {
+        $prefix = $type !== null && $type !== '' ? self::prefixForType($type) : 'TASK-';
+        $prefix .= date('Ym') . '-';
+        // Общий порядок цифр: max хвостовых цифр по ВСЕМ номерам (все префиксы),
+        // чтобы цифры не повторялись между типами заданий.
+        $max = 0;
+        try {
+            $all = $this->pdo->query('SELECT doc_no FROM tasks')->fetchAll(PDO::FETCH_COLUMN);
+            foreach ((array)$all as $docNo) {
+                if (preg_match('/(\d+)$/', (string)$docNo, $m)) {
+                    $n = (int)$m[1];
+                    if ($n > $max) {
+                        $max = $n;
+                    }
+                }
+            }
+        } catch (Throwable) {
+        }
+        if ($max > 0) {
+            $n = $max + 1;
         } else {
             $c = (int)$this->pdo->query('SELECT COUNT(*) FROM tasks')->fetchColumn();
             $n = $c + 2456;
@@ -100,7 +128,8 @@ final class TaskService
 
         $this->pdo->beginTransaction();
         try {
-            $no = $this->nextDocNo();
+            // Префикс номера зависит от исходного типа (до схлопывания отбор->сбор).
+            $no = $this->nextDocNo($type);
             $flags = $b['flags'] ?? null;
             if (is_array($flags)) {
                 $flags = implode(',', $flags);
@@ -227,6 +256,57 @@ final class TaskService
         $this->history($id, $userId, 'auto', null, null, 'done');
     }
 
+    // Удаление задания вместе со строками и историей (явно, т.к. в SQLite нет FK).
+    public function delete(int $id, ?int $userId): void
+    {
+        if ($id <= 0) {
+            throw new RuntimeException('Задание не найдено');
+        }
+        $st = $this->pdo->prepare('SELECT id, doc_no FROM tasks WHERE id=:id');
+        $st->execute([':id' => $id]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            throw new RuntimeException('Задание не найдено');
+        }
+        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->prepare('DELETE FROM task_items WHERE task_id=:id')->execute([':id' => $id]);
+            try {
+                $this->pdo->prepare('DELETE FROM task_history WHERE task_id=:id')->execute([':id' => $id]);
+            } catch (Throwable) {
+            }
+            $this->pdo->prepare('DELETE FROM tasks WHERE id=:id')->execute([':id' => $id]);
+            $this->pdo->commit();
+        } catch (Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    /** Массовое удаление. Возвращает число удаленных заданий. */
+    public function deleteMany(array $ids, ?int $userId): int
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn(int $v) => $v > 0)));
+        if (!$ids) {
+            throw new RuntimeException('Ничего не выбрано для удаления');
+        }
+        // Проверяем все заранее, чтобы не удалять частично.
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $st = $this->pdo->prepare("SELECT id FROM tasks WHERE id IN ($ph)");
+        $st->execute($ids);
+        $found = array_map('intval', (array)$st->fetchAll(PDO::FETCH_COLUMN));
+        $miss = array_diff($ids, $found);
+        if ($miss) {
+            throw new RuntimeException('Задания не найдены: ' . implode(', ', $miss));
+        }
+        $n = 0;
+        foreach ($ids as $id) {
+            $this->delete($id, $userId);
+            $n++;
+        }
+        return $n;
+    }
+
     // ТСД/отбор: отметить факт по строке (для будущих экранов ТСД).
     public function pick(int $itemId, float $qty, ?int $userId): void
     {
@@ -260,10 +340,12 @@ final class TaskService
         $page = $repo->paginate($f);
         $out = fopen('php://temp', 'r+');
         fputs($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['№ задания', 'Дата создания', 'Тип', 'Статус', 'Склад', 'Товары', 'Ячеек', 'Документ', 'Приоритет', 'Прогресс', 'Исполнитель'], ';');
+        fputcsv($out, ['№ задания', 'Дата создания', 'Тип', 'Статус', 'Склад', 'Товары', 'Ячейка хранения', '№ паллеты', 'Артикул', 'Наименование', 'Ячеек', 'Документ', 'Приоритет', 'Прогресс', 'Исполнитель'], ';');
         foreach ($page['rows'] as $r) {
             fputcsv($out, [$r['doc_no'], $r['created_at'], $r['type'], TaskStatus::tryLabel($r['status']),
                 $r['warehouse'] ?? $r['warehouse_id'], ($r['fact_qty'] ?? '') . '/' . ($r['plan_qty'] ?? ''),
+                $r['cell_storage_full'] ?? $r['cell_storage'] ?? '', $r['pallets_full'] ?? $r['pallets'] ?? '',
+                $r['skus_full'] ?? $r['skus'] ?? '', $r['item_names_full'] ?? $r['item_names'] ?? '',
                 $r['cells_count'], $r['doc_ref'], $r['priority'], $r['progress'], $r['executor_fio']], ';');
         }
         rewind($out);

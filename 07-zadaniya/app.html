@@ -103,6 +103,15 @@ body.navhide main{max-width:none}
 #colpanel{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);z-index:130;width:320px;max-width:92vw;max-height:80vh;overflow:auto;padding:14px 16px}
 #colpanel h2{margin:0;font-size:16px}
 </style>
+<style>
+.selbar{display:none;gap:10px;align-items:center;margin:0 0 10px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px}
+.selbar.on{display:flex}
+.selbar .btn{padding:6px 12px}
+#seldel{color:#C62828;border-color:#EF9A9A}
+.ctx div.danger{color:#C62828;font-weight:700}
+tr.chked td{background:#F4F2FF}
+td.cell{max-width:220px;overflow:hidden;text-overflow:ellipsis}
+</style>
 <style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
 <body>
 <button id="navshowbtn" title="Показать меню">▶</button>
@@ -117,9 +126,10 @@ body.navhide main{max-width:none}
 <button class="btn pri" id="mk">+ Создать</button>
 </div>
 <div class="chips" id="chips"></div>
+<div class="selbar" id="selbar"><b id="selcount">Выбрано: 0</b><button class="btn" id="seldel">Удалить выбранные</button><button class="btn" id="selclr">Снять выбор</button><span class="hint">Ctrl+клик по строке — выбрать одну · Shift+клик по галкам — диапазон · Delete — удалить</span></div>
 <div class="card" style="overflow:auto">
-<table><thead><tr><th><input type="checkbox"></th><th>№ задания</th><th>Дата создания</th><th>Тип задания</th><th>Статус</th><th>Склад</th><th>Товары / позиции</th><th>Ячеек</th><th>Документ</th><th>Приоритет</th><th>Прогресс</th><th>Исполнитель</th><th>Флаги</th><th id="colset" class="gear" title="Настройки полей">⚙️</th></tr></thead>
-<tbody id="rows"><tr><td colspan="14">Загрузка...</td></tr></tbody></table>
+<table><thead><tr><th><input type="checkbox" id="chall" title="Выбрать все"></th><th>№ задания</th><th>Дата создания</th><th>Тип задания</th><th>Статус</th><th>Склад</th><th>Товары / позиции</th><th>Ячейка хранения</th><th>№ паллеты</th><th>Артикул</th><th>Наименование</th><th>Ячеек</th><th>Документ</th><th>Приоритет</th><th>Прогресс</th><th>Исполнитель</th><th>Флаги</th><th id="colset" class="gear" title="Настройки полей">⚙️</th></tr></thead>
+<tbody id="rows"><tr><td colspan="18">Загрузка...</td></tr></tbody></table>
 <div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
 <select id="pp"><option>5</option><option>9</option><option selected>20</option><option>50</option></select></div>
 <div class="pg" id="pg"></div></div>
@@ -175,7 +185,8 @@ body.navhide main{max-width:none}
 <div data-a="mov">Показать движения</div>
 <div data-a="hist">История изменений</div><hr>
 <div data-a="auto">Выполнить автоматически</div>
-<div data-a="restart">Вернуть к началу</div>
+<div data-a="restart">Вернуть к началу</div><hr>
+<div data-a="del" class="danger">Удалить</div>
 </div>
 
 <div class="ctx" id="prioctx" style="min-width:180px">
@@ -249,10 +260,12 @@ body.navhide main{max-width:none}
 <script>
 const API='demo_sqlite.php';
 let page=1,perPage=20,lastRows=[],ctxId=null,curId=null,ntype='сбор';
+const selected=new Set(); // id выбранных галками заданий (переживает перезагрузку страницы списка)
 const $=id=>document.getElementById(id);
 const stLabel={new:'Новый',work:'В работе',paused:'На паузе',done:'Выполнен',cancelled:'Отменено'};
 const priLabel={lowest:'Самый низкий',low:'Низкий',normal:'Средний',high:'Высокий',critical:'Критический'};
 const dFmt=s=>(s||'').slice(0,16).replace('T',' ');
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2400)}
 function params(){const p=new URLSearchParams({action:'list',page,per_page:perPage});
 const v=(id,k)=>{if($(id)&&$(id).value)p.set(k,$(id).value)};
@@ -278,21 +291,47 @@ if(q.getAll('status[]').length)chips.push('Статус: '+q.getAll('status[]').
 if(q.get('type'))chips.push('Тип: '+q.get('type'));
 $('chips').innerHTML=chips.map(c=>`<span class="chip">${c}</span>`).join('')+(n?` <a href="#" id="clrall" style="font-size:12px">Сбросить все</a>`:'');
 const ca=$('clrall');if(ca)ca.onclick=e=>{e.preventDefault();clrF()};
-$('rows').innerHTML=lastRows.map(o=>{const pc=o.progress??0;
-return `<tr data-id="${o.id}"><td><input type="checkbox"></td>
+ $('rows').innerHTML=lastRows.map(o=>{const pc=o.progress??0;const isSel=selected.has(o.id);
+return `<tr data-id="${o.id}"${isSel?' class="chked"':''}><td><input type="checkbox" class="rowchk" data-id="${o.id}"${isSel?' checked':''} title="Выбрать"></td>
 <td><a class="num" href="#" data-id="${o.id}">${o.doc_no}</a></td><td>${dFmt(o.created_at)}</td><td>${o.type||''}</td>
 <td><span class="st st-${o.status}">${stLabel[o.status]||o.status}</span></td>
-<td>${o.warehouse||''}</td><td>${Math.round(o.fact_qty??0)} / ${Math.round(o.plan_qty??0)}</td><td>${o.cells_count??''}</td>
+<td>${o.warehouse||''}</td><td>${Math.round(o.fact_qty??0)} / ${Math.round(o.plan_qty??0)}</td>
+<td class="cell" title="${esc(o.cell_storage_full||'')}">${esc(o.cell_storage||'—')}</td>
+<td class="cell" title="${esc(o.pallets_full||'')}">${esc(o.pallets||'—')}</td>
+<td class="cell" title="${esc(o.skus_full||'')}">${esc(o.skus||'—')}</td>
+<td class="cell" title="${esc(o.item_names_full||'')}">${esc(o.item_names||'—')}</td>
+<td>${o.cells_count??''}</td>
 <td>${o.doc_ref?`<a class="num" href="#">${o.doc_ref}</a>`:'—'}</td>
 <td><span class="pr pr-${o.priority}" data-prid="${o.id}" title="Нажми, чтобы сменить приоритет">${priLabel[o.priority]||o.priority}</span></td>
 <td><div class="prog"><i style="width:${pc}%"></i></div><small>${pc} %</small></td>
-<td>${o.executor_fio||''}</td><td>${flagsHtml(o)}</td><td>⋮</td></tr>`}).join('')||'<tr><td colspan=14>Ничего не найдено</td></tr>';
+<td>${o.executor_fio||''}</td><td>${flagsHtml(o)}</td><td>⋮</td></tr>`}).join('')||'<tr><td colspan=18>Ничего не найдено</td></tr>';
+syncSelUI();
 const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
 for(let i=1;i<=Math.min(pages,5);i++)h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`;
 $('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()});
 document.querySelectorAll('#rows tr').forEach(tr=>{if(!tr.dataset.id)return;
-tr.onclick=e=>{if(e.target.tagName!=='INPUT'&&!(e.target.classList&&e.target.classList.contains('num'))&&!(e.target.closest&&e.target.closest('[data-prid]')))openDet(+tr.dataset.id);};
-tr.oncontextmenu=e=>{e.preventDefault();ctxId=+tr.dataset.id;colSub();const c=$('ctx');c.style.display='block';c.style.left=e.clientX+'px';c.style.top=e.clientY+'px'}})}
+tr.onclick=e=>{if(e.target.tagName==='INPUT')return;
+if((e.ctrlKey||e.metaKey)&&tr.dataset.id){const cb=tr.querySelector('.rowchk');if(cb){cb.checked=!cb.checked;cb.dispatchEvent(new Event('change',{bubbles:true}))}return}
+if(!(e.target.classList&&e.target.classList.contains('num'))&&!(e.target.closest&&e.target.closest('[data-prid]')))openDet(+tr.dataset.id);};
+tr.oncontextmenu=e=>{e.preventDefault();ctxId=+tr.dataset.id;colSub();syncDelLabel();const c=$('ctx');c.style.display='block';c.style.left=e.clientX+'px';c.style.top=e.clientY+'px'}})}
+// --- Выбор строк: общая галка, Ctrl+клик, Shift-диапазон (через скрипт data-shift-select), удаление ---
+function syncDelLabel(){const di=document.querySelector('#ctx [data-a="del"]');if(!di)return;
+const n=(selected.has(ctxId)&&selected.size>1)?selected.size:1;di.textContent=n>1?`Удалить (${n})`:'Удалить'}
+function massSync(){ // хук: вызывается скриптом shift-выделения после массовых операций
+document.querySelectorAll('#rows .rowchk').forEach(c=>{const id=+c.dataset.id;if(!id)return;if(c.checked)selected.add(id);else selected.delete(id)});syncSelUI()}
+function syncSelUI(){const boxes=[...document.querySelectorAll('#rows .rowchk')];
+const allOn=boxes.length>0&&boxes.every(c=>c.checked);
+const h=$('chall');if(h)h.checked=allOn;
+document.querySelectorAll('#rows tr[data-id]').forEach(tr=>tr.classList.toggle('chked',selected.has(+tr.dataset.id)));
+const sb=$('selbar');if(!sb)return;
+if(selected.size){sb.classList.add('on');$('selcount').textContent='Выбрано: '+selected.size}else sb.classList.remove('on');
+syncDelLabel()}
+async function delTasks(ids){ids=[...new Set((ids||[]).map(Number))].filter(Boolean);
+if(!ids.length){toast('Ничего не выбрано');return}
+if(!confirm(`Удалить заданий: ${ids.length}? Действие необратимо.`))return;
+const r=await fetch(API+'?action=delete_many',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});
+const jj=await r.json();
+if(r.ok){ids.forEach(id=>selected.delete(id));if(curId&&ids.includes(curId)){curId=null;$('detcard').style.display='none'}toast('Удалено: '+jj.deleted);load()}else toast('Ошибка: '+(jj.error||''))}
 async function openDet(id){curId=id;
 const r=await (await fetch(`${API}?action=items&id=${id}&per_page=50`)).json();
 const head=lastRows.find(x=>x.id===id)||{};
@@ -318,8 +357,8 @@ const body={type:ntype,priority:$('npri').value,warehouse_id:+$('nwh').value,exe
 const r=await fetch(API+'?action=store',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const j=await r.json();
 if(r.ok){$('wiz').classList.remove('open');toast('Создано задание #'+j.id);load()}else toast('Ошибка: '+(j.error||''))};
-$('exp').onclick=()=>{const h=['№ задания','Дата создания','Тип','Статус','Склад','Товары','Ячеек','Документ','Приоритет','Прогресс','Исполнитель'];
-const csv='\ufeff'+h.join(';')+'\n'+lastRows.map(o=>[o.doc_no,o.created_at,o.type,stLabel[o.status],o.warehouse,(o.fact_qty+'/'+o.plan_qty),o.cells_count,o.doc_ref,priLabel[o.priority],o.progress,o.executor_fio].join(';')).join('\n');
+$('exp').onclick=()=>{const h=['№ задания','Дата создания','Тип','Статус','Склад','Товары','Ячейка хранения','№ паллеты','Артикул','Наименование','Ячеек','Документ','Приоритет','Прогресс','Исполнитель'];
+const csv='\ufeff'+h.join(';')+'\n'+lastRows.map(o=>[o.doc_no,o.created_at,o.type,stLabel[o.status],o.warehouse,(o.fact_qty+'/'+o.plan_qty),(o.cell_storage_full||o.cell_storage||''),(o.pallets_full||o.pallets||''),(o.skus_full||o.skus||''),(o.item_names_full||o.item_names||''),o.cells_count,o.doc_ref,priLabel[o.priority],o.progress,o.executor_fio].join(';')).join('\n');
 const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='tasks.csv';a.click()};
 $('imp').onclick=()=>$('impfile').click();
 $('impfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;const t=await f.text();toast('Импорт принят: '+t.split('\n').length+' строк (демо)');load()};
@@ -343,7 +382,8 @@ const par=e.target.closest?e.target.closest('.par'):null;
 if(par&&par.dataset.sub){togSub(par);return}
 const id=ctxId;
 const post=async(url,body)=>{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});const j=await r.json();toast(r.ok?'Готово':'Ошибка: '+(j.error||''));load();return j};
-if(a==='pause')post(`${API}?action=pause&id=${id}`);
+if(a==='del'){$('ctx').style.display='none';delTasks((selected.has(id)&&selected.size>1)?[...selected]:[id]);return}
+else if(a==='pause')post(`${API}?action=pause&id=${id}`);
 else if(a==='restart')post(`${API}?action=restart&id=${id}`);
 else if(a==='auto')post(`${API}?action=auto&id=${id}`);
 else if(a==='prio'){$('ctx').style.display='none';const p=$('prioctx');p.style.display='block';p.style.left=(event.clientX)+'px';p.style.top=(event.clientY)+'px';return}
@@ -415,6 +455,15 @@ const p=$('colpanel');const open=p.style.display==='block';if(open){p.style.disp
 $('colclose').onclick=()=>$('colpanel').style.display='none';
 $('colreset').onclick=async()=>{hideCols=[];colApply();await colSave();colPanel()};
 if(document.querySelector('#rows'))new MutationObserver(()=>colApply()).observe(document.querySelector('#rows'),{childList:true});
+// --- Выбор строк и удаление: общая галка, Ctrl+клик, Delete ---
+$('chall').onclick=()=>{const st=$('chall').checked;document.querySelectorAll('#rows .rowchk').forEach(c=>{c.checked=st});massSync()};
+$('rows').addEventListener('change',e=>{const c=e.target.closest?e.target.closest('.rowchk'):null;if(!c)return;massSync()});
+$('seldel').onclick=()=>delTasks([...selected]);
+$('selclr').onclick=()=>{selected.clear();document.querySelectorAll('#rows .rowchk').forEach(c=>{c.checked=false});syncSelUI()};
+document.addEventListener('keydown',e=>{if(e.key!=='Delete')return;const t=e.target;
+if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;
+if($('wiz').classList.contains('open')||$('mm').classList.contains('open'))return;
+if(selected.size){e.preventDefault();delTasks([...selected])}else toast('Ничего не выбрано: отметьте галками строки для удаления')});
 colLoad();
 load();
 </script>

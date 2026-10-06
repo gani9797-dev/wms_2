@@ -167,7 +167,7 @@ body.navhide main{max-width:none}
 
 <div class="drawer" id="dr"><button class="btn" onclick="dr.classList.remove('open')">✕</button>
 <h2 id="dh">Карточка</h2>
-<div class="tabs" id="tabs"><b data-t="main">Основное</b><span data-t="goods">Товары</span><span data-t="docs">Документы</span><span data-t="hist">История</span><span data-t="flags">Флаги</span></div>
+<div class="tabs" id="tabs"><b data-t="main">Основное</b><span data-t="goods">Товары</span><span data-t="stockin">Оприходования</span><span data-t="docs">Документы</span><span data-t="hist">История</span><span data-t="flags">Флаги</span></div>
 <div id="db">...</div>
 <div style="display:flex;gap:10px;margin:10px 0"><button class="btn pri" id="dedit">Изменить</button><button class="btn" id="dprint">Печать ▾</button><button class="btn" onclick="dr.classList.remove('open')">Закрыть</button></div>
 </div>
@@ -320,6 +320,7 @@ $('dr').classList.add('open')}
 async function loadTab(){const id=curId;let h='';
 if(curTab==='goods'){const r=await (await fetch(`${API}?action=items&id=${id}`)).json();
 h=`<h3>Товары по поступлению (${r.length})</h3><table class="mini"><tr><th>п/п</th><th>Код</th><th>Артикул</th><th>Наименование</th><th>Ед</th><th>Кол-во</th><th>Цена</th><th>НДС%</th><th>Сумма без НДС</th><th>Сумма НДС</th><th>Сумма с НДС</th></tr>`+r.map((t,i)=>`<tr><td>${t.line_no||i+1}</td><td>${t.code||''}</td><td>${t.sku}</td><td>${t.name}</td><td>${t.unit}</td><td>${t.qty}</td><td>${t.price}</td><td>${t.vat_rate}</td><td>${t.sum_novat}</td><td>${t.vat_sum}</td><td>${t.sum_vat}</td></tr>`).join('')+'</table>'}
+else if(curTab==='stockin'){await loadStockin(id);return}
 else if(curTab==='docs'){const r=await (await fetch(`${API}?action=documents&id=${id}`)).json();
 h=`<h3>Вложенные документы (${r.length})</h3><table class="mini"><tr><th>п/п</th><th>Наименование</th><th>Формат</th><th>Страниц</th></tr>`+r.map((d,i)=>`<tr><td>${i+1}</td><td>${d.name}</td><td>${d.format}</td><td>${d.pages}</td></tr>`).join('')+'</table>'}
 else if(curTab==='hist'){const r=await (await fetch(`${API}?action=history&id=${id}`)).json();
@@ -327,6 +328,32 @@ h=`<h3>История документа (${r.length})</h3><table class="mini"><
 else if(curTab==='flags'){const r=await (await fetch(`${API}?action=flags&id=${id}`)).json();
 h=`<h3>Сканирование маркировок ЧЗ / серийники (${r.length})</h3><table class="mini"><tr><th>п/п</th><th>Артикул</th><th>Маркировка КИ</th><th>Приемщик</th><th>Дата</th></tr>`+r.map((f,i)=>`<tr><td>${i+1}</td><td>${f.sku||''}</td><td style="max-width:320px;overflow:hidden;text-overflow:ellipsis">${f.marking_code||f.serial_no||''}</td><td>${f.receiver||''}</td><td>${f.flag_date||''}</td></tr>`).join('')+'</table>'}
 $('db').innerHTML=h}
+// --- Вкладка "Оприходования": № паллеты, артикул, наименование, кол-во со знаком.
+// Принята -> плюс, отменена во время приемки -> минус. Сортировка кликом по шапке А↔Я.
+let stockinRows=[],stockinKey='',stockinDir=1;
+async function loadStockin(id){try{stockinRows=await (await fetch(`${API}?action=stockin&id=${id}`)).json()}catch(e){stockinRows=[]}
+if(!Array.isArray(stockinRows))stockinRows=[];renderStockin()}
+function stockinSortBy(k){if(stockinKey===k){stockinDir*=-1}else{stockinKey=k;stockinDir=1}renderStockin()}
+function renderStockin(){let r=[...stockinRows];
+if(stockinKey){const k=stockinKey,d=stockinDir;
+r.sort((a,b)=>{if(k==='qty'){return ((+a.qty||0)-(+b.qty||0))*d}
+const x=String(a[k]??'').toLowerCase(),y=String(b[k]??'').toLowerCase();
+return (x<y?-1:x>y?1:0)*d})}
+const arrow=k=>stockinKey===k?(stockinDir===1?' ▲':' ▼'):' <span style="color:#B9B9C7">↕</span>';
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const tot=r.reduce((s,x)=>s+(+x.qty||0),0);
+if(!r.length){$('db').innerHTML=`<h3>Оприходования (0)</h3><p class="hint">Нет оприходований</p>`;return}
+$('db').innerHTML=`<h3>Оприходования (${r.length})</h3>
+<p class="hint">Принятая паллета — количество с плюсом, отменённая во время приёмки — с минусом. Клик по заголовку сортирует А→Я / Я→А.</p>
+<table class="mini"><tr>
+<th style="cursor:pointer" onclick="stockinSortBy('pallet')">№ паллеты${arrow('pallet')}</th>
+<th style="cursor:pointer" onclick="stockinSortBy('sku')">Артикул${arrow('sku')}</th>
+<th style="cursor:pointer" onclick="stockinSortBy('name')">Наименование${arrow('name')}</th>
+<th style="cursor:pointer;text-align:right" onclick="stockinSortBy('qty')">Кол-во, шт${arrow('qty')}</th>
+</tr>`+r.map(x=>{const q=+x.qty||0;const c=q<0?'color:#C62828;font-weight:700':'color:#2E7D32;font-weight:700';
+const txt=(q>0?'+':'')+q;
+return `<tr><td>${esc(x.pallet||'—')}</td><td>${esc(x.sku)}</td><td style="white-space:normal;min-width:220px">${esc(x.name||'—')}</td><td style="text-align:right;${c}">${txt}</td></tr>`}).join('')+`</table>
+<div class="kv" style="max-width:320px;margin-top:8px"><i>Итого оприходовано, шт</i><b>${tot}</b></div>`}
 document.querySelectorAll('#tabs [data-t]').forEach(el=>el.onclick=()=>{curTab=el.dataset.t;open(curId)});
 $('fbtn').onclick=()=>$('fp').classList.add('open');
 $('fclose').onclick=()=>$('fp').classList.remove('open');
@@ -473,7 +500,9 @@ $('colclose').onclick=()=>$('colpanel').style.display='none';
 $('colreset').onclick=async()=>{hideCols=[];colApply();await colSave();colPanel()};
 if(document.querySelector('#rows'))new MutationObserver(()=>colApply()).observe(document.querySelector('#rows'),{childList:true});
 colLoad();
-load();
+// переход из смежных модулей (08.1): ?doc_no=П-1287 — ищем и открываем доп. форму прихода
+(function(){const u=new URLSearchParams(location.search);const d=u.get('doc_no')||u.get('doc');if(!d){load();return}
+$('q').value=d;page=1;load().then(()=>{const hit=lastRows.find(x=>String(x.doc_no)===d)||(lastRows.length===1?lastRows[0]:null);if(hit)open(hit.id)})})();
 </script>
 <script data-shift-select>
 /* Shift+клик по галкам: выделение диапазона подряд, как в Windows/проводнике.

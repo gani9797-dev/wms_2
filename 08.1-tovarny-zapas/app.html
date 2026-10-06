@@ -86,12 +86,14 @@ body.navhide main{max-width:none}
 <main>
 <div class="top"><h1>8.1 Товарный запас</h1><div class="user"><button id="bellbtn" title="Уведомления">🔔<span id="bellbadge">0</span></button><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span></div></div>
 <div class="bar">
-<input id="q" type="text" placeholder="Поиск по артикулу, ячейке, паллете, приходу...">
+<input id="q" type="text" placeholder="Поиск по артикулу, коду, ячейке, паллете, приходу...">
 <select id="wh" style="padding:10px 12px;border:1px solid var(--line);border-radius:10px"><option value="">Все склады</option></select>
 </div>
+<div id="confwarn" style="display:none;background:#FFF1F1;border:1px solid #F5B5B5;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#8B1A1A"></div>
 <div class="card" style="overflow:auto">
-<table><thead><tr><th>Склад</th><th>Ячейка</th><th>Паллета</th><th>Артикул</th><th>Кол-во</th><th>Приход</th><th>Отгрузка (резерв)</th><th><span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
-<tbody id="rows"><tr><td colspan="8">Загрузка...</td></tr></tbody></table>
+<table><thead><tr><th>Склад</th><th>Ячейка</th><th>Паллета</th><th>Тара</th><th>Длина паллеты, м</th><th>Ширина паллеты, м</th><th>Выс. паллеты, м</th><th>Объем, м³</th><th>Вес, кг</th><th>Арт. склад.</th><th>Артикул</th><th>Кол-во</th><th>Приход</th><th>Отгрузка</th><th>Резерв</th><th><span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
+<tbody id="rows"><tr><td colspan="16">Загрузка...</td></tr></tbody></table>
+<div class="hint" style="margin-top:8px">Тара: клик по номеру паллеты — смена Евро/Фин. Д/Ш/В — габариты паллеты в метрах (В — высота с товаром). Объем — Д×Ш×В. Вес — товар + тара (25 кг, если есть паллета). Если ячейка настроена только под евро, смена на фин запрещена.</div>
 <div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
 <select id="pp"><option>5</option><option selected>20</option><option>50</option></select></div>
 <div class="pg" id="pg"></div></div>
@@ -124,6 +126,14 @@ body.navhide main{max-width:none}
 <div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="colreset">Сбросить</button><button class="btn pri" id="colclose">Готово</button></div>
 </div>
 <div id="toast"></div>
+<div class="modal" id="palmodal"><div class="mbox"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Смена тары</h3><button class="btn" id="palmclose">✕</button></div>
+<div class="hint" id="palmsub" style="margin:6px 0"></div>
+<label>Паллета</label><input id="palm_num" disabled>
+<label>Ячейка (разрешенная тара)</label><input id="palm_cell" disabled>
+<label>Тара</label><select id="palm_type"><option value="euro">Евро — 1200×800</option><option value="fin">Фин — 1200×1000</option></select>
+<div class="hint" id="palmhint" style="margin-top:6px"></div>
+<div style="display:flex;gap:10px;margin-top:12px;justify-content:flex-end"><button class="btn" id="palmcancel">Отмена</button><button class="btn pri" id="palmsave">Сохранить</button></div>
+</div></div>
 
 <script>
 const API='demo_sqlite.php';
@@ -132,16 +142,54 @@ const $=id=>document.getElementById(id);
 function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2400)}
 async function loadWh(){try{const r=await (await fetch(API+'?action=refs')).json();
 $('wh').innerHTML='<option value="">Все склады</option>'+(r.warehouses||[]).map(w=>`<option value="${w.id}">${w.name}</option>`).join('')}catch(e){}}
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function palletLabel(t){return t==='fin'?'Фин':'Евро'}
 async function load(){const p=new URLSearchParams({action:'list',page,per_page:perPage});
 if($('q').value)p.set('search',$('q').value);
 if($('wh').value)p.set('warehouse_id',$('wh').value);
 const r=await fetch(API+'?'+p);const j=await r.json();lastRows=j.rows||[];
 $('info').textContent=`Показано ${j.from}–${j.to} из ${j.total}`;
-$('rows').innerHTML=lastRows.map(o=>{const rsv=(o.reserve||[]).map(x=>`<a href="../03-otgruzki/app.html?doc_no=${encodeURIComponent(x.doc_no)}" target="_blank" style="color:var(--vio)" title="Задания: ${(x.tasks||[]).join(', ')}">${x.doc_no}</a> <span style="color:var(--mut);font-size:12px">· ${x.pallet||'—'} · ${x.qty} шт</span>`).join('<br>')||'—';
-return `<tr><td>${o.warehouse||('Склад '+o.warehouse_id)}</td><td>${o.cell||''}</td><td>${o.pallet||''}</td><td><b>${o.sku||''}</b><br><small style="color:var(--mut)">${o.product_name||''}</small></td><td>${o.qty}</td><td>${o.receipt_no||'—'}</td><td>${rsv}</td><td></td></tr>`}).join('')||'<tr><td colspan=8>Ничего не найдено</td></tr>';
+const conf=j.conflicts||[];
+if(conf.length){$('confwarn').style.display='block';$('confwarn').innerHTML='⚠️ Одна и та же паллета в разных ячейках: '+conf.map(c=>`<b>${esc(c.pallet)}</b> (${(c.cells||[]).map(esc).join(', ')})`).join('; ')+'. Одна паллета не может быть в разных ячейках — устраните дубль.'}else{$('confwarn').style.display='none';$('confwarn').innerHTML=''}
+$('rows').innerHTML=lastRows.map(o=>{
+const docs=(o.reserve_docs&&o.reserve_docs.length?o.reserve_docs:(o.reserve||[]).map(x=>x.doc_no).filter((v,i,a)=>v&&a.indexOf(v)===i))||[];
+const ship=docs.length?docs.map(dn=>{const det=(o.reserve||[]).filter(x=>x.doc_no===dn);const tip=det.map(x=>`${x.tasks||''} ${(x.tasks||[]).join(', ')} · ${x.qty} шт`).join('; ');return `<a href="../03-otgruzki/app.html?doc_no=${encodeURIComponent(dn)}" target="_blank" style="color:var(--vio)" title="${esc(tip)}">${esc(dn)}</a>`}).join(', ')||'—':'—';
+const rqty=(o.reserve_qty??(o.reserve||[]).reduce((a,x)=>a+(+x.qty||0),0));
+const rsvQty=(+rqty>0)?`${(+rqty).toLocaleString('ru-RU',{maximumFractionDigits:3})} шт`:'—';
+const palNum=o.pallet||'—';
+const palConf=!!o.pallet_conflict;
+const palCells=(o.pallet_cells||[]).join(', ');
+const palWarn=palConf?` — ВНИМАНИЕ: паллета в нескольких ячейках: ${palCells}. Одна паллета не может быть в разных ячейках!`:'';
+const palCell=o.pallet?`<a href="#" class="num pal-link" data-id="${o.id}" title="Сменить тару (сейчас: ${palletLabel(o.pallet_type)})${esc(palWarn)}" ${palConf?'style="color:#B00020"':''}>${palConf?'⚠️ ':''}${esc(palNum)}</a>`:`<a href="#" class="num pal-link" data-id="${o.id}" title="Указать тару (сейчас: ${palletLabel(o.pallet_type)})" style="color:var(--mut)">— ${palletLabel(o.pallet_type)}</a>`;
+const tara=`<span class="st" title="Ячейка разрешает: ${esc(o.cell_allowed||'euro,fin')}">${esc(o.pallet_label||palletLabel(o.pallet_type))}</span>`;
+const hTip=`Высота с товаром: ${o.total_height_m??'?'} м`;
+const vTip=`${o.pallet_length_m}×${o.pallet_width_m}×${o.total_height_m} м`;
+const wTip=`Товар ${o.goods_weight_kg??''} кг + тара ${o.pallet?'25':'0'} кг`;
+const cellLink=`<a class="num" href="../05-yacheyki-hraneniya/app.html?cell=${encodeURIComponent(o.cell||'')}&warehouse_id=${o.warehouse_id||''}" target="_blank" title="Открыть карточку ячейки (модуль 5)">${esc(o.cell||'')}</a>`;
+const codeLink=o.product_code?`<a class="num" href="../08-nomenklatura/app.html?code=${encodeURIComponent(o.product_code)}" target="_blank" title="Открыть карточку товара">${esc(o.product_code)}</a>`:'—';
+const skuLink=o.sku?`<a class="num" href="../08-nomenklatura/app.html?sku=${encodeURIComponent(o.sku)}" target="_blank" title="Открыть карточку товара"><b>${esc(o.sku)}</b></a>`:'—';
+const rcpt=o.receipt_no?`<a class="num" href="../02-postupleniya/app.html?doc_no=${encodeURIComponent(o.receipt_no)}" target="_blank" title="Открыть доп. форму прихода">${esc(o.receipt_no)}</a>`:'—';
+return `<tr${palConf?' style="background:#FFF5F5"':''}><td>${esc(o.warehouse||('Склад '+o.warehouse_id))}</td><td>${cellLink}</td><td>${palCell}</td><td>${tara}</td><td>${o.pallet_length_m??'—'}</td><td>${o.pallet_width_m??'—'}</td><td title="${esc(hTip)}">${o.total_height_m??'—'}</td><td title="${esc(vTip)}">${o.volume_m3??'—'}</td><td title="${esc(wTip)}">${o.weight_kg??'—'}</td><td>${codeLink}</td><td>${skuLink}<br><small style="color:var(--mut)">${esc(o.product_name||'')}</small></td><td>${o.qty}</td><td>${rcpt}</td><td>${ship}</td><td>${rsvQty}</td><td></td></tr>`}).join('')||'<tr><td colspan=16>Ничего не найдено</td></tr>';
+document.querySelectorAll('.pal-link').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openPalModal(+a.dataset.id)});
 const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
 for(let i=1;i<=Math.min(pages,5);i++)h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`;
 $('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()})}
+let palId=null;
+function openPalModal(id){const o=lastRows.find(x=>+x.id===+id);if(!o){toast('Строка не найдена');return}palId=id;
+$('palm_num').value=o.pallet||('без номера · '+o.cell);
+$('palm_cell').value=(o.cell||'—')+' · разрешено: '+(o.cell_allowed||'euro,fin');
+$('palm_type').value=o.pallet_type||'euro';
+$('palmsub').textContent=`${o.sku||''} · ${o.product_name||''} · ${o.qty} шт`;
+if(o.pallet_conflict){$('palmhint').style.color='#B00020';$('palmhint').textContent=`⚠️ Паллета ${(o.pallet||'')} в нескольких ячейках: ${(o.pallet_cells||[]).join(', ')}. Смена тары заблокирована — сначала устраните дубль (одна паллета не может быть в разных ячейках).`;$('palmsave').disabled=true}
+else{$('palmhint').style.color='';$('palmhint').textContent=`Сейчас: ${o.pallet_label||palletLabel(o.pallet_type)} ${o.pallet_length_m}×${o.pallet_width_m}, В=${o.total_height_m} м, V=${o.volume_m3} м³, вес=${o.weight_kg} кг.`;$('palmsave').disabled=false}
+$('palmodal').classList.add('open')}
+function closePalModal(){$('palmodal').classList.remove('open');palId=null;$('palmsave').disabled=false}
+$('palmclose').onclick=$('palmcancel').onclick=closePalModal;
+$('palm_type').onchange=()=>{const v=$('palm_type').value;$('palmhint').textContent=v==='fin'?'Фин — 1.2×1.0×0.138 м, до 1200 кг.':'Евро — 1.2×0.8×0.144 м, до 1500 кг.'};
+$('palmsave').onclick=async()=>{if(!palId)return;const btn=$('palmsave');btn.disabled=true;
+try{const r=await fetch(API+'?action=pallet_update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stock_id:palId,pallet_type:$('palm_type').value})});
+const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+closePalModal();toast('Тара изменена: '+(j.pallet_label||$('palm_type').value));load()}catch(e){toast('Ошибка: '+e.message)}finally{btn.disabled=false}};
 $('q').onchange=()=>{page=1;load()};$('pp').onchange=e=>{perPage=+e.target.value;page=1;load()};
 $('wh').onchange=()=>{page=1;load()};
 loadWh();

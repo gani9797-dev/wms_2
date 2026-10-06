@@ -151,6 +151,53 @@ final class ReceiptRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    // Вкладка "Оприходования": № паллеты, артикул, наименование, кол-во со знаком.
+    // Знак: accept_status='Принято' -> плюс, иначе (Брак/Отменено/...) -> минус.
+    // Наименование тянем из receipt_items (первое совпадение по sku).
+    public function stockin(int $receiptId): array
+    {
+        try {
+            $st = $this->pdo->prepare(
+                "SELECT o.pallet, o.sku, o.qty, o.accept_status,
+                        (SELECT i.name FROM receipt_items i
+                          WHERE i.receipt_id = o.receipt_id AND i.sku = o.sku LIMIT 1) AS name,
+                        (SELECT p.status FROM tsd_pallets p
+                          WHERE p.receipt_id = o.receipt_id AND p.sscc = o.pallet LIMIT 1) AS pallet_status
+                 FROM receipt_operations o
+                 WHERE o.receipt_id = :id ORDER BY o.id"
+            );
+        } catch (Throwable $e) {
+            return [];
+        }
+        try {
+            $st->execute([':id' => $receiptId]);
+        } catch (Throwable $e) {
+            return [];
+        }
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        $out = [];
+        foreach ($rows as $r) {
+            $qty = (float)($r['qty'] ?? 0);
+            // Принята только если операция "Принято" и сама паллета не отменена.
+            // Отменой считаем статус паллеты 'Отменена'/'Отменено'/'Cancelled' (если появится)
+            // либо любой accept_status кроме 'Принято'.
+            $pStatRaw = trim((string)($r['pallet_status'] ?? ''));
+            $pStat = function_exists('mb_strtolower') ? mb_strtolower($pStatRaw, 'UTF-8') : strtolower($pStatRaw);
+            $isPalletCancelled = in_array($pStat, ['отменена', 'отменено', 'отмена', 'cancelled', 'canceled'], true)
+                || in_array($pStatRaw, ['Отменена', 'Отменено', 'ОТМЕНЕНА', 'ОТМЕНЕНО'], true);
+            $accepted = ((string)($r['accept_status'] ?? '') === 'Принято') && !$isPalletCancelled;
+            $out[] = [
+                'pallet' => ($r['pallet'] ?? '') !== '' ? $r['pallet'] : null,
+                'sku' => (string)($r['sku'] ?? ''),
+                'name' => (string)($r['name'] ?? ''),
+                'qty' => $accepted ? abs($qty) : -abs($qty),
+                'accept_status' => (string)($r['accept_status'] ?? ''),
+                'pallet_status' => (string)($r['pallet_status'] ?? ''),
+            ];
+        }
+        return $out;
+    }
+
     /** @return array{0:string,1:array} */
     private function buildWhere(ReceiptFilter $f): array
     {

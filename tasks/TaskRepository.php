@@ -15,10 +15,74 @@ final class TaskRepository
 {
     public function __construct(private PDO $pdo) {}
 
+    private function isSqlite(): bool
+    {
+        return $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+    }
+
+    /** GROUP_CONCAT с переносимым синтаксисом разделителя (MySQL vs SQLite). */
+    private function gc(string $expr, string $sep = ', '): string
+    {
+        $q = str_replace("'", "''", $sep);
+        if ($this->isSqlite()) {
+            return "GROUP_CONCAT($expr, '$q')";
+        }
+        return "GROUP_CONCAT($expr SEPARATOR '$sep')";
+    }
+
+    /**
+     * Ячейка хранения по строке позиций: "откуда→куда", если обе заданы и различаются,
+     * иначе та, что задана. Равные схлопываются в одну.
+     */
+    private function cellExpr(): string
+    {
+        $both = $this->isSqlite()
+            ? "i.cell_from || '→' || i.cell_to"
+            : "CONCAT_WS('→', i.cell_from, i.cell_to)";
+        return "CASE WHEN i.cell_from IS NOT NULL AND i.cell_from <> '' AND i.cell_from = i.cell_to THEN i.cell_from"
+            . " WHEN i.cell_from IS NOT NULL AND i.cell_from <> '' AND i.cell_to IS NOT NULL AND i.cell_to <> '' THEN $both"
+            . " ELSE COALESCE(NULLIF(i.cell_from,''), NULLIF(i.cell_to,'')) END";
+    }
+
+    /** @return string[] уникальные непустые значения с сохранением порядка */
+    private static function splitList(?string $s, string $sep): array
+    {
+        if ($s === null || $s === '') {
+            return [];
+        }
+        $out = [];
+        foreach (explode($sep, $s) as $p) {
+            $p = trim((string)$p);
+            if ($p !== '' && !in_array($p, $out, true)) {
+                $out[] = $p;
+            }
+        }
+        return $out;
+    }
+
+    private static function shortList(array $vals, int $limit = 3): string
+    {
+        if (!$vals) {
+            return '—';
+        }
+        $s = implode(', ', array_slice($vals, 0, $limit));
+        $rest = count($vals) - min(count($vals), $limit);
+        if ($rest > 0) {
+            $s .= ' (+' . $rest . ')';
+        }
+        return $s;
+    }
+
     /** @return array{rows: array, total: int, from: int, to: int, active_filters: int} */
     public function paginate(TaskFilter $f): array
     {
         [$where, $params] = $this->buildWhere($f);
+        if (!$this->isSqlite()) {
+            try {
+                $this->pdo->exec('SET SESSION group_concat_max_len = 100000');
+            } catch (Throwable) {
+            }
+        }
 
         $cnt = $this->pdo->prepare("SELECT COUNT(DISTINCT t.id) FROM tasks t LEFT JOIN task_items i ON i.task_id = t.id $where");
         $cnt->execute($params);
@@ -36,7 +100,11 @@ final class TaskRepository
                        t.doc_ref, t.order_ref, t.executor_id, t.executor_fio,
                        t.plan_qty, t.fact_qty, t.progress, t.cells_count,
                        t.volume, t.weight, t.equipment, t.flags, t.due_date, t.done_at,
-                       (SELECT COUNT(*) FROM task_items x WHERE x.task_id = t.id) AS lines_count
+                       (SELECT COUNT(*) FROM task_items x WHERE x.task_id = t.id) AS lines_count,
+                       {$this->gc('(' . $this->cellExpr() . ')')} AS cell_storage_list,
+                       {$this->gc('i.pallet')} AS pallet_list,
+                       {$this->gc('i.sku')} AS sku_list,
+                       {$this->gc('i.name', ' | ')} AS item_names_list
                 FROM tasks t
                 LEFT JOIN warehouses w ON w.id = t.warehouse_id
                 LEFT JOIN task_items i ON i.task_id = t.id
@@ -51,6 +119,21 @@ final class TaskRepository
         $st->bindValue(':off', $offset, PDO::PARAM_INT);
         $st->execute();
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $cells = self::splitList($r['cell_storage_list'] ?? null, ', ');
+            $pallets = self::splitList($r['pallet_list'] ?? null, ', ');
+            $skus = self::splitList($r['sku_list'] ?? null, ', ');
+            $names = self::splitList($r['item_names_list'] ?? null, ' | ');
+            $r['cell_storage'] = self::shortList($cells);
+            $r['pallets'] = self::shortList($pallets);
+            $r['skus'] = self::shortList($skus);
+            $r['item_names'] = self::shortList($names, 2);
+            $r['cell_storage_full'] = $cells ? implode(', ', $cells) : '';
+            $r['pallets_full'] = $pallets ? implode(', ', $pallets) : '';
+            $r['skus_full'] = $skus ? implode(', ', $skus) : '';
+            $r['item_names_full'] = $names ? implode('; ', $names) : '';
+        }
+        unset($r);
 
         $from = $total === 0 ? 0 : $offset + 1;
         $to = min($offset + $f->perPage, $total);

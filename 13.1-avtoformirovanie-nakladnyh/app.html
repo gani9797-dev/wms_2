@@ -5,29 +5,332 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>13.1 Автоформирование накладных — TiMLog</title>
 <style>
-:root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7}
+:root{--vio:#6432FF;--vio2:#7C3AED;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7;--green:#009900}
 *{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);display:flex}
-aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14px;position:sticky;top:0;max-height:100vh;overflow:auto}
-aside .logo{font-size:22px;font-weight:700;margin:6px 0 22px}
+aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14px;position:sticky;top:0;max-height:100vh;overflow:auto;flex:none}
 aside a{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
 aside a.on{background:var(--vio);color:#fff}
-main{flex:1;padding:18px 22px;max-width:1100px}
-.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px}
-code{background:#F4F0FB;padding:2px 6px;border-radius:6px}
+main{flex:1;padding:18px 22px;min-width:0;max-width:1560px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.top h1{margin:4px 0;font-size:24px}
+.user{display:flex;gap:10px;align-items:center;font-size:14px}
+.ava{width:36px;height:36px;border-radius:50%;background:#CBD5E0;color:#4A5568;display:flex;align-items:center;justify-content:center;font-weight:700}
+.bell{position:relative;font-size:18px}
+.bell i{position:absolute;top:-8px;right:-10px;background:#FF0000;color:#fff;border-radius:50%;min-width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-style:normal}
+.bar{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap;align-items:center}
+.bar input[type=text]{width:400px;max-width:90vw;padding:10px 12px;border:1px solid #CBD5E0;border-radius:10px}
+.btn{border:1px solid #CBD5E0;background:#fff;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:13px;color:#2D3748}
+.btn.pri{background:var(--vio2);color:#fff;border-color:var(--vio2);font-weight:700}
+.btn.blue{background:#ADDBFE;border-color:#ADDBFE;color:#fff;font-weight:700}
+.btn:disabled{opacity:.5;cursor:default}
+.fb{color:var(--vio2);font-weight:700}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 4px;align-items:center}
+.chip{background:#F4F0FB;color:#663EB2;border-radius:12px;padding:6px 6px 6px 12px;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.x{cursor:pointer;font-weight:700;padding:0 6px}
+.resetall{color:#663EB2;font-size:14px;cursor:pointer;font-style:italic}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:1500px}
+th{text-align:left;padding:10px 8px;color:#4A5568;border-bottom:1px solid #F0F0F0;white-space:nowrap;font-weight:700;font-size:12px}
+td{padding:10px 8px;border-bottom:1px solid #F0F0F0;vertical-align:middle;white-space:nowrap}
+tr:hover td{background:#fafaff}
+tr.sel td{background:#F8F6FC}
+.days{display:inline-flex;gap:3px}
+.day{width:16px;height:16px;border:2px solid #CBD5E0;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#fff;background:#fff}
+.day.on{background:var(--vio2);border-color:var(--vio2)}
+.pill{display:inline-block;padding:4px 12px;border-radius:14px;font-size:11px;font-weight:700;color:#fff;background:var(--green);cursor:pointer}
+.pill.off{background:#CCC}
+.doclink{color:#6536FD;font-style:italic;cursor:pointer}
+.pager{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;color:var(--mut);font-size:13px;flex-wrap:wrap;gap:8px}
+.pg button{border:1px solid var(--line);background:#fff;border-radius:8px;min-width:34px;padding:6px 8px;margin:0 2px;cursor:pointer}
+.pg button.on{background:var(--vio);color:#fff;border-color:var(--vio)}
+.fpanel{position:fixed;top:0;right:-620px;width:560px;max-width:96vw;height:100vh;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.15);transition:right .25s;padding:18px;overflow:auto;z-index:50}
+.fpanel.open{right:0}
+.fpanel h2{margin:0;font-size:18px}
+.fpanel label{font-size:12px;color:#4A5568;font-weight:700;display:block;margin:12px 0 4px}
+.fpanel input,.fpanel select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px}
+.frow{display:flex;gap:8px;align-items:center}.frow>*{flex:1}
+.fbadge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:50%;background:#663EB2;color:#fff;font-size:12px;font-weight:700;padding:0 5px}
+.apanel{position:fixed;top:0;right:-620px;width:520px;max-width:96vw;height:100vh;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.15);transition:right .25s;padding:18px;overflow:auto;z-index:50}
+.apanel.open{right:0}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:60}
+.modal.open{display:flex}
+.mbox{background:#fff;border-radius:12px;padding:20px;width:575px;max-width:96vw;max-height:94vh;overflow:auto}
+.mbox h2{margin:0 0 4px;font-size:19px}
+.mbox .fld{margin:8px 0}.mbox .fld>label{font-size:12px;color:#4A5568;font-weight:700;display:block;margin-bottom:3px}
+.mbox input,.mbox select{padding:8px 10px;border:1px solid #808080;border-radius:8px;font-size:13px}
+.mbox input:disabled{background:#F7FAFC;color:#666}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.dchk{display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap}
+.dbox{width:16px;height:16px;border:2px solid #CBD5E0;border-radius:4px;background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:10px}
+.dbox.on{background:var(--vio2);border-color:var(--vio2)}
+.tchip{background:#F4F0FB;border-radius:12px;padding:5px 6px 5px 12px;font-size:13px;display:inline-flex;gap:4px;align-items:center;margin:2px}
+.tchip.gray{background:#E6E6E6;color:#B3B3B3}
+.tgl{position:relative;width:54px;height:29px;background:#CCC;border-radius:15px;cursor:pointer;border:0;flex:none}
+.tgl::after{content:'';position:absolute;top:3px;left:28px;width:23px;height:23px;background:#fff;border-radius:50%;transition:left .15s}
+.tgl.on{background:var(--green)}.tgl.on::after{left:3px}
+.ctx{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:99;min-width:235px;padding:6px 0;font-size:14px}
+.ctx div{padding:9px 18px;cursor:pointer;color:#2C313C}.ctx div:hover{background:#F4F2FF}.ctx hr{border:0;border-top:1px solid #F0F0F0;margin:4px 0}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:99}
+.mini{font-size:12px;color:#999}
+.orline{display:flex;align-items:center;gap:8px;color:#999;font-size:12px;margin:6px 0}
+.orline::before,.orline::after{content:'';flex:1;border-top:1px solid #EAEAEA}
+.hbox{border:1px solid #E5E7EB;border-radius:8px;padding:8px;min-height:60px}
 </style>
 <style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
 <body>
-<aside><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp open" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a on" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<aside><nav class="nav">
+<a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a>
+<div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div>
+<div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div>
+<div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div>
+<a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a>
+<div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div>
+<a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a>
+<a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a>
+<div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div>
+<div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">🤝 9 Контрагенты</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div>
+<div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👥 10 Сотрудники</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div>
+<a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a>
+<a class="mi" href="../12-uvedomleniya/app.html">🔔 12 Уведомления</a>
+<div class="grp open" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a on" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div>
+</nav></aside>
 <main>
-<h1>13.1 Автоформирование накладных</h1>
-<div class="card">
-<p>Модуль в разработке. Структура БД — см. <code>schema.sql</code> в этой папке.</p>
-<ul>
-<li>Номер по схеме «Список модулей ИТОГО»: <b>13.1</b></li>
-<li>Папка: <code>13.1-avtoformirovanie-nakladnyh/</code></li>
-<li>Таблицы: <code>13.1-avtoformirovanie-nakladnyh/schema.sql</code></li>
-</ul>
+<div class="top"><h1>Автоформирование накладных</h1>
+<div class="user"><span style="font-size:20px">🔗</span><span class="bell">🔔<i>3</i></span><span class="ava">ИИ</span><span><b>Иванов И.И.</b><br><small style="color:var(--mut)">Администратор</small></span><span style="color:var(--mut)">▼</span></div></div>
+<div class="bar">
+<input id="q" type="text" placeholder="🔍 Поиск по грузополучателю, контрагенту, клиенту ....">
+<button class="btn" id="fbtn">Фильтры (<span class="fb" id="fbadge">2</span>)</button>
+<button class="btn" id="imp">Импорт</button>
+<button class="btn" id="exp">Экспорт</button>
+<button class="btn pri" id="mk">+ Добавить автоформирование</button>
+<button class="btn blue" id="analyzeBtn">Анализ и рекомендации</button>
 </div>
+<div class="chips" id="chips"></div>
+<div class="card"><table>
+<thead><tr><th><input type="checkbox" id="selAll"></th><th>ID</th><th>Тип</th><th>Наименование</th><th>День недели</th><th>Время</th><th>Интервал, ч</th><th>min объем, м3</th><th>min вес заказа</th><th>max объем, м3</th><th>max вес заказа</th><th>Мах вложение<br>в заказ</th><th>До доставки<br>(не более дней)</th><th>Дата создания</th><th>Статус</th></tr></thead>
+<tbody id="body"></tbody></table>
+<div class="pager"><span id="info"></span><span>Строк на странице: <select id="per"><option>9</option><option>17</option><option>25</option></select></span><span class="pg" id="pg"></span></div></div>
 </main>
+
+<!-- Фильтры -->
+<div class="fpanel" id="fp"><h2>Фильтры <span class="fbadge" id="fbadge2">2</span> <span style="float:right;cursor:pointer;color:#663EB2" id="fx">✕</span></h2>
+<div class="chips" id="fchips"></div><div><span class="resetall" id="fresetall">Сбросить все</span></div>
+<label>Дата создания документа</label><div class="frow"><input type="date" id="cFrom" value="2025-06-01"><span style="flex:0">–</span><input type="date" id="cTo" value="2025-06-22"></div>
+<label>Дата последнего формирования</label><div class="frow"><input type="date" id="rFrom" value="2025-06-01"><span style="flex:0">–</span><input type="date" id="rTo" value="2025-06-22"></div>
+<label>Дата последнего изменения</label><div class="frow"><input type="date" id="uFrom"><span style="flex:0">–</span><input type="date" id="uTo"></div>
+<div class="grid2"><div><label>Контрагент</label><select id="fCp"><option value="">Выбрать</option></select></div>
+<div><label>Грузополучатель</label><select id="fCs"><option value="">Выбрать</option></select></div></div>
+<label>Статус</label><select id="fSt"><option value="">Выбрать</option><option value="all">Все</option><option value="active">Активно</option><option value="inactive">Не активный</option></select>
+<label>Ограничение по объему, м3</label><div class="frow"><input type="number" step="0.01" id="vMin" placeholder="от"><span style="flex:0">–</span><input type="number" step="0.01" id="vMax" placeholder="до"></div>
+<label>Мах вложение в заказ</label><div class="frow"><input type="number" id="aMin" placeholder="от"><span style="flex:0">–</span><input type="number" id="aMax" placeholder="до"></div>
+<label>Мах вес в заказе</label><div class="frow"><input type="number" step="0.01" id="wMin" placeholder="от"><span style="flex:0">–</span><input type="number" step="0.01" id="wMax" placeholder="до"></div>
+<label>До доставки (не более дней)</label><div class="frow"><input type="number" id="dMin" placeholder="от"><span style="flex:0">–</span><input type="number" id="dMax" placeholder="до"></div>
+<div style="display:flex;gap:8px;margin-top:16px"><button class="btn" id="freset">Сбросить фильтры</button><button class="btn pri" id="fapply">Применить</button><button class="btn" id="fcancel">Отмена</button></div>
+</div>
+
+<!-- Анализ -->
+<div class="apanel" id="ap"><h2>Анализ и рекомендации <span style="float:right;cursor:pointer;color:#663EB2" id="ax">✕</span></h2><div id="abody" style="font-size:13px;color:#4A5568"></div></div>
+
+<!-- Модалка правила -->
+<div class="modal" id="mm"><div class="mbox"><h2 id="mtitle">Добавить автоформирование <span style="float:right;cursor:pointer;color:#663EB2" id="mx">✕</span></h2>
+<div class="grid2"><div class="fld"><label>Тип</label><select id="fKind" style="width:170px"><option>Грузополучатель</option><option>Контрагент</option></select></div>
+<div class="fld"><label>Наименование</label><select id="fName" style="width:170px"></select></div></div>
+<div class="fld"><label>День недели</label><div class="mini">ПН, ВТ, СР, ЧТ, ПТ, СБ, ВС &nbsp;&nbsp; <a href="#" id="allDays">все</a></div><div class="dchk" id="dayBox"></div></div>
+<div class="fld"><label>Время</label><div class="hbox" id="timeBox"></div>
+<div class="frow" id="tAddRow" style="margin-top:6px;max-width:300px"><input type="number" id="tH" min="0" max="23" placeholder="ЧЧ"><span style="flex:0">:</span><input type="number" id="tM" min="0" max="59" placeholder="ММ"><button class="btn pri" id="tAdd" style="flex:0">Добавить</button></div></div>
+<div class="fld"><label>Интервал, ч</label><div class="hbox" id="intBox" style="min-height:40px"></div>
+<div class="frow" style="margin-top:6px;max-width:300px"><input type="number" id="intVal" min="1" placeholder="Часы"><button class="btn pri" id="intAdd" style="flex:0">Добавить</button></div></div>
+<div class="orline">или</div>
+<div class="grid2"><div class="fld"><label>Min объем, м3</label><input type="number" step="0.01" id="fMinV" style="width:120px"></div>
+<div class="fld"><label>Min вес заказа</label><input type="number" step="0.01" id="fMinW" style="width:120px"></div></div>
+<div class="grid2"><div class="fld"><label>Max объем, м3</label><input type="number" step="0.01" id="fMaxV" style="width:120px"></div>
+<div class="fld"><label>Max вес заказа</label><input type="number" step="0.01" id="fMaxW" style="width:120px"></div></div>
+<div class="grid2"><div class="fld"><label>Дней до доставки (не более)</label><input type="number" id="fDaysB" style="width:120px"></div>
+<div class="fld"><label>Мах вложение в заказ</label><input type="number" id="fMaxA" style="width:120px"></div></div>
+<div class="fld"><label>Статус</label><div style="display:flex;gap:8px;align-items:center"><button class="tgl on" id="stTgl"></button><span id="stLabel">Активно</span></div></div>
+<div style="display:flex;gap:8px;margin-top:12px"><button class="btn pri" id="mSave">Добавить</button><button class="btn" id="mCancel">Отмена</button></div>
+</div></div>
+
+<!-- История -->
+<div class="modal" id="hm"><div class="mbox" style="width:620px"><h2 id="hTitle">История изменений <span style="float:right;cursor:pointer;color:#663EB2" id="hx">✕</span></h2>
+<div class="card" style="border:0;padding:0;overflow:auto"><table style="min-width:560px"><thead><tr><th>Дата</th><th>Пользователь</th><th>Что изменилось</th><th>Было</th><th>Стало</th></tr></thead><tbody id="hBody"></tbody></table>
+<div class="pager"><span id="hInfo"></span><span class="pg" id="hPg"></span></div></div>
+<div><button class="btn" id="hClose">Закрыть</button></div>
+</div></div>
+
+<div class="ctx" id="ctx"></div>
+<div id="toast"></div>
+<input type="file" id="file" accept=".json,.csv" style="display:none">
+<script>
+function toast(m){var t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(function(){t.style.display='none'},2200)}
+function ls(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function ss(k,v){localStorage.setItem(k,JSON.stringify(v))}
+document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(c){c.closest('.grp').classList.toggle('open')}});
+var NAMES=['ПЭК','Почта России','ИП Смирнова','Яндекс.Маркет','Деловые Линии','СДЭК'];
+var DAYS=['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'];
+function fmtDT(s){if(!s)return'—';var d=new Date(s);if(isNaN(d))return s;var p=function(n){return(n<10?'0':'')+n};return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+String(d.getFullYear()).slice(2)+' '+p(d.getHours())+':'+p(d.getMinutes())}
+function fmtD(s){if(!s)return'—';var d=new Date(s);if(isNaN(d))return s;var p=function(n){return(n<10?'0':'')+n};return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+p(d.getFullYear())}
+function seed(){return[
+{id:1,kind:'Грузополучатель',name:'ПЭК',days:[1,3],times:['15:00','21:00'],intervalH:null,minVol:null,minW:null,maxVol:null,maxW:null,maxAttach:5,daysBefore:3,created:'2025-02-01T10:23',updated:'2025-02-01T10:23',lastRun:'2025-06-01T17:37',status:'active'},
+{id:2,kind:'Грузополучатель',name:'ПЭК',days:[1,3],times:['16:00','22:00'],intervalH:10,minVol:null,minW:null,maxVol:5,maxW:null,maxAttach:null,daysBefore:3,created:'2025-02-01T10:24',updated:'2025-02-01T10:24',lastRun:'2025-04-01T13:12',status:'active'},
+{id:3,kind:'Грузополучатель',name:'Почта России',days:[1,2,3,4],times:['15:00','21:00'],intervalH:null,minVol:null,minW:null,maxVol:null,maxW:null,maxAttach:null,daysBefore:null,created:'2025-04-01T13:13',updated:'2025-04-01T13:13',lastRun:'2025-04-01T13:13',status:'active'},
+{id:4,kind:'Грузополучатель',name:'Почта России',days:[1,3,5],times:['16:00','22:00'],intervalH:3,minVol:null,minW:null,maxVol:9.99,maxW:4.99,maxAttach:1,daysBefore:3,created:'2025-04-01T13:13',updated:'2025-04-01T13:13',lastRun:'2025-06-01T17:38',status:'active'},
+{id:5,kind:'Контрагент',name:'ИП Смирнова',days:[3,5],times:['15:00','21:00'],intervalH:null,minVol:null,minW:null,maxVol:null,maxW:null,maxAttach:null,daysBefore:null,created:'2025-05-01T03:10',updated:'2025-05-01T03:10',lastRun:'2025-05-01T03:10',status:'inactive'},
+{id:6,kind:'Контрагент',name:'ИП Смирнова',days:[3,5],times:['16:00','22:00'],intervalH:10,minVol:null,minW:null,maxVol:null,maxW:null,maxAttach:null,daysBefore:null,created:'2025-05-01T03:11',updated:'2025-05-01T03:11',lastRun:'2025-05-01T03:11',status:'inactive'},
+{id:7,kind:'Грузополучатель',name:'Яндекс.Маркет',days:[1,3,5],times:[],intervalH:3,minVol:null,minW:null,maxVol:null,maxW:null,maxAttach:null,daysBefore:null,created:'2025-06-01T17:37',updated:'2025-06-01T17:37',lastRun:'2025-06-01T17:37',status:'active'},
+{id:8,kind:'Грузополучатель',name:'Яндекс.Маркет',days:[1,3,5],times:[],intervalH:4,minVol:null,minW:null,maxVol:5,maxW:null,maxAttach:null,daysBefore:null,created:'2025-06-01T17:38',updated:'2025-06-01T17:38',lastRun:'2025-06-01T17:38',status:'active'}]}
+var rules=ls('wms131_rules',null);if(!rules||!rules.length){rules=seed();ss('wms131_rules',rules)}
+var hist=ls('wms131_hist',{});
+if(!hist[4]){hist[4]=[
+{at:'2023-03-27T09:15',user:'Ермолов Михаил',field:'День недели',was:'ВТ, ЧТ, СБ',now:'ПН, СР, ПТ'},
+{at:'2023-03-27T09:15',user:'Ермолов Михаил',field:'Max объем, м3',was:'—',now:'9,99'},
+{at:'2023-03-27T09:15',user:'Ермолов Михаил',field:'Max вложение в заказ',was:'5',now:'1'},
+{at:'2023-03-27T09:15',user:'Ермолов Михаил',field:'Дней до доставки (не более)',was:'5',now:'3'},
+{at:'2023-03-26T22:00',user:'Робот Автоформирования накладных',field:'Создание накладной',was:'—',now:'10004378О',doc:1},
+{at:'2023-03-26T21:00',user:'Робот Автоформирования накладных',field:'Создание накладной',was:'—',now:'10004356О',doc:1},
+{at:'2023-03-26T16:00',user:'Робот Автоформирования накладных',field:'Создание накладной',was:'—',now:'10004332О',doc:1},
+{at:'2023-03-26T15:00',user:'Робот Автоформирования накладных',field:'Создание накладной',was:'—',now:'10004315О',doc:1},
+{at:'2023-03-25T22:00',user:'Робот Автоформирования накладных',field:'Создание накладной',was:'—',now:'10004298О',doc:1},
+{at:'2023-03-25T21:00',user:'Робот Автоформирования накладных',field:'Создание накладной',was:'—',now:'10004273О',doc:1}];ss('wms131_hist',hist)}
+var F={cFrom:'2025-06-01',cTo:'2025-06-22',rFrom:'2025-06-01',rTo:'2025-06-22',uFrom:'',uTo:'',cp:'',cs:'',st:'',vMin:'',vMax:'',aMin:'',aMax:'',wMin:'',wMax:'',dMin:'',dMax:''};
+var page=1, sel=new Set();
+function num(v){if(v===''||v==null)return null;var n=parseFloat(String(v).replace(',','.'));return isNaN(n)?null:n}
+function inR(v,a,b){if(a!==''&&a!=null&&v!=null&&v<parseFloat(a))return false;if(b!==''&&b!=null&&v!=null&&v>parseFloat(b))return false;if((a!==''&&a!=null||b!==''&&b!=null)&&v==null)return false;return true}
+function inD(iso,a,b){if(!a&&!b)return true;if(!iso)return false;var d=iso.slice(0,10);if(a&&d<a)return false;if(b&&d>b)return false;return true}
+function filtered(){var q=(document.getElementById('q').value||'').toLowerCase();return rules.filter(function(r){
+if(q&&(r.name+' '+r.kind+' '+(r.id)).toLowerCase().indexOf(q)<0)return false;
+if(!inD(r.created,F.cFrom,F.cTo))return false;
+if(!inD(r.lastRun,F.rFrom,F.rTo))return false;
+if(!inD(r.updated,F.uFrom,F.uTo))return false;
+if(F.cp&&!(r.kind==='Контрагент'&&r.name===F.cp))return false;
+if(F.cs&&!(r.kind==='Грузополучатель'&&r.name===F.cs))return false;
+if(F.st&&F.st!=='all'&&r.status!==F.st)return false;
+if(!inR(r.maxVol,F.vMin,F.vMax))return false;
+if(!inR(r.maxAttach,F.aMin,F.aMax))return false;
+if(!inR(r.maxW,F.wMin,F.wMax))return false;
+if(!inR(r.daysBefore,F.dMin,F.dMax))return false;
+return true})}
+function dayHtml(days){var s='<span class="days">';for(var i=1;i<=7;i++){s+='<span class="day'+(days.indexOf(i)>=0?' on':'')+'">'+(days.indexOf(i)>=0?'✓':'')+'</span>'}return s+'</span>'}
+function render(){var rows=filtered();var per=parseInt(document.getElementById('per').value,10)||9;var pages=Math.max(1,Math.ceil(rows.length/per));if(page>pages)page=pages;
+var b=document.getElementById('body');b.innerHTML='';rows.slice((page-1)*per,page*per).forEach(function(r){
+var tr=document.createElement('tr');if(sel.has(r.id))tr.classList.add('sel');
+var cb=document.createElement('td');var c=document.createElement('input');c.type='checkbox';c.checked=sel.has(r.id);c.onclick=function(ev){ev.stopPropagation();c.checked?sel.add(r.id):sel.delete(r.id);render()};cb.appendChild(c);tr.appendChild(cb);
+function td(t,html){var d=document.createElement('td');if(html!==undefined){d.innerHTML=html}else{d.textContent=t}tr.appendChild(d);return d}
+td(r.id);td(r.kind);td(r.name);td(null,dayHtml(r.days));td(r.times.join(', ')||'—');td(r.intervalH==null?'—':r.intervalH);
+td(r.minVol==null?'—':String(r.minVol).replace('.',','));td(r.minW==null?'—':String(r.minW).replace('.',','));
+td(r.maxVol==null?'—':String(r.maxVol).replace('.',','));td(r.maxW==null?'—':String(r.maxW).replace('.',','));
+td(r.maxAttach==null?'—':r.maxAttach);td(r.daysBefore==null?'—':r.daysBefore);td(fmtDT(r.created));
+var st=document.createElement('td');var p=document.createElement('span');p.className='pill'+(r.status==='active'?'':' off');p.textContent=r.status==='active'?'Активно':'Не активный';p.title='Переключить';p.onclick=function(ev){ev.stopPropagation();toggleSt(r.id)};st.appendChild(p);tr.appendChild(st);
+tr.ondblclick=function(){openRule(r.id,'view')};
+tr.oncontextmenu=function(e){e.preventDefault();showCtx(e.clientX,e.clientY,r.id)};
+tr.onclick=function(){};
+b.appendChild(tr)});
+var from=rows.length?(page-1)*per+1:0,to=Math.min(rows.length,page*per);
+document.getElementById('info').textContent='Показано '+from+'–'+to+' из '+rows.length;
+var pg=document.getElementById('pg');pg.innerHTML='';[['«',1],['‹',Math.max(1,page-1)]].forEach(function(x){var btn=document.createElement('button');btn.textContent=x[0];btn.onclick=function(){page=x[1];render()};pg.appendChild(btn)});
+var cur=document.createElement('button');cur.textContent=page;cur.className='on';pg.appendChild(cur);
+[['›',Math.min(pages,page+1)],['»',pages]].forEach(function(x){var btn=document.createElement('button');btn.textContent=x[0];btn.onclick=function(){page=x[1];render()};pg.appendChild(btn)});
+renderChips();var n=F.cFrom||F.cTo||F.rFrom||F.rTo?2:0;if(F.st||F.cp||F.cs)n++;document.getElementById('fbadge').textContent=n;document.getElementById('fbadge2').textContent=n;
+document.getElementById('selAll').checked=rows.length>0&&rows.every(function(r){return sel.has(r.id)})}
+function renderChips(){var c=document.getElementById('chips');c.innerHTML='';
+function chip(t,fn){if(!t)return;var s=document.createElement('span');s.className='chip';s.innerHTML=t;var x=document.createElement('span');x.className='x';x.textContent='✕';x.onclick=fn;s.appendChild(x);c.appendChild(s)}
+var df=function(d){var p=d.split('-');return p[2]+'.'+p[1]+'.'+p[0]};
+if(F.cFrom||F.cTo){chip((F.cFrom?df(F.cFrom):'…')+' — '+(F.cTo?df(F.cTo):'…'),function(){F.cFrom='';F.rFrom='';F.cTo='';F.rTo='';document.getElementById('cFrom').value='';document.getElementById('cTo').value='';document.getElementById('rFrom').value='';document.getElementById('rTo').value='';syncF();render()})}
+if(F.st){chip('Статус: '+(F.st==='all'?'Все':F.st==='active'?'Активно':'Не активный'),function(){F.st='';document.getElementById('fSt').value='';syncF();render()})}
+if(F.cp){chip('Контрагент: '+F.cp,function(){F.cp='';syncF();render()})}
+if(F.cs){chip('Грузополучатель: '+F.cs,function(){F.cs='';syncF();render()})}
+if(c.innerHTML){var r=document.createElement('span');r.className='resetall';r.textContent='Сбросить все';r.onclick=resetF;c.appendChild(r)}
+var f2=document.getElementById('fchips');f2.innerHTML=c.innerHTML;var x2=f2.querySelectorAll('.x');for(var i=0;i<x2.length;i++){x2[i].onclick=function(){resetF()}}}
+function syncF(){F.cFrom=document.getElementById('cFrom').value;F.cTo=document.getElementById('cTo').value;F.rFrom=document.getElementById('rFrom').value;F.rTo=document.getElementById('rTo').value;F.uFrom=document.getElementById('uFrom').value;F.uTo=document.getElementById('uTo').value;F.cp=document.getElementById('fCp').value;F.cs=document.getElementById('fCs').value;F.st=document.getElementById('fSt').value;F.vMin=document.getElementById('vMin').value;F.vMax=document.getElementById('vMax').value;F.aMin=document.getElementById('aMin').value;F.aMax=document.getElementById('aMax').value;F.wMin=document.getElementById('wMin').value;F.wMax=document.getElementById('wMax').value;F.dMin=document.getElementById('dMin').value;F.dMax=document.getElementById('dMax').value}
+function resetF(){F={cFrom:'',cTo:'',rFrom:'',rTo:'',uFrom:'',uTo:'',cp:'',cs:'',st:'',vMin:'',vMax:'',aMin:'',aMax:'',wMin:'',wMax:'',dMin:'',dMax:''};['cFrom','cTo','rFrom','rTo','uFrom','uTo','fCp','fCs','fSt','vMin','vMax','aMin','aMax','wMin','wMax','dMin','dMax'].forEach(function(id){document.getElementById(id).value=''});page=1;render()}
+document.getElementById('q').oninput=function(){page=1;render()};
+document.getElementById('per').onchange=function(){page=1;render()};
+document.getElementById('selAll').onclick=function(e){var rows=filtered();if(e.target.checked){rows.forEach(function(r){sel.add(r.id)})}else{sel.clear()}render()};
+document.getElementById('fbtn').onclick=function(){document.getElementById('fp').classList.add('open')};
+document.getElementById('fx').onclick=function(){document.getElementById('fp').classList.remove('open')};
+document.getElementById('fcancel').onclick=function(){document.getElementById('fp').classList.remove('open')};
+document.getElementById('freset').onclick=function(){resetF()};
+document.getElementById('fresetall').onclick=function(){resetF()};
+document.getElementById('fapply').onclick=function(){syncF();page=1;document.getElementById('fp').classList.remove('open');render()};
+document.getElementById('analyzeBtn').onclick=function(){openAnalysis()};
+document.getElementById('ax').onclick=function(){document.getElementById('ap').classList.remove('open')};
+/* справочники селектов */
+function fillNames(){var cp=document.getElementById('fCp'),cs=document.getElementById('fCs'),fn=document.getElementById('fName');[cp,cs].forEach(function(s){var v=s.value;s.innerHTML='<option value="">Выбрать</option>';NAMES.forEach(function(n){var o=document.createElement('option');o.value=n;o.textContent=n;s.appendChild(o)});s.value=v});
+var cur=fn.value;fn.innerHTML='';NAMES.forEach(function(n){var o=document.createElement('option');o.value=n;o.textContent=n;fn.appendChild(o)});if(cur)fn.value=cur}
+fillNames();
+/* импорт/экспорт */
+document.getElementById('exp').onclick=function(){var blob=new Blob([JSON.stringify(rules,null,2)],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='auto-invoices.json';a.click();toast('Экспортировано: '+rules.length)};
+document.getElementById('imp').onclick=function(){document.getElementById('file').click()};
+document.getElementById('file').onchange=function(e){var f=e.target.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(){try{var arr=JSON.parse(rd.result);if(!Array.isArray(arr))throw 0;var max=Math.max.apply(null,rules.map(function(r){return r.id}).concat([0]));arr.forEach(function(r){max++;r.id=max;rules.push(r)});persist();render();toast('Импортировано: '+arr.length)}catch(err){toast('Ошибка файла: нужен JSON-массив')}};rd.readAsText(f);e.target.value=''};
+function persist(){ss('wms131_rules',rules);ss('wms131_hist',hist)}
+function hlog(id,field,was,now){hist[id]=hist[id]||[];hist[id].unshift({at:new Date().toISOString(),user:'Иванов И.И.',field:field,was:was,now:now});persist()}
+function toggleSt(id){var r=rules.filter(function(x){return x.id===id})[0];if(!r)return;var was=r.status==='active'?'Активно':'Не активный';r.status=r.status==='active'?'inactive':'active';r.updated=new Date().toISOString();hlog(id,'Статус',was,r.status==='active'?'Активно':'Не активный');persist();render();toast('ID '+id+': '+was+' → '+(r.status==='active'?'Активно':'Не активный'))}
+/* контекстное меню */
+function showCtx(x,y,id){var c=document.getElementById('ctx');c.innerHTML='';var r=rules.filter(function(v){return v.id===id})[0];
+[['Открыть',function(){openRule(id,'view')}],['Редактировать',function(){openRule(id,'edit')}],['Копировать',function(){var max=Math.max.apply(null,rules.map(function(v){return v.id}));var cp=JSON.parse(JSON.stringify(r));cp.id=max+1;cp.created=new Date().toISOString();cp.updated=cp.created;rules.push(cp);hlog(cp.id,'Создание','—','Копия ID '+id);persist();render();toast('Скопировано как ID '+cp.id)}],[r.status==='active'?'Не активный':'Активировать',function(){toggleSt(id)}],['История изменений',function(){openHist(id)}]].forEach(function(it){if(it[0]==='---'){var h=document.createElement('hr');c.appendChild(h);return}var d=document.createElement('div');d.textContent=it[0];d.onclick=function(){c.style.display='none';it[1]()};c.appendChild(d)});
+c.style.left=x+'px';c.style.top=y+'px';c.style.display='block'}
+document.addEventListener('click',function(e){if(!e.target.closest||!e.target.closest('#ctx'))document.getElementById('ctx').style.display='none'});
+/* модалка правила */
+var mId=-1,mMode='add',mDays=[],mTimes=[],mInt=null,mStatus='active';
+function paintDays(ro){var b=document.getElementById('dayBox');b.innerHTML='';DAYS.forEach(function(d,i){var s=document.createElement('span');s.className='dbox'+(mDays.indexOf(i+1)>=0?' on':'');s.textContent=mDays.indexOf(i+1)>=0?'✓':'';s.title=d;if(!ro)s.onclick=function(){var k=mDays.indexOf(i+1);if(k>=0)mDays.splice(k,1);else mDays.push(i+1);paintDays(ro)};b.appendChild(s);var lb=document.createElement('span');lb.className='mini';lb.textContent=d;b.appendChild(lb)})}
+function paintTimes(ro){var b=document.getElementById('timeBox');b.innerHTML='';mTimes.forEach(function(t,i){var s=document.createElement('span');s.className='tchip';s.textContent=t;if(!ro){var x=document.createElement('span');x.className='x';x.textContent='✕';x.onclick=function(){mTimes.splice(i,1);paintTimes(ro)};s.appendChild(x)}b.appendChild(s)});if(!mTimes.length)b.innerHTML='<span class="mini">—</span>';
+document.getElementById('tAddRow').style.display=ro?'none':'';document.getElementById('intVal').disabled=!!ro;document.getElementById('intAdd').disabled=!!ro;
+var ib=document.getElementById('intBox');ib.innerHTML='';if(mInt!=null){var s=document.createElement('span');s.className='tchip gray';s.textContent=mInt;if(!ro){var x=document.createElement('span');x.className='x';x.textContent='✕';x.onclick=function(){mInt=null;paintTimes(ro)};s.appendChild(x)}ib.appendChild(s)}else ib.innerHTML='<span class="mini">—</span>'}
+function setRo(ro){['fKind','fName','fMinV','fMinW','fMaxV','fMaxW','fMaxA','fDaysB','tH','tM'].forEach(function(id){document.getElementById(id).disabled=ro});document.getElementById('stTgl').style.pointerEvents=ro?'none':'';document.getElementById('allDays').style.display=ro?'none':''}
+function openRule(id,mode){var r=id<0?null:rules.filter(function(v){return v.id===id})[0];mId=id;mMode=mode;
+document.getElementById('mtitle').innerHTML=(id<0?'Добавить автоформирование':'Автоформирование ID '+id)+(mode==='edit'?'':'')+' <span style="float:right;cursor:pointer;color:#663EB2" id="mx2">✕</span>';
+document.getElementById('mx2').onclick=closeM;
+if(!r){document.getElementById('fKind').value='Грузополучатель';document.getElementById('fName').value='ПЭК';mDays=[1,3,5];mTimes=['10:00'];mInt=3;mStatus='active';
+document.getElementById('fMinV').value='';document.getElementById('fMinW').value='';document.getElementById('fMaxV').value='';document.getElementById('fMaxW').value='';document.getElementById('fMaxA').value='';document.getElementById('fDaysB').value=''}
+else{document.getElementById('fKind').value=r.kind;if(NAMES.indexOf(r.name)<0){var o=document.createElement('option');o.value=r.name;o.textContent=r.name;document.getElementById('fName').appendChild(o)}document.getElementById('fName').value=r.name;mDays=r.days.slice();mTimes=r.times.slice();mInt=r.intervalH;mStatus=r.status;
+document.getElementById('fMinV').value=r.minVol==null?'':r.minVol;document.getElementById('fMinW').value=r.minW==null?'':r.minW;document.getElementById('fMaxV').value=r.maxVol==null?'':r.maxVol;document.getElementById('fMaxW').value=r.maxW==null?'':r.maxW;document.getElementById('fMaxA').value=r.maxAttach==null?'':r.maxAttach;document.getElementById('fDaysB').value=r.daysBefore==null?'':r.daysBefore}
+var ro=(mode==='view');setRo(ro);paintDays(ro);paintTimes(ro);
+document.getElementById('stTgl').className='tgl'+(mStatus==='active'?' on':'');document.getElementById('stLabel').textContent=mStatus==='active'?'Активно':'Не активный';
+document.getElementById('mSave').textContent=id<0?'Добавить':(ro?'Редактировать':'Сохранить');
+document.getElementById('mm').classList.add('open')}
+function closeM(){document.getElementById('mm').classList.remove('open')}
+document.getElementById('mx').onclick=closeM;document.getElementById('mCancel').onclick=closeM;
+document.getElementById('allDays').onclick=function(e){e.preventDefault();mDays=[1,2,3,4,5,6,7];paintDays(false)};
+document.getElementById('stTgl').onclick=function(){mStatus=mStatus==='active'?'inactive':'active';this.className='tgl'+(mStatus==='active'?' on':'');document.getElementById('stLabel').textContent=mStatus==='active'?'Активно':'Не активный'};
+document.getElementById('tAdd').onclick=function(){var h=document.getElementById('tH').value,m=document.getElementById('tM').value;if(h===''||m===''){toast('Укажите часы и минуты');return}h=String(h).padStart(2,'0');m=String(m).padStart(2,'0');if(+h>23||+m>59){toast('Некорректное время');return}var t=h+':'+m;if(mTimes.indexOf(t)<0)mTimes.push(t);mTimes.sort();paintTimes(false)};
+document.getElementById('intAdd').onclick=function(){var v=parseInt(document.getElementById('intVal').value,10);if(!v||v<1){toast('Укажите интервал, ч');return}mInt=v;paintTimes(false)};
+function collect(){return{kind:document.getElementById('fKind').value,name:document.getElementById('fName').value,days:mDays.slice().sort(),times:mTimes.slice().sort(),intervalH:mInt,minVol:num(document.getElementById('fMinV').value),minW:num(document.getElementById('fMinW').value),maxVol:num(document.getElementById('fMaxV').value),maxW:num(document.getElementById('fMaxW').value),maxAttach:document.getElementById('fMaxA').value===''||document.getElementById('fMaxA').value==null?null:parseInt(document.getElementById('fMaxA').value,10),daysBefore:document.getElementById('fDaysB').value===''||document.getElementById('fDaysB').value==null?null:parseInt(document.getElementById('fDaysB').value,10),status:mStatus}}
+function diffLog(id,old,nw){var L=[['kind','Тип'],['name','Наименование'],['days','День недели'],['times','Время'],['intervalH','Интервал, ч'],['minVol','Min объем, м3'],['minW','Min вес заказа'],['maxVol','Max объем, м3'],['maxW','Max вес заказа'],['maxAttach','Мах вложение в заказ'],['daysBefore','Дней до доставки (не более)'],['status','Статус']];
+var F2={days:function(v){return v.map(function(d){return DAYS[d-1]}).join(', ')},times:function(v){return v.join(', ')},status:function(v){return v==='active'?'Активно':'Не активный'}};
+L.forEach(function(p){var a=old[p[0]],b=nw[p[0]];var sa=F2[p[0]]?F2[p[0]](a==null?(p[0]==='days'||p[0]==='times'?[]:a):a):(a==null?'—':String(a).replace('.',','));var sb=F2[p[0]]?F2[p[0]](b==null?(p[0]==='days'||p[0]==='times'?[]:b):b):(b==null?'—':String(b).replace('.',','));if(JSON.stringify(a)!==JSON.stringify(b))hlog(id,p[1],sa||'—',sb||'—')})}
+document.getElementById('mSave').onclick=function(){
+if(mId>=0&&mMode==='view'){openRule(mId,'edit');return}
+var v=collect();if(!v.days.length){toast('Выберите дни недели');return}if(!v.times.length&&v.intervalH==null){toast('Укажите время или интервал');return}
+if(mId<0){var max=Math.max.apply(null,rules.map(function(r){return r.id}).concat([0]));v.id=max+1;v.created=new Date().toISOString();v.updated=v.created;v.lastRun=null;rules.push(v);hlog(v.id,'Создание','—','ID '+v.id);persist();closeM();render();toast('Добавлено ID '+v.id)}
+else{var r=rules.filter(function(x){return x.id===mId})[0];diffLog(mId,{kind:r.kind,name:r.name,days:r.days,times:r.times,intervalH:r.intervalH,minVol:r.minVol,minW:r.minW,maxVol:r.maxVol,maxW:r.maxW,maxAttach:r.maxAttach,daysBefore:r.daysBefore,status:r.status},v);
+Object.assign(r,v);r.updated=new Date().toISOString();persist();closeM();render();toast('Сохранено ID '+mId)}};
+document.getElementById('mk').onclick=function(){openRule(-1,'add')};
+/* история */
+var hId=-1,hPage=1;
+function openHist(id){hId=id;hPage=1;document.getElementById('hTitle').innerHTML='История изменений ID '+id+' <span style="float:right;cursor:pointer;color:#663EB2" id="hx2">✕</span>';document.getElementById('hx2').onclick=closeH;renderHist();document.getElementById('hm').classList.add('open')}
+function closeH(){document.getElementById('hm').classList.remove('open')}
+document.getElementById('hx').onclick=closeH;document.getElementById('hClose').onclick=closeH;
+function renderHist(){var rows=(hist[hId]||[]).slice().sort(function(a,b){return new Date(b.at)-new Date(a.at)});var per=9;var pages=Math.max(1,Math.ceil(rows.length/per));if(hPage>pages)hPage=pages;
+var b=document.getElementById('hBody');b.innerHTML=rows.length?'':'<tr><td colspan="5" style="color:#999">Нет изменений</td></tr>';
+rows.slice((hPage-1)*per,hPage*per).forEach(function(h){var tr=document.createElement('tr');var f1=document.createElement('td');f1.textContent=fmtDT(h.at);tr.appendChild(f1);
+var f2=document.createElement('td');f2.textContent=h.user;tr.appendChild(f2);
+var f3=document.createElement('td');f3.textContent=h.field;tr.appendChild(f3);
+var f4=document.createElement('td');f4.textContent=h.was;tr.appendChild(f4);
+var f5=document.createElement('td');if(h.doc){f5.className='doclink';f5.textContent=h.now;f5.onclick=function(){toast('Накладная '+h.now)}}else f5.textContent=h.now;tr.appendChild(f5);b.appendChild(tr)});
+document.getElementById('hInfo').textContent='Показано '+(rows.length?((hPage-1)*per+1):0)+'–'+Math.min(rows.length,hPage*per)+' из '+rows.length;
+var pg=document.getElementById('hPg');pg.innerHTML='';[['«',1],['‹',Math.max(1,hPage-1)]].forEach(function(x){var btn=document.createElement('button');btn.textContent=x[0];btn.onclick=function(){hPage=x[1];renderHist()};pg.appendChild(btn)});
+var cur=document.createElement('button');cur.textContent=hPage;cur.className='on';pg.appendChild(cur);
+[['›',Math.min(pages,hPage+1)],['»',pages]].forEach(function(x){var btn=document.createElement('button');btn.textContent=x[0];btn.onclick=function(){hPage=x[1];renderHist()};pg.appendChild(btn)})}
+/* анализ */
+function openAnalysis(){var out=[];rules.forEach(function(r){
+if(!r.times.length&&r.intervalH==null)out.push('ID '+r.id+' ('+r.name+'): нет ни времени, ни интервала — формирование не запустится.');
+if(r.status==='inactive'&&r.lastRun)out.push('ID '+r.id+' ('+r.name+'): правило не активно, последняя сборка '+fmtDT(r.lastRun)+'.');
+if(r.minVol!=null&&r.maxVol!=null&&r.minVol>r.maxVol)out.push('ID '+r.id+' ('+r.name+'): Min объем больше Max — проверьте лимиты.');
+if(r.minW!=null&&r.maxW!=null&&r.minW>r.maxW)out.push('ID '+r.id+' ('+r.name+'): Min вес больше Max — проверьте лимиты.')});
+var seen={};rules.forEach(function(r){var k=r.name+'|'+r.days.slice().sort().join(',')+'|'+r.times.slice().sort().join(',');if(seen[k])out.push('ID '+r.id+' дублирует ID '+seen[k]+' ('+r.name+', дни и время совпадают).');else seen[k]=r.id});
+var b=document.getElementById('abody');b.innerHTML=out.length?'<ul><li>'+out.join('</li><li>')+'</li></ul>':'<p>Проблем не найдено: у всех правил задано время или интервал, лимиты корректны, дублей нет.</p>';
+document.getElementById('ap').classList.add('open')}
+render();
+</script>
 <script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>
 </html>

@@ -9,12 +9,10 @@ require_once __DIR__ . '/TaskStatus.php';
 require_once __DIR__ . '/TaskFilter.php';
 require_once __DIR__ . '/TaskRepository.php';
 require_once __DIR__ . '/TaskService.php';
+require_once __DIR__ . '/../shared/db.php';
 
-$dbFile = __DIR__ . '/wms_tasks.sqlite';
-$pdo = new PDO('sqlite:' . $dbFile, null, null, [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-]);
+// Единая БД заданий (тот же файл, что у ТСД и модуля 07).
+$pdo = wms_tasks_pdo();
 
 // --- Схема SQLite (упрощенная; прод — tasks/schema.sql на MySQL) ---
 $pdo->exec("CREATE TABLE IF NOT EXISTS warehouses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
@@ -128,6 +126,14 @@ try {
     } elseif ($action === 'auto' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $service->autoRun((int)($_GET['id'] ?? 0), $userId);
         echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+    } elseif ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $service->delete((int)($_GET['id'] ?? 0), $userId);
+        echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+    } elseif ($action === 'delete_many' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $b = json_decode(file_get_contents('php://input'), true) ?? [];
+        $ids = $b['ids'] ?? $b;
+        $n = $service->deleteMany((array)$ids, $userId);
+        echo json_encode(['ok' => true, 'deleted' => $n], JSON_UNESCAPED_UNICODE);
     } elseif ($action === 'pick' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $b = json_decode(file_get_contents('php://input'), true) ?? [];
         // ТСД-скан: {item_id, qty} либо {task_id, sku/code, qty}

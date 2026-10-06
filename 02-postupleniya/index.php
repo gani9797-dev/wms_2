@@ -38,6 +38,8 @@ if ($action === 'list') {
     $controller->history((int)($_GET['id'] ?? 0));
 } elseif ($action === 'flags') {
     $controller->flags((int)($_GET['id'] ?? 0));
+} elseif ($action === 'stockin') {
+    $controller->stockin((int)($_GET['id'] ?? 0));
 } elseif ($action === 'store' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $controller->store($body);
 } elseif ($action === 'copy' && $_SERVER['REQUEST_METHOD'] === 'POST') {

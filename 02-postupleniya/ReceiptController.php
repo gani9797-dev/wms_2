@@ -175,6 +175,11 @@ final class ReceiptController
         $this->json($this->repo->flags($id));
     }
 
+    public function stockin(int $id): void
+    {
+        $this->json($this->repo->stockin($id));
+    }
+
     public function archive(int $id): void
     {
         try {

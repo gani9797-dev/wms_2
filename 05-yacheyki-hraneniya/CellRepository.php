@@ -136,6 +136,38 @@ final class CellRepository
         $r['is_unlimited'] = ((float)($r['capacity'] ?? 0)) <= 0;
         $r['temp_label'] = $this->tempLabel($r);
         $r['lock_label'] = ((int)($r['is_locked'] ?? 0) === 1) ? 'Да' : 'Нет';
+        $beam = isset($r['beam_width']) && $r['beam_width'] !== null && (float)$r['beam_width'] > 0
+            ? (float)$r['beam_width'] : 3.2;
+        $r['beam_width'] = $beam <= 3.4 ? 3.2 : 3.6;
+        $r['beam_label'] = number_format($r['beam_width'], 1, ',', '') . ' м';
+        $r['pallet_types_label'] = self::palletTypesLabel($r['allowed_pallet_types'] ?? null);
+        $r['pallet_type_label'] = self::palletTypeLabel($r['pallet_type'] ?? null);
+        $r['height_label'] = isset($r['cell_height_mm']) && $r['cell_height_mm'] !== null && (int)$r['cell_height_mm'] > 0
+            ? ((int)$r['cell_height_mm'] . ' мм') : '—';
+    }
+
+    public static function palletTypesLabel(mixed $v): string
+    {
+        $raw = trim((string)($v ?? ''));
+        if ($raw === '' || $raw === 'euro,fin' || $raw === 'fin,euro') {
+            return 'Евро + Фин';
+        }
+        if ($raw === 'euro') {
+            return 'Евро';
+        }
+        if ($raw === 'fin') {
+            return 'Фин';
+        }
+        return $raw;
+    }
+
+    public static function palletTypeLabel(mixed $v): string
+    {
+        $s = trim((string)($v ?? ''));
+        if ($s === '') {
+            return '—';
+        }
+        return $s === 'fin' ? 'Фин' : ($s === 'euro' ? 'Евро' : $s);
     }
 
     private function tempLabel(array $r): string

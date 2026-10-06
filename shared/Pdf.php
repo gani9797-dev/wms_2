@@ -476,6 +476,101 @@ final class WmsCode128
     }
 }
 
+// ---------- Штрихкод EAN-13 (векторный, для этикетки товара) ----------
+
+final class WmsEan13
+{
+    private const L = [
+        '0' => '0001101', '1' => '0011001', '2' => '0010011', '3' => '0111101',
+        '4' => '0100011', '5' => '0110001', '6' => '0101111', '7' => '0111011',
+        '8' => '0110111', '9' => '0001011',
+    ];
+    private const G = [
+        '0' => '0100111', '1' => '0110011', '2' => '0011011', '3' => '0100001',
+        '4' => '0011101', '5' => '0111001', '6' => '0000101', '7' => '0010001',
+        '8' => '0001001', '9' => '0010111',
+    ];
+    private const R = [
+        '0' => '1110010', '1' => '1100110', '2' => '1101100', '3' => '1000010',
+        '4' => '1011100', '5' => '1001110', '6' => '1010000', '7' => '1000100',
+        '8' => '1001000', '9' => '1110100',
+    ];
+    // Чётность левой шестёрки по первой цифре.
+    private const PARITY = [
+        '0' => 'LLLLLL', '1' => 'LLGLGG', '2' => 'LLGGLG', '3' => 'LLGGGL',
+        '4' => 'LGLLGG', '5' => 'LGGLLG', '6' => 'LGGGLL', '7' => 'LGLGLG',
+        '8' => 'LGLGGL', '9' => 'LGGLGL',
+    ];
+
+    public static function checkDigit(string $first12): string
+    {
+        $sum = 0;
+        for ($i = 0; $i < 12; $i++) {
+            $d = (int)$first12[$i];
+            $sum += ($i % 2 === 0) ? $d : $d * 3;
+        }
+        return (string)((10 - ($sum % 10)) % 10);
+    }
+
+    /**
+     * Нормализовать к валидным 13 цифрам.
+     * 12 цифр -> дописываем контрольную; 13 цифр -> проверяем контрольную.
+     * @throws RuntimeException если не EAN-13
+     */
+    public static function normalize(string $raw): string
+    {
+        $digits = preg_replace('/\D/', '', $raw) ?? '';
+        if (strlen($digits) === 12) {
+            return $digits . self::checkDigit($digits);
+        }
+        if (strlen($digits) === 13) {
+            if (self::checkDigit(substr($digits, 0, 12)) !== $digits[12]) {
+                throw new RuntimeException('EAN-13: неверная контрольная цифра: ' . $raw);
+            }
+            return $digits;
+        }
+        throw new RuntimeException('EAN-13: нужно 12 или 13 цифр, получено: ' . $raw);
+    }
+
+    /** 13 цифр как есть (12 -> дописываем КЦ, 13 -> без проверки для печати того, что хранится). */
+    public static function loose(string $raw): string
+    {
+        $digits = preg_replace('/\D/', '', $raw) ?? '';
+        if (strlen($digits) === 12) {
+            return $digits . self::checkDigit($digits);
+        }
+        if (strlen($digits) === 13) {
+            return $digits;
+        }
+        throw new RuntimeException('EAN-13: нужно 12 или 13 цифр, получено: ' . $raw);
+    }
+
+    /** Битовая строка 95 модулей ('1' — штрих). */
+    public static function bits(string $raw): string
+    {
+        $d = self::loose($raw);
+        $par = self::PARITY[$d[0]];
+        $out = '101'; // левый ограничитель
+        for ($i = 1; $i <= 6; $i++) {
+            $tbl = ($par[$i - 1] === 'G') ? self::G : self::L;
+            $out .= $tbl[$d[$i]];
+        }
+        $out .= '01010'; // центр
+        for ($i = 7; $i <= 12; $i++) {
+            $out .= self::R[$d[$i]];
+        }
+        $out .= '101'; // правый ограничитель
+        return $out;
+    }
+
+    /** Человекочитаемая группировка: "D DDDDDD DDDDDD". */
+    public static function human(string $ean13): string
+    {
+        $e = self::loose($ean13);
+        return $e[0] . ' ' . substr($e, 1, 6) . ' ' . substr($e, 7, 6);
+    }
+}
+
 // ---------- Табличный документ ----------
 
 function wms_pdf_clean(string $s): string
@@ -973,6 +1068,177 @@ function wms_shipment_print(array $data, ?array $force = null): array
         }
     }
     return [$data, $force];
+}
+
+/**
+ * Этикетка со штрихкодом товара (модуль 08, ПКМ -> Печать -> Штрихкод).
+ * Компоновка строго по ТЗ:
+ *   вверху — артикул,
+ *   следующая строка — наименование,
+ *   внизу — штрихкод товара EAN-13 (штрихи + цифры).
+ * Если ШК не EAN-13 (не 12/13 цифр) — рисуем Code128 как запасной вариант.
+ */
+function wms_pdf_product_barcode(string $sku, string $name, string $barcode): string
+{
+    [$regFile, $boldFile] = wms_pdf_font_files();
+    $reg = new WmsTtf($regFile);
+    $bold = new WmsTtf($boldFile);
+    $regBytes = (string)file_get_contents($regFile);
+    $boldBytes = (string)file_get_contents($boldFile);
+
+    $sku = wms_pdf_clean($sku) ?: '—';
+    $name = wms_pdf_clean($name) ?: '—';
+    $barcode = trim($barcode);
+
+    // Биты штрихов + подпись под ними.
+    $isEan = true;
+    try {
+        $bits = WmsEan13::bits($barcode);
+        $ean = WmsEan13::loose($barcode);
+        $caption = WmsEan13::human($ean);
+    } catch (Throwable) {
+        $isEan = false;
+        $mods = WmsCode128::modules($barcode !== '' ? $barcode : ($sku !== '' ? $sku : '0'));
+        $bits = '';
+        foreach ($mods as $i => $w) {
+            $bits .= str_repeat(($i % 2 === 0) ? '1' : '0', $w);
+        }
+        $caption = $barcode;
+    }
+
+    $PW = 595.28;
+    $PH = 841.89;
+    $fsSku = 16.0;
+    $fsName = 12.0;
+    $fsCap = 13.0;
+
+    // Имя переносим максимум в 3 строки по ширине этикетки.
+    $labelW = 440.0;
+    $nameLines = wms_pdf_wrap($reg, $name, $fsName, $labelW - 20);
+    $nameLines = array_slice($nameLines, 0, 3);
+
+    $barH = 90.0;
+    $guardExtra = $isEan ? 8.0 : 0.0; // у EAN ограничители чуть длиннее
+    // Ширина модуля: влезаем в этикетку с тихими зонами.
+    $n = max(1, strlen($bits));
+    $modW = min(2.2, ($labelW - 40) / $n);
+    $totW = $n * $modW;
+    $bx = ($PW - $totW) / 2;
+
+    // Вертикальная раскладка от центра: артикул, имя, штрихи, цифры.
+    $lhSku = $fsSku * 1.35;
+    $lhName = $fsName * 1.35;
+    $lhCap = $fsCap * 1.35;
+    $blockH = $lhSku + 6 + count($nameLines) * $lhName + 10 + $barH + $guardExtra + 4 + $lhCap + 16;
+    $yTop = ($PH + $blockH) / 2;
+
+    $useR = [];
+    $useB = [];
+    $mark = static function (string $s, bool $b) use (&$useR, &$useB) {
+        foreach (WmsTtf::cps($s) as $cp) {
+            if ($b) $useB[$cp] = true;
+            else $useR[$cp] = true;
+        }
+    };
+    $mark($sku, true);
+    foreach ($nameLines as $ln) $mark($ln, false);
+    $mark($caption, false);
+
+    $pdf = new WmsPdf();
+    $fontObjs = [];
+    foreach ([['F1', $reg, $regBytes, $useR], ['F2', $bold, $boldBytes, $useB]] as [$tag, $f, $bytes, $used]) {
+        $gids = [];
+        foreach (array_keys($used) as $cp) $gids[$f->gid($cp)] = true;
+        $gids = array_keys($gids);
+        sort($gids);
+        $w = '';
+        $run = null;
+        foreach ($gids as $g) {
+            $ww = (int)round($f->pdfW($g));
+            if ($run === null || $g !== $run[1] + 1) {
+                if ($run !== null) $w .= $run[0] . ' [' . implode(' ', $run[2]) . '] ';
+                $run = [$g, $g, []];
+            }
+            $run[1] = $g;
+            $run[2][] = $ww;
+        }
+        if ($run !== null) $w .= $run[0] . ' [' . implode(' ', $run[2]) . '] ';
+        $tu = "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n"
+            . "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n"
+            . "/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n"
+            . "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"
+            . count($used) . " beginbfchar\n";
+        foreach (array_keys($used) as $cp) {
+            $tu .= sprintf('<%04X> <%s>', $f->gid($cp), strtoupper(bin2hex(WmsTtf::utf16be($cp)))) . "\n";
+        }
+        $tu .= "endbfchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n";
+        $ps = $f->psName;
+        $bb = $f->bbox;
+        $asc = (int)round($f->ascent * 1000 / $f->upm);
+        $desc = (int)round($f->descent * 1000 / $f->upm);
+        $fileId = $pdf->add("<< /Length " . strlen($bytes) . " /Length1 " . strlen($bytes) . " >>\nstream\n" . $bytes . "\nendstream");
+        $descId = $pdf->add("<< /Type /FontDescriptor /FontName /$ps /Flags 32 "
+            . "/FontBBox [$bb[0] $bb[1] $bb[2] $bb[3]] /ItalicAngle 0 /Ascent $asc /Descent $desc /StemV 80 /FontFile2 $fileId 0 R >>");
+        $dw = (int)round($f->pdfW(0));
+        $cidId = $pdf->add("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /$ps "
+            . "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> "
+            . "/DW $dw /W [$w] /FontDescriptor $descId 0 R >>");
+        $tuId = $pdf->add("<< /Length " . strlen($tu) . " >>\nstream\n" . $tu . "endstream");
+        $t0Id = $pdf->add("<< /Type /Font /Subtype /Type0 /BaseFont /$ps /Encoding /Identity-H "
+            . "/DescendantFonts [$cidId 0 R] /ToUnicode $tuId 0 R >>");
+        $fontObjs[$tag] = $t0Id;
+    }
+
+    $enc = static function (WmsTtf $f, string $s): string {
+        $h = '';
+        foreach (WmsTtf::cps($s) as $cp) $h .= sprintf('%04X', $f->gid($cp));
+        return $h;
+    };
+    $T = static function (string $tag, float $size, float $x, float $y, string $hex): string {
+        return "BT /$tag " . rtrim(rtrim(sprintf('%.2F', $size), '0'), '.') . " Tf 1 0 0 1 "
+            . sprintf('%.2F %.2F', $x, $y) . " Tm <$hex> Tj ET\n";
+    };
+
+    $s = '';
+    // Тонкая рамка этикетки.
+    $s .= sprintf("%.2F %.2F %.2F %.2F re S\n", ($PW - $labelW) / 2, $yTop - $blockH, $labelW, $blockH);
+    $y = $yTop;
+    // 1) Артикул вверху, жирно, по центру.
+    $y -= $lhSku;
+    $capW = $bold->strW($sku, $fsSku);
+    $s .= $T('F2', $fsSku, ($PW - $capW) / 2, $y, $enc($bold, $sku));
+    $y -= 6;
+    // 2) Наименование, по центру (до 3 строк).
+    foreach ($nameLines as $ln) {
+        $y -= $lhName;
+        $lw = $reg->strW($ln, $fsName);
+        $s .= $T('F1', $fsName, ($PW - $lw) / 2, $y, $enc($reg, $ln));
+    }
+    $y -= 10;
+    // 3) Штрихи EAN-13 (или Code128 fallback).
+    $by = $y - $barH;
+    $cx = $bx;
+    $len = strlen($bits);
+    for ($i = 0; $i < $len; $i++) {
+        // Ограничители EAN (первые/последние 3 и центральные 5) чуть длиннее.
+        $extra = 0.0;
+        if ($isEan && ($i < 3 || $i >= $len - 3 || ($i >= 45 && $i < 50))) $extra = $guardExtra;
+        if ($bits[$i] === '1') {
+            $s .= sprintf('%.2F %.2F %.2F %.2F re f' . "\n", $cx, $by - $extra, $modW + 0.25, $barH + $extra);
+        }
+        $cx += $modW;
+    }
+    $y = $by - $guardExtra - 4 - $lhCap;
+    $cw = $reg->strW($caption, $fsCap);
+    $s .= $T('F1', $fsCap, ($PW - $cw) / 2, $y, $enc($reg, $caption));
+
+    $contentId = $pdf->add("<< /Length " . strlen($s) . " >>\nstream\n" . $s . "endstream");
+    $pagesId = $pdf->add('@@KIDS@@');
+    $pageId = $pdf->add("<< /Type /Page /Parent $pagesId 0 R /MediaBox [0 0 $PW $PH] "
+        . "/Contents $contentId 0 R /Resources << /Font << /F1 {$fontObjs['F1']} 0 R /F2 {$fontObjs['F2']} 0 R >> >> >>");
+    $pdf->objs[$pagesId - 1] = "<< /Type /Pages /Kids [$pageId 0 R] /Count 1 >>";
+    $pdf->add("<< /Type /Catalog /Pages $pagesId 0 R >>");
+    return $pdf->render();
 }
 
 function wms_pdf_filename(string $title, int $id = 0): string

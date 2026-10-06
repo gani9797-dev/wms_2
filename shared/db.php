@@ -31,6 +31,14 @@ function wms_storage_db_file(): string
     return wms_root() . '/05-yacheyki-hraneniya/wms_storage.sqlite';
 }
 
+// Канонический файл заданий: tasks/wms_tasks.sqlite.
+// Его используют ТСД (tsd/tasks.php), модуль 07 (07-zadaniya/demo_sqlite.php)
+// и легаси-модуль tasks/demo_sqlite.php — все видят одни и те же задания.
+function wms_tasks_db_file(): string
+{
+    return wms_root() . '/tasks/wms_tasks.sqlite';
+}
+
 function wms_receipts_pdo(): PDO
 {
     $pdo = new PDO('sqlite:' . wms_receipts_db_file(), null, null, [
@@ -57,6 +65,16 @@ function wms_storage_pdo(): PDO
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
     wms_ensure_storage_schema($pdo);
+    return $pdo;
+}
+
+function wms_tasks_pdo(): PDO
+{
+    $pdo = new PDO('sqlite:' . wms_tasks_db_file(), null, null, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ]);
+    wms_ensure_tasks_schema($pdo);
     return $pdo;
 }
 
@@ -152,6 +170,36 @@ function wms_ensure_receipt_schema(PDO $pdo): void
     }
 }
 
+// Дотягивает схему заданий (модуль 07 / ТСД / tasks). Безопасно на каждый запрос.
+function wms_ensure_tasks_schema(PDO $pdo): void
+{
+    $pdo->exec("CREATE TABLE IF NOT EXISTS warehouses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, fio TEXT NOT NULL, role TEXT DEFAULT 'storekeeper')");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, doc_no TEXT NOT NULL UNIQUE, type TEXT NOT NULL DEFAULT 'сбор',
+      status TEXT NOT NULL DEFAULT 'new', priority TEXT NOT NULL DEFAULT 'normal',
+      warehouse_id INTEGER NOT NULL, doc_ref TEXT, order_ref TEXT,
+      executor_id INTEGER, executor_fio TEXT,
+      plan_qty REAL DEFAULT 0, fact_qty REAL DEFAULT 0, progress INTEGER DEFAULT 0,
+      cells_count INTEGER DEFAULT 0, volume REAL DEFAULT 0, weight REAL DEFAULT 0,
+      equipment TEXT, flags TEXT, need_check INTEGER DEFAULT 0, comment TEXT,
+      due_date TEXT, done_at TEXT, paused_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS task_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL,
+      code TEXT, sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт',
+      cell_from TEXT, cell_to TEXT, pallet TEXT,
+      plan_qty REAL DEFAULT 0, fact_qty REAL DEFAULT 0,
+      state TEXT, executor_fio TEXT)");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS task_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL, user_id INTEGER,
+      action TEXT NOT NULL, field TEXT, field_label TEXT, old_value TEXT, new_value TEXT,
+      created_at TEXT DEFAULT (datetime('now')))");
+    // Закрепление заданий за сотрудниками ТСД + журнал проблем/сортировки.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS tsd_task_locks (task_id INTEGER PRIMARY KEY, user_id INTEGER, user_fio TEXT, status TEXT NOT NULL DEFAULT 'work', updated_at TEXT DEFAULT (datetime('now')))");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS tsd_task_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER, cell TEXT, sku TEXT, user_id INTEGER, reason TEXT, created_at TEXT DEFAULT (datetime('now')))");
+}
+
 // Дотягивает схему ячеек хранения (модуль 05). Безопасно на каждый запрос.
 function wms_ensure_storage_schema(PDO $pdo): void
 {
@@ -166,8 +214,25 @@ function wms_ensure_storage_schema(PDO $pdo): void
       temp_from REAL, temp_to REAL, is_locked INTEGER DEFAULT 0, lock_reason TEXT,
       allowed_goods TEXT DEFAULT 'Все', max_weight_kg REAL, max_pallets INTEGER,
       hazmat_allowed INTEGER DEFAULT 0, comment TEXT, is_archived INTEGER DEFAULT 0,
+      beam_width REAL DEFAULT 3.2, cell_height_mm INTEGER DEFAULT NULL,
+      allowed_pallet_types TEXT DEFAULT 'euro,fin', pallet_type TEXT DEFAULT NULL,
       created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))");
     $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_cell_code_wh ON storage_cells(code, warehouse_id)");
+    // Миграция старых файлов: ширина балки / высота ячейки / типы тары / факт. тип паллеты.
+    foreach ([
+        'beam_width' => 'beam_width REAL DEFAULT 3.2',
+        'cell_height_mm' => 'cell_height_mm INTEGER',
+        'allowed_pallet_types' => "allowed_pallet_types TEXT DEFAULT 'euro,fin'",
+        'pallet_type' => 'pallet_type TEXT',
+    ] as $col => $ddl) {
+        try {
+            $has = false;
+            foreach ($pdo->query("PRAGMA table_info(storage_cells)")->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                if (($c['name'] ?? '') === $col) { $has = true; break; }
+            }
+            if (!$has) $pdo->exec("ALTER TABLE storage_cells ADD COLUMN $ddl");
+        } catch (Throwable) {}
+    }
     $pdo->exec("CREATE TABLE IF NOT EXISTS cell_content (
       id INTEGER PRIMARY KEY AUTOINCREMENT, cell_id INTEGER NOT NULL,
       product_code TEXT, sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт',

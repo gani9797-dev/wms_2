@@ -67,6 +67,16 @@ try {
     } elseif ($action === 'auto' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $service->autoRun((int)($_GET['id'] ?? 0), $userId);
         echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+    } elseif ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $service->delete((int)($_GET['id'] ?? 0), $userId);
+        echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+    } elseif ($action === 'delete_many' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $ids = $body['ids'] ?? $body ?? [];
+        if (isset($ids['ids'])) {
+            $ids = $ids['ids'];
+        }
+        $n = $service->deleteMany((array)$ids, $userId);
+        echo json_encode(['ok' => true, 'deleted' => $n], JSON_UNESCAPED_UNICODE);
     } elseif ($action === 'pick' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         // ТСД-скан: {item_id, qty}
         $itemId = (int)($body['item_id'] ?? $_GET['item_id'] ?? 0);

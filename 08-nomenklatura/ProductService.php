@@ -12,7 +12,8 @@ final class ProductService
     private const EDITABLE = [
         'code', 'sku', 'name', 'unit', 'category', 'brand', 'owner', 'warehouse_id',
         'description', 'image_path', 'length_mm', 'width_mm', 'height_mm', 'weight_g',
-        'volume_m3', 'qty_in_box', 'boxes_per_pallet', 'storage_strategy', 'pick_strategy',
+        'volume_m3', 'qty_in_box', 'boxes_per_pallet', 'pallet_type', 'pallet_height_mm',
+        'storage_strategy', 'pick_strategy',
         'placement_strategy',
         'temp_from', 'temp_to', 'shelf_life_days', 'marking_start', 'chz_group',
         'max_expiry_pct', 'is_batch', 'is_expiry', 'is_serial', 'is_chz', 'is_danger',
@@ -26,6 +27,7 @@ final class ProductService
         'warehouse_id' => 'Склад', 'description' => 'Описание', 'length_mm' => 'Длина',
         'width_mm' => 'Ширина', 'height_mm' => 'Высота', 'weight_g' => 'Вес',
         'volume_m3' => 'Объем', 'qty_in_box' => 'Штук в коробе', 'boxes_per_pallet' => 'Коробов на паллете',
+        'pallet_type' => 'Тип паллеты', 'pallet_height_mm' => 'Высота паллеты',
         'storage_strategy' => 'Стратегия хранения', 'pick_strategy' => 'Стратегия отбора',
         'placement_strategy' => 'Стратегия размещения',
         'temp_from' => 'Темп. от', 'temp_to' => 'Темп. до', 'shelf_life_days' => 'Срок годности',
@@ -230,13 +232,21 @@ final class ProductService
         return $n;
     }
 
-    public function printData(int $id, string $kind = 'barcode'): array
+    public function printData(int $id, string $kind = 'barcode', ?string $barcode = null): array
     {
         $st = $this->pdo->prepare("SELECT p.*, (SELECT barcode FROM product_barcodes WHERE product_id = p.id ORDER BY id LIMIT 1) AS main_bc FROM products p WHERE p.id = :id");
         $st->execute([':id' => $id]);
         $p = $st->fetch(PDO::FETCH_ASSOC);
         if (!$p) throw new RuntimeException('Карточка не найдена');
-        return ['kind' => $kind, 'sku' => $p['sku'], 'name' => $p['name'], 'barcode' => $p['main_bc'], 'unit' => $p['unit']];
+        $list = [];
+        try {
+            $bs = $this->pdo->prepare("SELECT barcode FROM product_barcodes WHERE product_id = :id ORDER BY id");
+            $bs->execute([':id' => $id]);
+            $list = array_values(array_filter(array_map(fn($r) => trim((string)($r['barcode'] ?? $r)), $bs->fetchAll(PDO::FETCH_ASSOC))));
+        } catch (Throwable) {}
+        $main = $barcode !== null && trim($barcode) !== '' ? trim($barcode) : (string)($p['main_bc'] ?? '');
+        if ($main === '' && $list) $main = (string)$list[0];
+        return ['kind' => $kind, 'code' => $p['code'] ?? null, 'sku' => $p['sku'], 'name' => $p['name'], 'barcode' => $main, 'barcode_list' => $list, 'unit' => $p['unit']];
     }
 
     public function exportCsv(ProductFilter $f, ProductRepository $repo): string
@@ -337,8 +347,17 @@ final class ProductService
                 $b[$k] = ($s === '' ? null : (float)$s);
             }
         }
-        foreach (['qty_in_box', 'boxes_per_pallet', 'shelf_life_days', 'warehouse_id', 'length_mm', 'width_mm', 'height_mm', 'weight_g'] as $k) {
+        foreach (['qty_in_box', 'boxes_per_pallet', 'shelf_life_days', 'warehouse_id', 'length_mm', 'width_mm', 'height_mm', 'weight_g', 'pallet_height_mm'] as $k) {
             if (array_key_exists($k, $b) && ($b[$k] === '' || $b[$k] === null)) $b[$k] = null;
+        }
+        if (array_key_exists('pallet_type', $b) && $b['pallet_type'] !== null && $b['pallet_type'] !== '') {
+            $s = function_exists('mb_strtolower') ? mb_strtolower(trim((string)$b['pallet_type']), 'UTF-8') : strtolower(trim((string)$b['pallet_type']));
+            if (in_array($s, ['евро', 'euro', 'eur', 'е'], true)) $b['pallet_type'] = 'euro';
+            elseif (in_array($s, ['фин', 'финская', 'fin', 'fan', 'ф'], true)) $b['pallet_type'] = 'fin';
+            else throw new RuntimeException('Тип паллеты: euro (евро) или fin (фин)');
+        }
+        if (array_key_exists('pallet_height_mm', $b) && $b['pallet_height_mm'] !== null && ((int)$b['pallet_height_mm'] <= 0)) {
+            throw new RuntimeException('Высота паллеты должна быть > 0 мм');
         }
         // Статус из карточки приходит строкой "1"/"0" — ок; защищаем от мусора.
         if (array_key_exists('is_active', $b) && $b['is_active'] !== null && $b['is_active'] !== '') {

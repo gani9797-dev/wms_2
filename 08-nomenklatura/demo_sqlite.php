@@ -79,6 +79,17 @@ try {
     }
     if (!$has) $pdo->exec("ALTER TABLE products ADD COLUMN quality TEXT");
 } catch (Throwable) {}
+// Тип тары и высота паллеты (для подбора ячейки при размещении по SSCC:
+// euro/фин + высота, мм — ячейка обязана принять по высоте и по типу).
+foreach (['pallet_type' => "pallet_type TEXT DEFAULT 'euro'", 'pallet_height_mm' => 'pallet_height_mm INTEGER'] as $col => $ddl) {
+    try {
+        $has = false;
+        foreach ($pdo->query("PRAGMA table_info(products)")->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            if (($c['name'] ?? '') === $col) { $has = true; break; }
+        }
+        if (!$has) $pdo->exec("ALTER TABLE products ADD COLUMN $ddl");
+    } catch (Throwable) {}
+}
 // Разовая чистка сид-мусора: старый сид ставил всем «Легкая промышленность».
 // Сбрасываем только нетронутым сид-строкам (Мячи/Wilson/Эталон, габариты 1000³) —
 // заведенное вручную не трогаем. Идемпотентно.
@@ -281,10 +292,55 @@ try {
     } elseif ($action === 'print') {
         $pId = (int)($_GET['id'] ?? 0);
         $pKind = (string)($_GET['kind'] ?? 'barcode');
-        if (($_GET['format'] ?? '') === 'pdf') {
+        $pBc = isset($_GET['bc']) ? (string)$_GET['bc'] : null;
+        $pFmt = (string)($_GET['format'] ?? '');
+        $pW = isset($_GET['w']) ? (float)$_GET['w'] : 58.0;
+        $pH = isset($_GET['h']) ? (float)$_GET['h'] : 40.0;
+        $pN = isset($_GET['copies']) ? max(1, min(999, (int)$_GET['copies'])) : 1;
+        $pDpi = isset($_GET['dpi']) ? (int)$_GET['dpi'] : 203;
+        if ($pFmt === 'zpl') {
+            require_once __DIR__ . '/../shared/Zpl.php';
+            try {
+                $pd = $service->printData($pId, $pKind, $pBc);
+                $zpl = wms_zpl_product_barcode((string)($pd['sku'] ?? ''), (string)($pd['name'] ?? ''), (string)($pd['barcode'] ?? ''), $pW, $pH, $pN, $pDpi);
+                if (!headers_sent()) {
+                    header('Content-Type: text/plain; charset=utf-8');
+                    header('Content-Disposition: attachment; filename="' . wms_zpl_filename((string)($pd['sku'] ?? 'barcode'), $pId) . '"');
+                }
+                echo $zpl;
+            } catch (Throwable $e) {
+                http_response_code(400);
+                if (!headers_sent()) header('Content-Type: text/plain; charset=utf-8');
+                echo 'Ошибка ZPL: ' . $e->getMessage();
+            }
+            exit;
+        }
+        if ($pFmt === 'label') {
+            require_once __DIR__ . '/../shared/Zpl.php';
+            try {
+                $pd = $service->printData($pId, $pKind, $pBc);
+                if (!headers_sent()) header('Content-Type: text/html; charset=utf-8');
+                echo wms_label_html((string)($pd['sku'] ?? ''), (string)($pd['name'] ?? ''), (string)($pd['barcode'] ?? ''), $pW, $pH, $pN, isset($_GET['autoprint']));
+            } catch (Throwable $e) {
+                http_response_code(400);
+                if (!headers_sent()) header('Content-Type: text/plain; charset=utf-8');
+                echo 'Ошибка этикетки: ' . $e->getMessage();
+            }
+            exit;
+        }
+        if ($pFmt === 'pdf') {
             require_once __DIR__ . '/../shared/Pdf.php';
             try {
-                wms_pdf_output(wms_pdf_auto($service->printData($pId, $pKind)), wms_pdf_filename($pKind, $pId));
+                $pd = $service->printData($pId, $pKind, $pBc);
+                if ($pKind === 'barcode') {
+                    if (($pd['barcode'] ?? '') === '') throw new RuntimeException('У товара нет штрихкода');
+                    wms_pdf_output(
+                        wms_pdf_product_barcode((string)($pd['sku'] ?? ''), (string)($pd['name'] ?? ''), (string)$pd['barcode']),
+                        wms_pdf_filename('barcode_' . ($pd['sku'] ?? $pKind), $pId)
+                    );
+                } else {
+                    wms_pdf_output(wms_pdf_auto($pd), wms_pdf_filename($pKind, $pId));
+                }
             } catch (Throwable $e) {
                 http_response_code(400);
                 header('Content-Type: text/plain; charset=utf-8');
@@ -292,7 +348,7 @@ try {
             }
             exit;
         }
-        echo json_encode($service->printData($pId, $pKind), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        echo json_encode($service->printData($pId, $pKind, $pBc), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'notif_list') {
         echo json_encode(Notifications::list($pdo, (string)($_GET['tab'] ?? 'all'), isset($_GET['search']) ? (string)$_GET['search'] : null, isset($_GET['type']) ? (string)$_GET['type'] : null, (int)($_GET['limit'] ?? 50)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'notif_counts') {

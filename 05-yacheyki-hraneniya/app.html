@@ -110,8 +110,8 @@ body.navhide main{max-width:none}
 </div>
 <div class="chips" id="chips"></div>
 <div class="card" style="overflow:auto">
-<table><thead><tr><th><input type="checkbox" id="chall"></th><th>Адрес</th><th>Зона</th><th>Тип ячейки</th><th>Категория</th><th>Статус</th><th>Заполненность</th><th>В ячейке, шт</th><th>Резерв</th><th>Остаток, шт</th><th>Паллет</th><th>Темп. режим</th><th>Блокировка</th><th>⋮ <span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
-<tbody id="rows"><tr><td colspan="14">Загрузка...</td></tr></tbody></table>
+<table><thead><tr><th><input type="checkbox" id="chall"></th><th>Адрес</th><th>Зона</th><th>Тип ячейки</th><th>Балка</th><th>Высота</th><th>Тара</th><th>Категория</th><th>Статус</th><th>Заполненность</th><th>В ячейке, шт</th><th>Резерв</th><th>Остаток, шт</th><th>Паллет</th><th>Темп. режим</th><th>Блокировка</th><th>⋮ <span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
+<tbody id="rows"><tr><td colspan="17">Загрузка...</td></tr></tbody></table>
 <div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
 <select id="pp"><option>5</option><option>9</option><option selected>14</option><option>20</option></select></div>
 <div class="pg" id="pg"></div></div>
@@ -163,6 +163,10 @@ body.navhide main{max-width:none}
 <div style="flex:1"><label>Тип *</label><select id="nt"><option value="pallet">Паллетная</option><option value="box">Коробочная</option></select></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Ряд, от *</label><input id="nrf" type="text" inputmode="numeric" maxlength="3" placeholder="01"></div>
 <div style="flex:1"><label>Ряд, до *</label><input id="nrt" type="text" inputmode="numeric" maxlength="3" placeholder="02"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Ширина балки, м * (одна на всё создание)</label><select id="nbm"><option value="3.2">3,2 — 3 евро / 2 фин</option><option value="3.6">3,6 — 4 евро / 3 фин</option></select></div>
+<div style="flex:1"><label>Высота ячейки, мм</label><input id="nhh" type="number" min="1" placeholder="напр. 1500"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Типы тары (какие паллеты можно ставить)</label><select id="npt2"><option value="euro,fin">Евро + Фин</option><option value="euro">Только Евро</option><option value="fin">Только Фин</option></select></div>
+<div style="flex:1"><label style="font-weight:400;font-size:11px;color:var(--mut)">Правило секции (Ряд+Секция): 3,2 — хоть один евро ⇒ вся секция под евро; 3,6 — жестко под евро, 3-й фин блокирует ячейку «временно занята». Подбор на ТСД добивает непустые секции.</label></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Секция, от *</label><input id="nsf" type="text" inputmode="numeric" maxlength="3" placeholder="01"></div>
 <div style="flex:1"><label>Секция, до *</label><input id="nst" type="text" inputmode="numeric" maxlength="3" placeholder="03"></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Уровень, от *</label><input id="nlf" type="text" inputmode="numeric" maxlength="3" placeholder="01"></div>
@@ -190,6 +194,10 @@ body.navhide main{max-width:none}
 <div style="flex:1"><label>Темп. до</label><input id="ett" type="number"></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Разрешено</label><input id="eal" type="text"></div>
 <div style="flex:1"><label>Макс паллет</label><input id="emp" type="number"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Ширина балки, м</label><select id="ebm"><option value="3.2">3,2</option><option value="3.6">3,6</option></select></div>
+<div style="flex:1"><label>Высота ячейки, мм</label><input id="ehh" type="number" min="1"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Типы тары</label><select id="ept"><option value="euro,fin">Евро + Фин</option><option value="euro">Только Евро</option><option value="fin">Только Фин</option></select></div>
+<div style="flex:1"><label>Стоит паллета (факт)</label><select id="eptf"><option value="">—</option><option value="euro">Евро</option><option value="fin">Фин</option></select></div></div>
 <label>Комментарий</label><input id="ecm" type="text">
 <div style="display:flex;gap:10px;margin-top:10px"><button class="btn" onclick="em.classList.remove('open')">Отмена</button><button class="btn pri" id="eok">Сохранить</button></div>
 </div></div>
@@ -264,11 +272,11 @@ async function load(){const r=await fetch(API+'?'+params());const j=await r.json
 $('info').textContent=`Показано ${j.from}–${j.to} из ${j.total}`;
 const n=j.active_filters||0;$('fbadge').style.display=n?'flex':'none';$('fbadge').textContent=n;$('fbadge2').textContent=n;$('factive').textContent=n;chips();
 $('rows').innerHTML=lastRows.map(o=>`<tr data-id="${o.id}"><td><input type="checkbox" data-id="${o.id}"></td>
-<td><a class="num" href="#" data-id="${o.id}">${esc(o.code)}</a></td><td>${esc(o.zone_label)}</td><td>${esc(o.type_label)}</td><td>${esc(o.category||'—')}</td>
+<td><a class="num" href="#" data-id="${o.id}">${esc(o.code)}</a></td><td>${esc(o.zone_label)}</td><td>${esc(o.type_label)}</td><td>${esc(o.beam_label||'3,2 м')}</td><td>${esc(o.height_label||'—')}</td><td>${esc(o.pallet_types_label||'Евро + Фин')}</td><td>${esc(o.category||'—')}</td>
 <td><span class="st st-${o.status}">${esc(o.status_label)}</span></td>
 <td>${o.is_unlimited ? '<span title="Безразмерная ячейка (вместимость 0)" style="font-weight:700">∞</span> <small style="color:var(--mut)">без лимита</small>' : `${fillBar(o.fill_pct)}<small style="color:var(--mut)">${o.fill_pct}%</small>`}</td>
 <td>${o.qty}</td><td>${o.reserved_qty}</td><td>${o.qty}</td><td>${o.pallet_count}</td>
-<td>${esc(o.temp_label)}</td><td>${esc(o.lock_label)}</td><td>⋮</td></tr>`).join('')||'<tr><td colspan=14>Ничего не найдено</td></tr>';
+<td>${esc(o.temp_label)}</td><td>${esc(o.lock_label)}</td><td>⋮</td></tr>`).join('')||'<tr><td colspan=17>Ничего не найдено</td></tr>';
 const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
 for(let i=1;i<=Math.min(pages,5);i++)h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`;
 $('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()});
@@ -313,6 +321,10 @@ h=`<div class="grid2"><div class="box"><h3>Вместимость</h3>
 <div class="kv"><i>Паллетомест</i><span>${s.pallet_count} / ${s.max_pallets??'—'}</span></div>
 <div class="kv"><i>Вместимость, шт</i><span>${s.is_unlimited ? '<b>∞</b> без лимита' : esc(s.capacity)}</span></div>
 <div class="kv"><i>Макс вес, кг</i><span>${s.max_weight_kg??'—'}</span></div>
+<div class="kv"><i>Ширина балки</i><span>${esc(s.beam_label||'3,2 м')}</span></div>
+<div class="kv"><i>Высота ячейки</i><span>${esc(s.height_label||'—')}</span></div>
+<div class="kv"><i>Типы тары</i><span>${esc(s.pallet_types_label||'Евро + Фин')}</span></div>
+<div class="kv"><i>Стоит паллета</i><span>${esc(s.pallet_type_label||'—')}</span></div>
 <div class="kv"><i>Объем, м3</i><span>—</span></div></div>
 <div class="box"><h3>Условия</h3>
 <div class="kv"><i>Темп. режим</i><span>${esc(s.temp_label)}</span></div>
@@ -363,7 +375,7 @@ $('mk').onclick=()=>{$('mm').classList.add('open');bulkPreview()};
 $('mok').onclick=async()=>{const pv=bulkPreview();if(!pv){return}
 if(pv.total>5000){toast('Слишком много: '+pv.total+' (лимит 5000)');return}
 if($('ncap').value!==''&&+$('ncap').value<0){toast('Ошибка: вместимость не может быть отрицательной (0 — безразмерная)');return}
-const body={letter:pv.v.letter,row_from:pv.v.rf,row_to:pv.v.rt,sec_from:pv.v.sf,sec_to:pv.v.st,level_from:pv.v.lf,level_to:pv.v.lt,place_from:pv.v.pf,place_to:pv.v.pt,warehouse_id:+$('nw').value,zone:$('nz').value,cell_type:$('nt').value,category:$('ncat').value||null,capacity:$('ncap').value==='' ?0:+$('ncap').value,temp_from:$('ntf').value==='' ?null:+$('ntf').value,temp_to:$('ntt').value==='' ?null:+$('ntt').value,comment:$('ncm').value||null};
+const body={letter:pv.v.letter,row_from:pv.v.rf,row_to:pv.v.rt,sec_from:pv.v.sf,sec_to:pv.v.st,level_from:pv.v.lf,level_to:pv.v.lt,place_from:pv.v.pf,place_to:pv.v.pt,warehouse_id:+$('nw').value,zone:$('nz').value,cell_type:$('nt').value,category:$('ncat').value||null,capacity:$('ncap').value==='' ?0:+$('ncap').value,temp_from:$('ntf').value==='' ?null:+$('ntf').value,temp_to:$('ntt').value==='' ?null:+$('ntt').value,comment:$('ncm').value||null,beam_width:parseFloat(($('nbm')||{value:'3.2'}).value)||3.2,cell_height_mm:$('nhh').value==='' ?null:+$('nhh').value,allowed_pallet_types:($('npt2')||{value:'euro,fin'}).value||'euro,fin'};
 const r=await fetch(API+'?action=bulk_create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const j=await r.json();
 if(r.ok){$('mm').classList.remove('open');toast(`Создано: ${j.created} из ${j.total}`+(j.skipped?` (пропущено дубликатов: ${j.skipped})`:''))}
@@ -372,10 +384,11 @@ function openEdit(){if(!curData)return;const s=curData;
 $('ec').value=s.code||'';$('ew').value=s.warehouse_id||1;$('ez').value=s.zone||'storage';$('et').value=s.cell_type||'pallet';
 $('ecat').value=s.category||'';$('ecap').value=s.capacity??0;$('etf').value=s.temp_from??'';$('ett').value=s.temp_to??'';
 $('eal').value=s.allowed_goods||'Все';$('emp').value=s.max_pallets??'';$('ecm').value=s.comment||'';
+$('ebm').value=String(s.beam_width??'3.2');$('ehh').value=s.cell_height_mm??'';$('ept').value=s.allowed_pallet_types||'euro,fin';$('eptf').value=s.pallet_type||'';
 $('em').classList.add('open')}
 $('dedit').onclick=openEdit;
 $('eok').onclick=async()=>{if(!curId)return;const cap=$('ecap').value==='' ?0:+$('ecap').value;if(cap<0){toast('Ошибка: вместимость не может быть отрицательной (0 — безразмерная)');return}
-const body={code:$('ec').value.trim(),warehouse_id:+$('ew').value,zone:$('ez').value,cell_type:$('et').value,category:$('ecat').value||null,capacity:cap,temp_from:$('etf').value==='' ?null:+$('etf').value,temp_to:$('ett').value==='' ?null:+$('ett').value,allowed_goods:$('eal').value||'Все',max_pallets:$('emp').value==='' ?null:+$('emp').value,comment:$('ecm').value||null};
+const body={code:$('ec').value.trim(),warehouse_id:+$('ew').value,zone:$('ez').value,cell_type:$('et').value,category:$('ecat').value||null,capacity:cap,temp_from:$('etf').value==='' ?null:+$('etf').value,temp_to:$('ett').value==='' ?null:+$('ett').value,allowed_goods:$('eal').value||'Все',max_pallets:$('emp').value==='' ?null:+$('emp').value,comment:$('ecm').value||null,beam_width:parseFloat($('ebm').value)||3.2,cell_height_mm:$('ehh').value==='' ?null:+$('ehh').value,allowed_pallet_types:$('ept').value||'euro,fin',pallet_type:$('eptf').value||null};
 const r=await fetch(API+'?action=update&id='+curId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const j=await r.json();$('em').classList.remove('open');toast(r.ok?'Сохранено':'Ошибка: '+(j.error||''));if(r.ok)open(curId);load()};
 // Печать PDF: сервер формирует документ, браузер сразу открывает.
@@ -525,7 +538,13 @@ $('colclose').onclick=()=>$('colpanel').style.display='none';
 $('colreset').onclick=async()=>{hideCols=[];colApply();await colSave();colPanel()};
 if(document.querySelector('#rows'))new MutationObserver(()=>colApply()).observe(document.querySelector('#rows'),{childList:true});
 colLoad();
-load();
+// переход из смежных модулей (08.1): ?cell=A-01-01&warehouse_id=1 — ищем и открываем карточку ячейки
+(function(){const u=new URLSearchParams(location.search);const c=u.get('cell');if(!c){load();return}
+const w=u.get('warehouse_id')||u.get('wh')||'';
+if($('q'))$('q').value=c;if(w&&$('fwh'))$('fwh').value=w;page=1;
+load().then(()=>{const norm=s=>String(s||'').trim().toUpperCase();
+const hit=lastRows.find(o=>norm(o.code)===norm(c)&&(!w||String(o.warehouse_id)===String(w)))||lastRows.find(o=>norm(o.code)===norm(c));
+if(hit)open(hit.id)})})();
 </script>
 <script data-shift-select>
 /* Shift+клик по галкам: выделение диапазона подряд, как в Windows/проводнике.

@@ -190,6 +190,8 @@ if ($action === 'list') {
     echo json_encode($repo->history((int)($_GET['id'] ?? 0)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 } elseif ($action === 'flags') {
     echo json_encode($repo->flags((int)($_GET['id'] ?? 0)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+} elseif ($action === 'stockin') {
+    echo json_encode($repo->stockin((int)($_GET['id'] ?? 0)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 } elseif ($action === 'store' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $b = json_decode(file_get_contents('php://input'), true) ?? [];
     if (empty($b['supplier_id']) || empty($b['warehouse_id']) || empty($b['cargo_places_plan'])) {
@@ -354,5 +356,5 @@ if ($action === 'list') {
     }
 } else {
     http_response_code(404);
-    echo json_encode(['error' => 'unknown action, use ?action=list|show|operations|items|documents|history|flags&id=1'], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['error' => 'unknown action, use ?action=list|show|operations|items|documents|history|flags|stockin&id=1'], JSON_UNESCAPED_UNICODE);
 }

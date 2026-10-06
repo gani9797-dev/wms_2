@@ -5,29 +5,296 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>13 Настройки — TiMLog</title>
 <style>
-:root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7}
+:root{--vio:#6432FF;--vio2:#7C3AED;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7}
 *{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);display:flex}
 aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14px;position:sticky;top:0;max-height:100vh;overflow:auto}
-aside .logo{font-size:22px;font-weight:700;margin:6px 0 22px}
 aside a{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
 aside a.on{background:var(--vio);color:#fff}
-main{flex:1;padding:18px 22px;max-width:1100px}
-.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px}
-code{background:#F4F0FB;padding:2px 6px;border-radius:6px}
+main{flex:1;padding:18px 22px;min-width:0;max-width:1280px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.top h1{margin:4px 0;font-size:26px}
+.user{display:flex;gap:10px;align-items:center;font-size:14px}
+.ava{width:36px;height:36px;border-radius:50%;background:#CBD5E0;color:#4A5568;display:flex;align-items:center;justify-content:center;font-weight:700}
+.bar{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap;align-items:center}
+.bar input[type=text]{width:400px;max-width:90vw;padding:10px 12px;border:1px solid #CBD5E0;border-radius:10px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:14px}
+.btn.pri{background:var(--vio);color:#fff;border-color:var(--vio);font-weight:700}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px}
+.tile{background:#fff;border:1px solid var(--line);border-radius:12px;padding:26px 10px;text-align:center;font-size:14px;font-weight:700;color:#4A4A4A;cursor:pointer}
+.tile:hover{border-color:var(--vio);color:var(--vio)}
+.tile small{display:block;font-weight:400;color:var(--mut);font-size:11px;margin-top:6px}
+.tile.hot{background:var(--vio2);color:#fff;border-color:var(--vio2)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px;color:#6B7280;border-bottom:1px solid #F0F0F0;white-space:nowrap;font-weight:400}
+td{padding:10px;border-bottom:1px solid #F0F0F0;vertical-align:middle}
+tr:hover td{background:#fafaff}
+.tabs{display:flex;gap:18px;border-bottom:2px solid #EDE9FE;margin:6px 0 12px;font-size:15px;flex-wrap:wrap}
+.tabs span{padding-bottom:8px;cursor:pointer;color:#999}
+.tabs span.on{color:var(--vio);font-weight:700;border-bottom:3px solid var(--vio)}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:#60a917}
+.dot.off{background:#E53E3E}
+.st-ok{background:#C6F6D5;color:#276749;border-radius:12px;padding:4px 12px;font-size:12px;font-weight:700}
+.st-off{background:#FED7D7;color:#9B2C2C;border-radius:12px;padding:4px 12px;font-size:12px;font-weight:700}
+.pager{display:flex;justify-content:space-between;align-items:center;padding:10px 4px;color:var(--mut);font-size:13px;flex-wrap:wrap;gap:8px}
+.pg button{border:1px solid var(--line);background:#fff;border-radius:8px;min-width:34px;padding:6px 8px;margin:0 2px;cursor:pointer}
+.pg button.on{background:var(--vio);color:#fff;border-color:var(--vio)}
+.fld{margin:8px 0}.fld label{font-size:12px;color:#6B7280;display:block;margin-bottom:3px}
+.fld input,.fld select,.fld textarea{width:100%;padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px}
+.fld input:disabled{background:#F7FAFC;color:#4A5568}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}.two{grid-template-columns:1fr !important}}
+.two{display:grid;grid-template-columns:460px 1fr;gap:14px;align-items:start}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:60}
+.modal.open{display:flex}.mbox{background:#fff;border-radius:12px;padding:20px;width:560px;max-width:96vw;max-height:92vh;overflow:auto}
+.mbox h2{margin:0 0 8px;font-size:18px}
+.ctx{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:99;min-width:260px;padding:6px 0;font-size:14px}
+.ctx div{padding:9px 18px;cursor:pointer}.ctx div:hover{background:#F4F2FF}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:99}
+.sched{display:grid;grid-template-columns:70px 1fr 1fr 70px;gap:6px;align-items:center;font-size:12px}
+.sched input{padding:6px;border:1px solid #E2E8F0;border-radius:8px;width:100%}
+.sched .hd{color:#6B7280;font-size:12px}
+.gate{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;background:#fff}
+.gate h3{margin:0 0 8px;font-size:22px}
+.dock{display:inline-block;border:1px solid #CBD5E0;border-radius:8px;padding:8px 18px;margin:4px 8px 4px 0;font-size:16px}
+.view{display:none}.view.on{display:block}
+.chip{display:inline-block;background:#F4F0FB;color:#663EB2;border-radius:12px;padding:4px 10px;font-size:12px;margin:2px}
+.x{cursor:pointer;color:#663EB2;font-weight:700;margin-left:6px}
 </style>
 <style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
 <body>
-<aside><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp open" data-grp="13"><div class="par"><a class="mi on" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<aside><nav class="nav">
+<a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a>
+<div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div>
+<div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div>
+<div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div>
+<a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a>
+<div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div>
+<a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a>
+<a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a>
+<div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div>
+<div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">🤝 9 Контрагенты</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div>
+<div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👥 10 Сотрудники</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div>
+<a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a>
+<a class="mi" href="../12-uvedomleniya/app.html">🔔 12 Уведомления</a>
+<div class="grp open" data-grp="13"><div class="par"><a class="mi on" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div>
+</nav></aside>
 <main>
-<h1>13 Настройки</h1>
-<div class="card">
-<p>Модуль в разработке. Структура БД — см. <code>schema.sql</code> в этой папке.</p>
-<ul>
-<li>Номер по схеме «Список модулей ИТОГО»: <b>13</b></li>
-<li>Папка: <code>13-nastroyki/</code></li>
-<li>Таблицы: <code>13-nastroyki/schema.sql</code></li>
-</ul>
-</div>
+<div class="top"><h1 id="ttl">Настройки</h1><div class="user"><span class="ava">ПС</span><span><b>Половинкин Сергей</b><br><small style="color:var(--mut)">Директор</small></span><span style="color:var(--mut)">▼</span></div></div>
+
+<!-- ХАБ -->
+<section id="v-hub" class="view on">
+<div class="bar"><input id="hq" type="text" placeholder="🔍 Поиск по разделу настроек ..."></div>
+<div class="grid" id="hub"></div>
+</section>
+
+<!-- ОРГАНИЗАЦИЯ И СКЛАДЫ -->
+<section id="v-org" class="view">
+<div class="bar"><button class="btn" data-go="hub">← Все настройки</button>
+<button class="btn pri" id="whAdd">+ Добавить склад</button></div>
+<div class="tabs"><span class="on" id="tabList">Список складов</span><span id="tabHist">История изменений</span></div>
+<div id="orgList">
+<div class="two">
+<div class="card"><h2 id="orgTitle" style="margin:0 0 8px">ООО "Лучшее решение"</h2><div id="orgForm"></div>
+<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn pri" id="orgEdit">Редактировать</button><button class="btn" id="orgSave" style="display:none">Сохранить</button><button class="btn" id="orgCancel" style="display:none">Отмена</button><button class="btn" data-go="hub">Закрыть</button></div></div>
+<div class="card"><div class="bar" style="margin:0 0 10px"><input id="wq" type="text" placeholder="🔍 Поиск по наименованию, адресу, статусу ..." style="flex:1"></div>
+<table><thead><tr><th>Код</th><th>Наименование склада</th><th>Тип</th><th>Адрес</th><th>Статус</th></tr></thead><tbody id="whBody"></tbody></table>
+<div class="pager"><span id="whInfo"></span><span>Строк на странице: <select id="whPer"><option>10</option><option selected>17</option><option>25</option></select></span><span class="pg" id="whPg"></span></div></div>
+</div></div>
+<div id="orgHist" style="display:none" class="card"><table><thead><tr><th>Дата</th><th>Пользователь</th><th>Что изменилось</th><th>Было</th><th>Стало</th></tr></thead><tbody id="histBody"></tbody></table></div>
+</section>
+
+<!-- СКЛАД И ХРАНЕНИЕ -->
+<section id="v-storage" class="view">
+<div class="bar"><button class="btn" data-go="hub">← Все настройки</button></div>
+<div class="tabs" id="stTabs"><span class="on" data-st="zones">Зоны склада</span><span data-st="cells">Тип ячеек</span><span data-st="pallets">Тип паллет</span><span data-st="lpn">Категория LPN</span><span data-st="rules">Правила</span></div>
+<div class="card"><div class="bar" style="margin-top:0"><button class="btn pri" id="stAdd">+ Создать</button></div>
+<table><thead><tr><th>Код</th><th>Наименование</th><th>Доп.</th><th>Статус</th><th></th></tr></thead><tbody id="stBody"></tbody></table>
+<div id="rulesBox" style="display:none;margin-top:10px;color:#666;font-size:13px">Правила: <span class="chip">Размещение</span><span class="chip">Перемещение</span><span class="chip">Пополнение</span><span class="chip">Сбор</span><span class="chip">Инвентаризация</span></div></div>
+</section>
+
+<!-- ВОРОТА -->
+<section id="v-gates" class="view">
+<div class="bar"><button class="btn" data-go="hub">← Все настройки</button>
+<button class="btn pri" id="gateAdd">+ Ворота</button><button class="btn" id="tabloBtn">Подключить табло</button></div>
+<div class="tabs"><span class="on" id="gwMain">Основной склад</span><span id="gwCold">Холодный склад</span></div>
+<div class="tabs"><span class="on" id="gvList">Список</span><span id="gvSchem">Схема</span></div>
+<div class="card" id="gatesListCard"><table><thead><tr><th>Ворота №</th><th>Доки</th><th>Интервал слотов</th><th>Ед. изм. интервала</th><th>Статус доступности</th></tr></thead><tbody id="gateBody"></tbody></table></div>
+<div id="gatesSchem" style="display:none"></div>
+</section>
+
+<!-- ПРОЧИЙ РАЗДЕЛ -->
+<section id="v-other" class="view">
+<div class="bar"><button class="btn" data-go="hub">← Все настройки</button></div>
+<div class="card"><h2 id="othTitle"></h2><p id="othText" style="color:#4A5568"></p><p><a id="othLink" href="#">Открыть модуль →</a></p></div>
+</section>
+
 </main>
+
+<!-- Модалка склада -->
+<div class="modal" id="whModal"><div class="mbox"><h2 id="whMTitle">Новый склад</h2>
+<div class="fld"><label>Наименование</label><input id="f_whName" value="Основной склад"></div>
+<div class="grid2"><div class="fld"><label>Код</label><input id="f_whCode" value="BD6"></div>
+<div class="fld"><label>Тип</label><select id="f_whType"><option>Распределительный</option><option>Температурный</option></select></div></div>
+<div class="fld"><label>Адрес</label><input id="f_whAddr" value="Московская область, г. Дзержинск, Яничкин проезд, д.6"></div>
+<div class="fld"><label>Часовой пояс</label><select id="f_whTz"><option>(UTC+3) Москва</option><option>(UTC+4) Самара</option><option>(UTC+5) Екатеринбург</option><option>(UTC+7) Новосибирск</option></select></div>
+<div class="fld"><label>Статус</label><select id="f_whSt"><option value="active">Активный</option><option value="inactive">Не активный</option></select></div>
+<div class="fld"><label>Режим работы</label><div class="sched"><span class="hd">День недели</span><span class="hd">Время работы</span><span class="hd">Перерыв</span><span class="hd">Закрыто</span><span id="schedRows" style="display:contents"></span></div></div>
+<div style="display:flex;gap:8px;margin-top:12px"><button class="btn pri" id="whSave">Сохранить</button><button class="btn" id="whCancel">Отменить</button></div>
+</div></div>
+
+<!-- Модалка ворот -->
+<div class="modal" id="gateModal"><div class="mbox"><h2 id="gMTitle">Новые ворота</h2>
+<div class="grid2"><div class="fld"><label>Номер ворот</label><input id="f_gNo" type="number" min="1" value="4"></div>
+<div class="fld"><label>Статус</label><select id="f_gSt"><option value="active">Активный</option><option value="inactive">Не активный</option></select></div></div>
+<div class="grid2"><div class="fld"><label>Интервал слотов</label><input id="f_gInt" type="number" min="1" value="1"></div>
+<div class="fld"><label>Ед. изм. интервалов</label><select id="f_gUnit"><option>час</option><option>минута</option></select></div></div>
+<div class="fld"><label>Доки</label><div id="dockBox"></div><button class="btn" id="dockAdd" style="margin-top:6px">+ Док</button></div>
+<div style="display:flex;gap:8px;margin-top:12px"><button class="btn pri" id="gateSave">Сохранить</button><button class="btn" id="gateCancel">Отменить</button></div>
+</div></div>
+
+<div class="ctx" id="ctx"></div>
+<div id="toast"></div>
+<script>
+var USER='Половинкин Сергей';
+function toast(m){var t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(function(){t.style.display='none'},2200)}
+function ls(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function ss(k,v){localStorage.setItem(k,JSON.stringify(v))}
+document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(c){c.closest('.grp').classList.toggle('open')}});
+
+/* ---------- Хаб ---------- */
+var SECTIONS=[
+{n:'Организация и склады',d:'org',e:'🏢',s:'Реквизиты, склады, режим работы'},
+{n:'Справочники',d:'other:refs',e:'📚',s:'Перейти в модуль'},
+{n:'Номенклатура',d:'other:nom',e:'📁',s:'Товары и карточки',link:'../08-nomenklatura/app.html'},
+{n:'Склад и хранение',d:'storage',e:'🗄️',s:'Зоны, ячейки, паллеты, LPN'},
+{n:'Поступления',d:'other:post',e:'📥',s:'Перейти в модуль',link:'../02-postupleniya/app.html'},
+{n:'Реестр прибытия ТС',d:'other:reestr',e:'🚛',s:'Перейти в модуль',link:'../01-reestr-pribytiya-ts/app.html'},
+{n:'Ворота и бронирование',d:'gates',e:'🚪',s:'Ворота, доки, слоты, табло'},
+{n:'Заказы',d:'other:zak',e:'🧾',s:'Перейти в модуль',link:'../03.1-zakazy/app.html'},
+{n:'Отгрузки',d:'other:otg',e:'📤',s:'Перейти в модуль',link:'../03-otgruzki/app.html'},
+{n:'Задания',d:'other:zad',e:'📝',s:'Перейти в модуль',link:'../07-zadaniya/app.html'},
+{n:'Инвентаризация',d:'other:inv',e:'📋',s:'Перейти в модуль',link:'../06-inventarizatsiya/app.html'},
+{n:'Персонал',d:'other:per',e:'👥',s:'Перейти в модуль',link:'../10-sotrudniki/app.html'},
+{n:'KPI',d:'other:kpi',e:'📈',s:'Настройка KPI',link:'../13.4-nastroyka-kpi/app.html'},
+{n:'Биллинг',d:'other:bil',e:'💳',s:'Перейти в модуль',link:'../09.1-billing/app.html'},
+{n:'Документы и нумерация',d:'other:doc',e:'🔢',s:'Шаблоны номеров'},
+{n:'Уведомления',d:'other:ntf',e:'🔔',s:'Перейти в модуль',link:'../12-uvedomleniya/app.html'},
+{n:'ТСД и сканирование',d:'other:tsd',e:'📱',s:'Терминалы сбора данных',link:'../tsd/app.html'},
+{n:'Интеграция',d:'other:int',e:'🔌',s:'API, обмены'},
+{n:'Пользователи и права',d:'other:usr',e:'🔐',s:'Роли и доступ'},
+{n:'Автоматизация',d:'other:auto',e:'⚡',s:'Накладные, счета',link:'../13.1-avtoformirovanie-nakladnyh/app.html'},
+{n:'Отчеты',d:'other:rep',e:'📊',s:'Перейти в модуль',link:'../11-otchety/app.html'},
+{n:'Журнал изменений',d:'other:log',e:'🕘',s:'История настроек'},
+{n:'Системные параметры',d:'other:sys',e:'🛠️',s:'Константы системы'}];
+var OTH_TXT={refs:'Раздел-заглушка: общие справочники ведутся в своих модулях.',nom:'Карточки товаров, штрихкоды, упаковка — в модуле 8.',post:'Правила приёмки и размещение — в модуле 2.',reestr:'Слоты прибытия ТС настраиваются здесь в разделе «Ворота», оперативный реестр — в модуле 1.',zak:'Логика заказов — в модуле 3.1.',otg:'Логика отгрузок — в модуле 3.',zad:'Типы заданий и автопостановка — в модуле 7.',inv:'Параметры инвентаризации — в модуле 6.',per:'Графики, отделы, должности — в модуле 10.',kpi:'Формулы и ставки — в 13.4.',bil:'Тарифы и счета — в 9.1 / 13.2.',doc:'Шаблоны нумерации документов.',ntf:'Каналы и шаблоны — в модуле 12.',tsd:'Шаблоны ШК и префиксы — в модуле ТСД.',int:'Ключи API и вебхуки.',usr:'Пользователи, роли, права.',auto:'Автоправила накладных/счетов — 13.1, 13.2.',rep:'Источники отчётов — в модуле 11.',log:'Полная история — вкладка «История изменений» в «Организации и складах».',sys:'Часовой пояс по умолчанию, единицы измерения, округления.'};
+function renderHub(f){var h=document.getElementById('hub');h.innerHTML='';SECTIONS.filter(function(s){return !f||s.n.toLowerCase().indexOf(f.toLowerCase())>=0}).forEach(function(s){var d=document.createElement('div');d.className='tile'+(s.d==='org'?' hot':'');d.innerHTML=s.e+'<br>'+s.n+'<small>'+s.s+'</small>';d.onclick=function(){go(s.d)};h.appendChild(d)})}
+function go(d){document.querySelectorAll('.view').forEach(function(v){v.classList.remove('on')});
+var t=document.getElementById('ttl');
+if(d==='hub'){document.getElementById('v-hub').classList.add('on');t.textContent='Настройки'}
+else if(d==='org'){document.getElementById('v-org').classList.add('on');t.textContent='Организация и склады';renderOrg();renderWh()}
+else if(d==='storage'){document.getElementById('v-storage').classList.add('on');t.textContent='Склад и хранение';renderSt()}
+else if(d==='gates'){document.getElementById('v-gates').classList.add('on');t.textContent='Ворота и бронирование';renderGates()}
+else if(d.indexOf('other:')===0){document.getElementById('v-other').classList.add('on');var k=d.split(':')[1];var s=SECTIONS.filter(function(x){return x.d===d})[0];document.getElementById('othTitle').textContent=s?s.n:k;document.getElementById('othText').textContent=OTH_TXT[k]||'';var a=document.getElementById('othLink');if(s&&s.link){a.style.display='';a.href=s.link}else{a.style.display='none'}t.textContent=s?s.n:'Настройки'}}
+document.querySelectorAll('[data-go]').forEach(function(b){b.onclick=function(){go(b.getAttribute('data-go'))}});
+document.getElementById('hq').oninput=function(e){renderHub(e.target.value)};
+
+/* ---------- Организация ---------- */
+var ORG_DEF={short:'ООО "Лучшее решение"',full:'Общество с ограниченной ответственностью Лучшее решение',ogrn:'ОГРН № 1175029024906 от 11.10.2017г. выдано Инспекцией Федеральной налоговой службы России по г. Мытищи Московской области',bank:'ФИЛИАЛ "ЦЕНТРАЛЬНЫЙ" БАНКА ВТБ (ПАО) г. Москва',inn:'50234678912',okpo:'19856703',kpp:'770943001',oktmo:'46746000001',bik:'044525411',okato:'46446000000',rs:'40702810435000000192',ks:'30101810145250000411',ur:'123456, Москва, ул. Ленина, д. 10, оф. 5',post:'123456, Москва, ул. Ленина, д. 10, оф. 5',fact:'141021, Московская область, г. Мытищи, Осташковское шоссе, стр. 57',phone:'8 (916) 304-54-54',email:'info@best.solution.ru',dir:'Иванов Иван Иванович, Генеральный директор ООО "Лучшее решение", действующий на основании Устава'};
+var ORG_FIELDS=[['short','Короткое наименование'],['full','Полное наименование'],['ogrn','Свидетельство (дата, номер, кем выдано)'],['bank','Наим. Банка'],['inn','ИНН'],['okpo','ОКПО'],['kpp','КПП'],['oktmo','ОКТМО'],['bik','БИК'],['okato','ОКАТО'],['rs','р/с'],['ks','к/с'],['ur','Юридический адрес'],['post','Почтовый адрес'],['fact','Фактический адрес'],['phone','Телефон'],['email','E-mail'],['dir','ФИО руководителя и должность']];
+var org=ls('wms13_org',ORG_DEF), orgEdit=false;
+var DAYS=['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'];
+function defSched(){return DAYS.map(function(d,i){return{day:d,from:'00:00',to:'23:59',bfrom:'',bto:'',closed:false}})}
+var whs=ls('wms13_wh',[
+{code:'BD2',name:'Холодный склад',type:'Температурный',addr:'Московская область, г. Дзержинск, Яничкин проезд, д.2',tz:'(UTC+3) Москва',status:'active',sched:defSched()},
+{code:'BD6',name:'Основной склад',type:'Распределительный',addr:'Московская область, г. Дзержинск, Яничкин проезд, д.6',tz:'(UTC+3) Москва',status:'active',sched:defSched()}]);
+var hist=ls('wms13_hist',[]);
+function hlog(field,was,now,entity){hist.unshift({at:new Date().toLocaleString('ru-RU'),user:USER,entity:entity||'Склад',field:field,was:was==null?'—':String(was),now:now==null?'—':String(now)});ss('wms13_hist',hist)}
+function renderOrg(){document.getElementById('orgTitle').textContent=org.short;var f=document.getElementById('orgForm');f.innerHTML='';ORG_FIELDS.forEach(function(p){var d=document.createElement('div');d.className='fld';d.innerHTML='<label>'+p[1]+'</label>';var inp=document.createElement(p[0]==='ogrn'||p[0]==='dir'?'textarea':'input');inp.value=org[p[0]]||'';inp.disabled=!orgEdit;inp.id='org_'+p[0];d.appendChild(inp);f.appendChild(d)});
+document.getElementById('orgEdit').style.display=orgEdit?'none':'';document.getElementById('orgSave').style.display=orgEdit?'':'none';document.getElementById('orgCancel').style.display=orgEdit?'':'none'}
+document.getElementById('orgEdit').onclick=function(){orgEdit=true;renderOrg()};
+document.getElementById('orgCancel').onclick=function(){orgEdit=false;org=ls('wms13_org',ORG_DEF);renderOrg()};
+document.getElementById('orgSave').onclick=function(){var changed=[];ORG_FIELDS.forEach(function(p){var v=document.getElementById('org_'+p[0]).value;if(v!==org[p[0]]){changed.push([p[1],org[p[0]],v]);org[p[0]]=v}});ss('wms13_org',org);changed.forEach(function(c){hlog('Организация: '+c[0],c[1],c[2],'Организация')});orgEdit=false;renderOrg();toast(changed.length?('Сохранено, изменений: '+changed.length):'Без изменений')};
+document.getElementById('tabList').onclick=function(){this.classList.add('on');document.getElementById('tabHist').classList.remove('on');document.getElementById('orgList').style.display='';document.getElementById('orgHist').style.display='none'};
+document.getElementById('tabHist').onclick=function(){this.classList.add('on');document.getElementById('tabList').classList.remove('on');document.getElementById('orgList').style.display='none';document.getElementById('orgHist').style.display='';renderHist()};
+
+/* склады: таблица + пагинация + ПКМ */
+var whPage=1;
+function whFiltered(){var q=(document.getElementById('wq').value||'').toLowerCase();return whs.map(function(w,i){return{w:w,i:i}}).filter(function(x){return !q||(x.w.code+x.w.name+x.w.addr+x.w.status).toLowerCase().indexOf(q)>=0})}
+function renderWh(){var per=parseInt(document.getElementById('whPer').value,10)||17;var rows=whFiltered();var pages=Math.max(1,Math.ceil(rows.length/per));if(whPage>pages)whPage=pages;var b=document.getElementById('whBody');b.innerHTML='';rows.slice((whPage-1)*per,whPage*per).forEach(function(x){var tr=document.createElement('tr');tr.innerHTML='<td><b>'+x.w.code+'</b></td><td>'+x.w.name+'</td><td>'+x.w.type+'</td><td>'+x.w.addr+'</td><td><span class="dot'+(x.w.status==='active'?'':' off')+'"></span></td>';tr.ondblclick=function(){openWh(x.i,'view')};tr.oncontextmenu=function(e){e.preventDefault();showCtx(e.clientX,e.clientY,[['Открыть',function(){openWh(x.i,'view')}],['Редактировать',function(){openWh(x.i,'edit')}],['Просмотр остатков по складу',function(){toast('Остатки склада '+x.w.code+': демо-режим')}],['Переместить остатки',function(){toast('Перемещение остатков '+x.w.code+': демо-режим')}],[(x.w.status==='active'?'Не активный':'Активировать'),function(){x.w.status=x.w.status==='active'?'inactive':'active';ss('wms13_wh',whs);hlog('Склад: Статус',x.w.status==='active'?'Не активный':'Активный',x.w.status==='active'?'Активный':'Не активный','Склад');renderWh()}]])};tr.onclick=function(){document.querySelectorAll('#whBody tr').forEach(function(r){r.classList.remove('sel')});tr.classList.add('sel')};b.appendChild(tr)});
+document.getElementById('whInfo').textContent='Показано '+Math.min(rows.length,per)+' из '+rows.length;
+var pg=document.getElementById('whPg');pg.innerHTML='';['«','‹'].forEach(function(s){var btn=document.createElement('button');btn.textContent=s;btn.onclick=function(){whPage=1;renderWh()};pg.appendChild(btn)});
+var cur=document.createElement('button');cur.textContent=whPage;cur.className='on';pg.appendChild(cur);
+['›','»'].forEach(function(s){var btn=document.createElement('button');btn.textContent=s;btn.onclick=function(){whPage=pages;renderWh()};pg.appendChild(btn)})}
+document.getElementById('wq').oninput=function(){whPage=1;renderWh()};
+document.getElementById('whPer').onchange=function(){whPage=1;renderWh()};
+function renderHist(){var b=document.getElementById('histBody');b.innerHTML=hist.length?'': '<tr><td colspan="5" style="color:#999">Изменений пока нет</td></tr>';hist.forEach(function(h){var tr=document.createElement('tr');tr.innerHTML='<td>'+h.at+'</td><td>'+h.user+'</td><td>'+h.entity+': '+h.field+'</td><td>'+h.was+'</td><td>'+h.now+'</td>';b.appendChild(tr)})}
+
+/* модалка склада */
+var whIdx=-1, whMode='new';
+var tmpSched=null;
+function buildSched(cur){var el=document.getElementById('schedRows');el.innerHTML='';cur.forEach(function(r,i){var d=document.createElement('span');d.textContent=r.day;el.appendChild(d);
+var w=document.createElement('span');w.style.display='flex';w.style.gap='4px';var a=document.createElement('input');a.value=r.from;var dash=document.createElement('span');dash.textContent='–';dash.style.alignSelf='center';var b2=document.createElement('input');b2.value=r.to;a.oninput=function(){cur[i].from=a.value};b2.oninput=function(){cur[i].to=b2.value};w.appendChild(a);w.appendChild(dash);w.appendChild(b2);el.appendChild(w);
+var br=document.createElement('span');br.style.display='flex';br.style.gap='4px';var c1=document.createElement('input');c1.value=r.bfrom||'';c1.placeholder='';var d2=document.createElement('span');d2.textContent='–';d2.style.alignSelf='center';var c2=document.createElement('input');c2.value=r.bto||'';c1.oninput=function(){cur[i].bfrom=c1.value};c2.oninput=function(){cur[i].bto=c2.value};br.appendChild(c1);br.appendChild(d2);br.appendChild(c2);el.appendChild(br);
+var cb=document.createElement('input');cb.type='checkbox';cb.checked=!!r.closed;cb.style.width='auto';cb.style.justifySelf='center';cb.onchange=function(){cur[i].closed=cb.checked};el.appendChild(cb)})}
+function openWh(i,mode){whIdx=i;whMode=mode;var w=i>=0?whs[i]:{code:'',name:'',type:'Распределительный',addr:'',tz:'(UTC+3) Москва',status:'active',sched:defSched()};
+document.getElementById('whMTitle').textContent=i<0?'Новый склад':(w.code+' '+w.name+' — '+w.type);
+document.getElementById('f_whName').value=w.name;document.getElementById('f_whCode').value=w.code;document.getElementById('f_whType').value=w.type;document.getElementById('f_whAddr').value=w.addr;document.getElementById('f_whTz').value=w.tz;document.getElementById('f_whSt').value=w.status;
+tmpSched=JSON.parse(JSON.stringify(w.sched||defSched()));buildSched(tmpSched);
+var ro=(mode==='view');['f_whName','f_whCode','f_whAddr'].forEach(function(id){document.getElementById(id).disabled=ro});
+document.getElementById('whSave').textContent=ro?'Редактировать':'Сохранить';
+document.getElementById('whModal').classList.add('open')}
+document.getElementById('whAdd').onclick=function(){openWh(-1,'new')};
+document.getElementById('whCancel').onclick=function(){document.getElementById('whModal').classList.remove('open')};
+document.getElementById('whSave').onclick=function(){if(whMode==='view'){whMode='edit';['f_whName','f_whCode','f_whAddr'].forEach(function(id){document.getElementById(id).disabled=false});document.getElementById('whSave').textContent='Сохранить';return}
+var code=document.getElementById('f_whCode').value.trim(),name=document.getElementById('f_whName').value.trim();if(!code||!name){toast('Заполните Код и Наименование');return}
+var rec={code:code,name:name,type:document.getElementById('f_whType').value,addr:document.getElementById('f_whAddr').value,tz:document.getElementById('f_whTz').value,status:document.getElementById('f_whSt').value,sched:tmpSched};
+if(whIdx<0){if(whs.some(function(w){return w.code===code})){toast('Код уже существует');return}whs.push(rec);hlog('Склад: Наименование','—',name,'Склад');hlog('Склад: Код','—',code,'Склад');hlog('Склад: Адрес','—',rec.addr,'Склад');hlog('Склад: Часовой пояс','—',rec.tz,'Склад');tmpSched.forEach(function(r){hlog('Склад: Режим работы','—',r.day+' '+r.from+' - '+r.to,'Склад')})}
+else{var o=whs[whIdx];if(o.name!==rec.name)hlog('Склад: Наименование',o.name,rec.name,'Склад');if(o.code!==rec.code)hlog('Склад: Код',o.code,rec.code,'Склад');if(o.addr!==rec.addr)hlog('Склад: Адрес',o.addr,rec.addr,'Склад');if(o.tz!==rec.tz)hlog('Склад: Часовой пояс',o.tz,rec.tz,'Склад');whs[whIdx]=rec}
+ss('wms13_wh',whs);document.getElementById('whModal').classList.remove('open');renderWh();toast('Сохранено')};
+
+/* ---------- Склад и хранение ---------- */
+var ST_DEF={zones:[{code:'A',name:'Зона приёмки',extra:'BD6',on:1},{code:'B',name:'Зона хранения',extra:'BD6',on:1},{code:'C',name:'Зона брака',extra:'BD2',on:1}],cells:[{code:'PAL',name:'Паллетная',extra:'1200×800',on:1},{code:'SHELF',name:'Стеллажная',extra:'—',on:1}],pallets:[{code:'EUR',name:'EUR-паллет 1200×800',extra:'до 1500 кг',on:1},{code:'FIN',name:'FIN-паллет 1200×1000',extra:'до 1200 кг',on:1}],lpn:[{code:'BOX',name:'Короб',extra:'—',on:1},{code:'PALLET',name:'Паллет',extra:'—',on:1}],rules:[{code:'R1',name:'Размещение: ближняя свободная',extra:'placement',on:1},{code:'R2',name:'Пополнение по min/max',extra:'replenish',on:1}]};
+var st=ls('wms13_st',ST_DEF), stKey='zones';
+document.querySelectorAll('#stTabs span').forEach(function(s){s.onclick=function(){document.querySelectorAll('#stTabs span').forEach(function(x){x.classList.remove('on')});s.classList.add('on');stKey=s.getAttribute('data-st');renderSt()}});
+function renderSt(){var b=document.getElementById('stBody');b.innerHTML='';(st[stKey]||[]).forEach(function(r,i){var tr=document.createElement('tr');tr.innerHTML='<td><b>'+r.code+'</b></td><td>'+r.name+'</td><td>'+(r.extra||'')+'</td><td>'+(r.on?'<span class="st-ok">Активный</span>':'<span class="st-off">Не активный</span>')+'</td>';var td=document.createElement('td');var del=document.createElement('span');del.className='x';del.textContent='✕';del.title='Удалить';del.onclick=function(){st[stKey].splice(i,1);ss('wms13_st',st);renderSt()};td.appendChild(del);tr.appendChild(td);b.appendChild(tr)});
+document.getElementById('rulesBox').style.display=stKey==='rules'?'block':'none'}
+document.getElementById('stAdd').onclick=function(){var c=prompt('Код:');if(!c)return;var n=prompt('Наименование:');if(!n)return;st[stKey].push({code:c,name:n,extra:'',on:1});ss('wms13_st',st);renderSt()};
+
+/* ---------- Ворота ---------- */
+var gates=ls('wms13_gates',[
+{wh:'Основной склад',no:1,interval:1,unit:'час',status:'active',docks:['1.1','1.2']},
+{wh:'Основной склад',no:2,interval:2,unit:'час',status:'active',docks:['2.1','2.2']},
+{wh:'Основной склад',no:3,interval:30,unit:'минута',status:'active',docks:['3.1','3.2']}]);
+var gWh='Основной склад', gView='list';
+document.getElementById('gwMain').onclick=function(){gWh='Основной склад';this.classList.add('on');document.getElementById('gwCold').classList.remove('on');renderGates()};
+document.getElementById('gwCold').onclick=function(){gWh='Холодный склад';this.classList.add('on');document.getElementById('gwMain').classList.remove('on');renderGates()};
+document.getElementById('gvList').onclick=function(){gView='list';this.classList.add('on');document.getElementById('gvSchem').classList.remove('on');renderGates()};
+document.getElementById('gvSchem').onclick=function(){gView='schem';this.classList.add('on');document.getElementById('gvList').classList.remove('on');renderGates()};
+document.getElementById('tabloBtn').onclick=function(){toast('Табло: демо-режим, ворота '+gWh)};
+function renderGates(){var list=gates.map(function(g,i){return{g:g,i:i}}).filter(function(x){return x.g.wh===gWh});
+var b=document.getElementById('gateBody');b.innerHTML='';list.forEach(function(x){var tr=document.createElement('tr');tr.innerHTML='<td><b>'+x.g.no+'</b></td><td>'+x.g.docks.join(', ')+'</td><td>'+x.g.interval+'</td><td>'+x.g.unit+'</td><td>'+(x.g.status==='active'?'<span class="st-ok">Активный</span>':'<span class="st-off">Не активный</span>')+'</td>';
+tr.oncontextmenu=function(e){e.preventDefault();showCtx(e.clientX,e.clientY,[['Печать ШК ворот',function(){toast('ШК ворот '+x.g.no)}],['Печать ШК дока',function(){toast('ШК дока '+x.g.docks[0])}],['Редактировать',function(){openGate(x.i)}],['Не активный',function(){x.g.status=x.g.status==='active'?'inactive':'active';ss('wms13_gates',gates);hlog('Ворота: Статус',gWh+' №'+x.g.no,'active/inactive','Ворота');renderGates()}]])};b.appendChild(tr)});
+document.getElementById('gatesListCard').style.display=gView==='list'?'':'none';document.getElementById('gatesSchem').style.display=gView==='schem'?'':'none';
+var s=document.getElementById('gatesSchem');s.innerHTML='';list.forEach(function(x){var d=document.createElement('div');d.className='gate';d.innerHTML='<h3>'+x.g.no+' <span class="dot'+(x.g.status==='active'?'':' off')+'"></span></h3>';x.g.docks.forEach(function(dn){var sp=document.createElement('span');sp.className='dock';sp.textContent=dn;d.appendChild(sp)});var iv=document.createElement('span');iv.className='dock';iv.style.borderStyle='dashed';iv.textContent=x.g.interval+' '+(x.g.unit==='час'?(x.g.interval===1?'час':'часа'):x.g.unit);d.appendChild(iv);s.appendChild(d)})}
+var gIdx=-1, tmpDocks=[];
+function renderDockBox(){var d=document.getElementById('dockBox');d.innerHTML='';tmpDocks.forEach(function(n,i){var sp=document.createElement('span');sp.className='chip';sp.textContent=n;var x=document.createElement('span');x.className='x';x.textContent='✕';x.onclick=function(){tmpDocks.splice(i,1);renderDockBox()};sp.appendChild(x);d.appendChild(sp)})}
+function openGate(i){gIdx=i;var g=i>=0?gates[i]:{wh:gWh,no:4,interval:1,unit:'час',status:'active',docks:[]};
+document.getElementById('gMTitle').textContent=i<0?'Новые ворота':'Ворота '+g.no;
+document.getElementById('f_gNo').value=g.no;document.getElementById('f_gSt').value=g.status;document.getElementById('f_gInt').value=g.interval;document.getElementById('f_gUnit').value=g.unit;tmpDocks=g.docks.slice();renderDockBox();document.getElementById('gateModal').classList.add('open')}
+document.getElementById('gateAdd').onclick=function(){openGate(-1)};
+document.getElementById('gateCancel').onclick=function(){document.getElementById('gateModal').classList.remove('open')};
+document.getElementById('dockAdd').onclick=function(){var v=prompt('Номер дока (напр. 4.1):');if(v){tmpDocks.push(v);renderDockBox()}};
+document.getElementById('gateSave').onclick=function(){var no=parseInt(document.getElementById('f_gNo').value,10);if(!no){toast('Укажите номер ворот');return}
+var rec={wh:gWh,no:no,interval:parseInt(document.getElementById('f_gInt').value,10)||1,unit:document.getElementById('f_gUnit').value,status:document.getElementById('f_gSt').value,docks:tmpDocks.slice()};
+if(gIdx<0){if(gates.some(function(g){return g.wh===gWh&&g.no===no})){toast('Такие ворота уже есть');return}gates.push(rec);hlog('Ворота: Созданы',gWh,gWh+' №'+no,'Ворота')}
+else{gates[gIdx]=rec;hlog('Ворота: Изменены',gWh+' №'+no,gWh+' №'+no+' ('+rec.interval+' '+rec.unit+')','Ворота')}
+ss('wms13_gates',gates);document.getElementById('gateModal').classList.remove('open');renderGates();toast('Сохранено')};
+
+/* ctx */
+function showCtx(x,y,items){var c=document.getElementById('ctx');c.innerHTML='';items.forEach(function(it){var d=document.createElement('div');d.textContent=it[0];d.onclick=function(){c.style.display='none';it[1]()};c.appendChild(d)});c.style.left=x+'px';c.style.top=y+'px';c.style.display='block'}
+document.addEventListener('click',function(e){if(!e.target.closest||!e.target.closest('#ctx'))document.getElementById('ctx').style.display='none'});
+renderHub('');
+</script>
 <script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>
 </html>

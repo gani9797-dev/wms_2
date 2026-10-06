@@ -10,6 +10,7 @@ require_once __DIR__ . '/CellStatus.php';
 require_once __DIR__ . '/CellFilter.php';
 require_once __DIR__ . '/CellRepository.php';
 require_once __DIR__ . '/CellService.php';
+require_once __DIR__ . '/CellPlacement.php';
 require_once __DIR__ . '/../shared/db.php';
 
 $pdo = wms_storage_pdo();
@@ -89,6 +90,52 @@ try {
         echo json_encode($repo->movements((int)($_GET['id'] ?? 0)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'tasks') {
         echo json_encode($repo->tasks((int)($_GET['id'] ?? 0)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    } elseif ($action === 'suggest') {
+        // Онлайн-подбор ячейки: ?pallet_type=euro|fin&height_mm=1500&warehouse_id=1
+        $pt = (string)($_GET['pallet_type'] ?? $_GET['pallet'] ?? 'euro');
+        $h = isset($_GET['height_mm']) && $_GET['height_mm'] !== '' ? (int)$_GET['height_mm'] : null;
+        $w = isset($_GET['warehouse_id']) && $_GET['warehouse_id'] !== '' ? (int)$_GET['warehouse_id'] : null;
+        $s = CellPlacement::suggest($pdo, $pt, $h, $w);
+        if (!$s) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Подходящая ячейка не найдена (высота/тара/секция)'], JSON_UNESCAPED_UNICODE);
+        } else {
+            echo json_encode(['ok' => true, 'pallet_type' => CellPlacement::normalizePalletType($pt),
+                'height_mm' => $h, 'cell' => $s['cell'], 'section' => $s['section'],
+                'hint' => 'Приоритет: добивка непустых секций до полной'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        }
+    } elseif ($action === 'place' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        // Занять ячейку под паллету: {cell_id?, pallet_type, height_mm?, sscc?, warehouse_id?}
+        // Без cell_id — сначала онлайн-подбор, затем резерв.
+        $b = json_decode(file_get_contents('php://input'), true) ?? [];
+        $pt = (string)($b['pallet_type'] ?? $b['pallet'] ?? 'euro');
+        $h = isset($b['height_mm']) && $b['height_mm'] !== '' ? (int)$b['height_mm'] : null;
+        $w = isset($b['warehouse_id']) && $b['warehouse_id'] !== '' ? (int)$b['warehouse_id'] : null;
+        $sscc = trim((string)($b['sscc'] ?? ''));
+        $cid = (int)($b['cell_id'] ?? 0);
+        if ($cid <= 0) {
+            $s = CellPlacement::suggest($pdo, $pt, $h, $w);
+            if (!$s) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Подходящая ячейка не найдена (высота/тара/секция)'], JSON_UNESCAPED_UNICODE);
+            } else {
+                $r = CellPlacement::occupy($pdo, (int)$s['cell']['id'], $pt, ($sscc !== '' ? $sscc : null), $userId);
+                http_response_code(201);
+                echo json_encode(['ok' => true, 'cell' => $r['cell'], 'section' => $s['section'],
+                    'temp_blocked' => $r['temp_blocked'], 'section_tuned' => $r['section_tuned']], JSON_UNESCAPED_UNICODE);
+            }
+        } else {
+            $r = CellPlacement::occupy($pdo, $cid, $pt, ($sscc !== '' ? $sscc : null), $userId);
+            http_response_code(201);
+            echo json_encode(['ok' => true, 'cell' => $r['cell'],
+                'temp_blocked' => $r['temp_blocked'], 'section_tuned' => $r['section_tuned']], JSON_UNESCAPED_UNICODE);
+        }
+    } elseif ($action === 'sync_temp' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $b = json_decode(file_get_contents('php://input'), true) ?? [];
+        $n = CellPlacement::syncTempBlocks($pdo, (int)($b['warehouse_id'] ?? $_GET['warehouse_id'] ?? 1),
+            $b['building'] ?? $_GET['building'] ?? null, $b['sec'] ?? $b['row_no'] ?? $_GET['sec'] ?? null,
+            $b['level'] ?? $b['level_no'] ?? $_GET['level'] ?? null);
+        echo json_encode(['ok' => true, 'released' => $n], JSON_UNESCAPED_UNICODE);
     } elseif ($action === 'store' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $b = json_decode(file_get_contents('php://input'), true) ?? [];
         $id = $service->create($b, $userId);

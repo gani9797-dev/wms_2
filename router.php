@@ -120,6 +120,17 @@ if (str_starts_with($uri, '/tsd/')) {
         exit;
     }
     // app.html и статика ТСД — без логина (удобно для сканеров в цеху).
+    // HTML ТСД отдаем без кэша, иначе сканеры работают на старой версии интерфейса.
+    if (str_ends_with($uri, '.html')) {
+        $f = __DIR__ . $uri;
+        if (is_file($f)) {
+            header('Content-Type: text/html; charset=utf-8');
+            header('Cache-Control: no-store, no-cache, must-revalidate');
+            header('Pragma: no-cache');
+            readfile($f);
+            exit;
+        }
+    }
     return false;
 }
 
