@@ -1,0 +1,26 @@
+# Ручная проверка сервера: доступность по SSH, наличие PHP/Git, состояние клона.
+# Удобно использовать сразу после bootstrap.ps1, до первого настоящего деплоя.
+name: Проверка хоста
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Предпроверка Windows-хоста
+    runs-on: ubuntu-latest
+    steps:
+      - name: deploy.ps1 -Preflight
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          command_timeout: 5m
+          script_stop: true
+          script: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${{ vars.WMS_ROOT || 'C:\wms' }}\app\deploy\deploy.ps1" -Preflight -Port "${{ vars.WMS_PORT || '8001' }}"

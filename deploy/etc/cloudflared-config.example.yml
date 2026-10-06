@@ -1,0 +1,22 @@
+# Пример конфигурации cloudflared для портала TiMLog.
+# Расположение на сервере (после установки службы):
+#   C:\Windows\System32\config\systemprofile\.cloudflared\config.yml
+#
+# После правки:  Restart-Service cloudflared
+
+url: http://127.0.0.1:8001
+tunnel: wms
+credentials-file: C:\Windows\System32\config\systemprofile\.cloudflared\wms.json
+
+ingress:
+  # Портал склада
+  - hostname: wms.example.com
+    service: http://127.0.0.1:8001
+
+  # SSH для деплоя из GitHub Actions (второй маршрут того же туннеля).
+  # Нужен workflow "Deploy WMS (Windows, SSH через Cloudflare Tunnel)".
+  - hostname: ssh.example.com
+    service: ssh://localhost:22
+
+  # Всё остальное
+  - service: http_status:404

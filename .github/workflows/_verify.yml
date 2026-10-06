@@ -1,0 +1,71 @@
+# Переиспользуемый workflow: проверка кода перед деплоем.
+# Вызывается из deploy.yml и deploy-tunnel.yml, чтобы на сервер не уехал битый код.
+name: Verify
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  php:
+    name: PHP lint + smoke-тест
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: PHP 8.3 + SQLite
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: sqlite3, pdo_sqlite, mbstring
+          coverage: none
+
+      - name: Синтаксис всех PHP-файлов
+        run: |
+          fail=0
+          while IFS= read -r -d '' f; do
+            if ! out="$(php -l "$f" 2>&1)"; then
+              echo "::error file=$f::$out"
+              fail=1
+            fi
+          done < <(find . -name '*.php' -not -path './.git/*' -print0)
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Есть PHP-файлы с синтаксическими ошибками — деплой отменён"
+            exit 1
+          fi
+          echo "Синтаксис OK"
+
+      - name: Smoke-тест роутера (логин / защита / ТСД)
+        run: |
+          php -S 127.0.0.1:8081 router.php > /tmp/wms-server.log 2>&1 &
+          srv=$!
+          cleanup() { kill "$srv" 2>/dev/null || true; }
+          trap cleanup EXIT
+
+          for i in $(seq 1 30); do
+            curl -sf -o /tmp/login.html http://127.0.0.1:8081/login && break
+            sleep 1
+          done
+
+          if ! grep -q "TiMLog" /tmp/login.html; then
+            echo "::error::/login не отдаёт форму входа"
+            cat /tmp/wms-server.log
+            exit 1
+          fi
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/02-postupleniya/app.html)
+          if [ "$code" != "302" ]; then
+            echo "::error::закрытая страница без логина должна редиректить (302), получено $code"
+            exit 1
+          fi
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8081/tsd/api.php?action=tasks')
+          if [ "$code" != "401" ]; then
+            echo "::error::/tsd/api.php без токена должен отвечать 401, получено $code"
+            exit 1
+          fi
+
+          echo "Smoke-тест пройден"

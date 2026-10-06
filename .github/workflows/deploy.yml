@@ -1,0 +1,104 @@
+# Деплой TiMLog (WMS) на свой Windows-сервер по SSH.
+#
+# Схема: push в ветку -> GitHub Actions подключается к серверу по SSH
+# (appleboy/ssh-action) -> на сервере powershell выполняет deploy\deploy.ps1:
+# остановка PHP-сервера, git fetch + checkout нужного коммита, перезаливка
+# SQLite-данных из GitHub, запуск и проверка доступности.
+#
+# Секреты репозитория (Settings -> Secrets and variables -> Actions):
+#   SSH_HOST           - IP или hostname сервера
+#   SSH_PORT           - порт SSH (обычно 22)
+#   SSH_USER           - пользователь Windows
+#   SSH_KEY            - приватный SSH-ключ (содержимое файла целиком)
+#   SSH_PASSPHRASE     - пароль ключа, если он защищён (иначе удалите строку)
+# Переменные (Variables, необязательно):
+#   WMS_ROOT           - корень установки на сервере, по умолчанию C:\wms
+#   WMS_PORT           - порт PHP-сервера, по умолчанию 8001
+#   WMS_KEEP_DATA      - "true" = по умолчанию НЕ перезаливать БД из GitHub
+name: Deploy WMS (Windows, SSH)
+
+on:
+  push:
+    branches:
+      - arena/448262c5-wms-2
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Что деплоить: ветка, тег или SHA. Пусто = коммит, на котором запущен workflow.'
+        required: false
+        default: ''
+      keep_data:
+        description: 'Сохранить данные сервера (не перезаливать SQLite из GitHub)'
+        type: boolean
+        default: false
+      restart_tunnel:
+        description: 'Перезапустить службу cloudflared после деплоя'
+        type: boolean
+        default: false
+
+concurrency:
+  group: wms-deploy-windows
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Проверка кода
+    uses: ./.github/workflows/_verify.yml
+
+  deploy:
+    name: Деплой по SSH
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - name: Проверить секреты
+        run: |
+          missing=""
+          if [ -z "${{ secrets.SSH_HOST }}" ]; then missing="$missing SSH_HOST"; fi
+          if [ -z "${{ secrets.SSH_USER }}" ]; then missing="$missing SSH_USER"; fi
+          if [ -z "${{ secrets.SSH_KEY }}" ]; then missing="$missing SSH_KEY"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::Не заданы секреты:$missing (Settings -> Secrets and variables -> Actions)"
+            exit 1
+          fi
+
+      - name: Аргументы для deploy.ps1
+        id: args
+        run: |
+          ref="${{ github.event.inputs.ref }}"
+          if [ -n "$ref" ]; then
+            target="-Ref \"$ref\""
+          else
+            target="-Sha \"${{ github.sha }}\""
+          fi
+
+          keep="${{ github.event.inputs.keep_data }}"
+          if [ -z "$keep" ]; then keep="${{ vars.WMS_KEEP_DATA }}"; fi
+          if [ -z "$keep" ]; then keep="false"; fi
+
+          extra=""
+          if [ "$keep" = "true" ]; then extra="$extra -KeepData"; fi
+          if [ "${{ github.event.inputs.restart_tunnel }}" = "true" ]; then extra="$extra -RestartTunnel"; fi
+
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "extra=$extra" >> "$GITHUB_OUTPUT"
+
+      - name: Деплой на сервер
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          command_timeout: 15m
+          script_stop: true
+          debug: false
+          # Одна строка: так команда одинаково работает и в cmd.exe, и в PowerShell
+          # (на Windows-OpenSSH shell по умолчанию зависит от настроек).
+          script: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${{ vars.WMS_ROOT || 'C:\wms' }}\app\deploy\deploy.ps1" ${{ steps.args.outputs.target }} ${{ steps.args.outputs.extra }} -Port "${{ vars.WMS_PORT || '8001' }}"
+
+      - name: Итог
+        run: echo "Деплой ${{ github.sha }} завершён"

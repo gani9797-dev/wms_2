@@ -1,0 +1,101 @@
+# Альтернативный деплой: SSH НЕ открыт наружу, а идёт внутрь через Cloudflare Tunnel.
+#
+# Когда использовать: сервер за NAT / без белого IP / порт 22 закрыт.
+# Что нужно на сервере: в cloudflared-туннель добавлен маршрут ssh (ssh://localhost:22),
+# а в Cloudflare Access создано приложение для этого hostname с политикой Service Auth
+# и сервисным токеном.
+#
+# Секреты: SSH_USER, SSH_KEY, SSH_PASSPHRASE,
+#          CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
+# Переменные: CF_SSH_HOSTNAME (например ssh.sklad.example.com),
+#             WMS_ROOT, WMS_PORT, WMS_KEEP_DATA
+name: Deploy WMS (Windows, SSH через Cloudflare Tunnel)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Что деплоить: ветка, тег или SHA'
+        required: false
+        default: ''
+      keep_data:
+        description: 'Сохранить данные сервера (не перезаливать SQLite из GitHub)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: wms-deploy-tunnel
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Проверка кода
+    uses: ./.github/workflows/_verify.yml
+
+  deploy:
+    name: Деплой через туннель
+    runs-on: ubuntu-latest
+    needs: verify
+    env:
+      LOCAL_SSH_PORT: '2222'
+    steps:
+      - name: Установить cloudflared
+        run: |
+          curl -fsSL -o /tmp/cloudflared.deb \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i /tmp/cloudflared.deb
+          cloudflared --version
+
+      - name: Поднять локальный SSH-канал через Cloudflare Access
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          nohup cloudflared access tcp \
+            --hostname "${{ vars.CF_SSH_HOSTNAME }}" \
+            --url "tcp://127.0.0.1:${LOCAL_SSH_PORT}" > /tmp/cloudflared.log 2>&1 &
+          for i in $(seq 1 30); do
+            if nc -z 127.0.0.1 "${LOCAL_SSH_PORT}"; then echo "Канал поднят"; exit 0; fi
+            sleep 1
+          done
+          echo "::error::Канал cloudflared не поднялся"
+          cat /tmp/cloudflared.log
+          exit 1
+
+      - name: Аргументы для deploy.ps1
+        id: args
+        run: |
+          ref="${{ github.event.inputs.ref }}"
+          if [ -n "$ref" ]; then
+            target="-Ref \"$ref\""
+          else
+            target="-Sha \"${{ github.sha }}\""
+          fi
+          keep="${{ github.event.inputs.keep_data }}"
+          if [ -z "$keep" ]; then keep="${{ vars.WMS_KEEP_DATA }}"; fi
+          if [ -z "$keep" ]; then keep="false"; fi
+          extra=""
+          if [ "$keep" = "true" ]; then extra="$extra -KeepData"; fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "extra=$extra" >> "$GITHUB_OUTPUT"
+
+      - name: Деплой на сервер
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: 127.0.0.1
+          port: 2222
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          command_timeout: 15m
+          script_stop: true
+          script: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${{ vars.WMS_ROOT || 'C:\wms' }}\app\deploy\deploy.ps1" ${{ steps.args.outputs.target }} ${{ steps.args.outputs.extra }} -Port "${{ vars.WMS_PORT || '8001' }}"
+
+      - name: Закрыть канал
+        if: always()
+        run: |
+          pkill -f 'cloudflared access tcp' || true
+          echo "Канал закрыт"
