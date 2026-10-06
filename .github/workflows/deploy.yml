@@ -86,6 +86,7 @@ jobs:
           echo "extra=$extra" >> "$GITHUB_OUTPUT"
 
       - name: Деплой на сервер
+        if: steps.check.outputs.skip != 'true'
         uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.SSH_HOST }}
