@@ -54,18 +54,22 @@ jobs:
     needs: verify
     steps:
       - name: Проверить секреты
+        id: check
         run: |
           missing=""
           if [ -z "${{ secrets.SSH_HOST }}" ]; then missing="$missing SSH_HOST"; fi
           if [ -z "${{ secrets.SSH_USER }}" ]; then missing="$missing SSH_USER"; fi
           if [ -z "${{ secrets.SSH_KEY }}" ]; then missing="$missing SSH_KEY"; fi
           if [ -n "$missing" ]; then
-            echo "::error::Не заданы секреты:$missing (Settings -> Secrets and variables -> Actions)"
-            exit 1
+            echo "::warning::Не заданы секреты:$missing — деплой пропущен. Заполните их в Settings -> Secrets and variables -> Actions (см. deploy/README.md)"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Аргументы для deploy.ps1
         id: args
+        if: steps.check.outputs.skip != 'true'
         run: |
           ref="${{ github.event.inputs.ref }}"
           if [ -n "$ref" ]; then
