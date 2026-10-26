@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ТСД — Сортировка отгрузки</title>
+<style>
+:root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7;--ok:#2E7D32;--bad:#C62828;--warn:#E65100}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--ink);color:#fff;padding:12px 14px;position:sticky;top:0;z-index:5}
+header .t{display:flex;justify-content:space-between;align-items:center;gap:8px}
+header b{font-size:18px}header small{color:var(--mut);display:block;font-size:12px}
+header a{color:#fff;text-decoration:none;font-size:16px;border:1px solid #444;border-radius:8px;padding:6px 10px}
+main{padding:12px;max-width:640px;margin:0 auto;padding-bottom:60px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.card.red{border-color:#EF9A9A;background:#FFEBEE}.card.green{border-color:#A5D6A7;background:#E8F5E9}.card.amber{border-color:#FFCC80;background:#FFF8E1}
+h2{margin:0 0 8px;font-size:20px}.mut{color:var(--mut);font-size:13px}
+input,select{width:100%;font-size:20px;padding:14px;border:1px solid var(--line);border-radius:10px;margin:6px 0;background:#fff}
+button{width:100%;font-size:19px;font-weight:700;padding:16px;border-radius:12px;border:1px solid var(--vio);background:var(--vio);color:#fff;cursor:pointer;margin:6px 0;min-height:58px}
+button.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
+button.red{background:var(--bad);border-color:var(--bad)}
+button.green{background:var(--ok);border-color:var(--ok)}
+button.amber{background:#EF6C00;border-color:#EF6C00}
+button.small{font-size:16px;padding:12px;min-height:48px}
+.row2{display:flex;gap:8px}.row2>*{flex:1}
+.prog{height:12px;background:#E6E6E6;border-radius:8px;overflow:hidden;margin:8px 0}.prog i{display:block;height:100%;background:#009900}
+.step{font-size:12px;color:var(--vio);font-weight:700;margin-bottom:4px}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #F0F0F0;font-size:15px}
+.kv i{font-style:normal;color:var(--mut)}.kv b{color:var(--vio);text-align:right}
+.big{font-size:26px;font-weight:700;text-align:center}
+.photo{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#F6F6F6;display:flex;align-items:center;justify-content:center;font-size:40px}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:10px;display:none;z-index:99;max-width:92vw;font-size:16px;text-align:center}
+.hint{background:#F3F0FF;border:1px solid #D8CEFF;border-radius:10px;padding:8px 10px;font-size:13px;color:#3B2A80;margin:8px 0}
+#navback{position:fixed;left:12px;bottom:16px;z-index:98;width:auto;padding:12px 18px;min-height:48px;font-size:16px;display:none;background:#fff;color:#1C2331;border:1px solid #EAEAEA;border-radius:12px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;margin:0}
+.switch{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--mut)}
+.list{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px;margin:8px 0}
+.list div{padding:5px 4px;border-bottom:1px solid #F5F5F5;font-size:14px;word-break:break-all}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+<div class="t"><a href="app.html">‹ Меню</a><b>ТСД — Сортировка</b><span id="who" style="font-size:12px;color:#7CFC9A"></span></div>
+<small id="dhead">сканируй код отгрузки</small>
+</header>
+<main id="m"></main>
+<div id="toast"></div>
+<button id="navback">← Назад</button>
+<script>
+const $=id=>document.getElementById(id);
+const TOKEN=localStorage.getItem('tsd_token')||(window.WMS_TSD_TOKEN||'tsd-12345');
+const ME=JSON.parse(localStorage.getItem('tsd_me')||'null');
+if(ME)$('who').textContent=ME.fio;
+const uid=()=>ME?ME.id:null;
+// Ввод количества штук: вкл/выкл (переключатель в шапке).
+let QTY_INPUT=localStorage.getItem('tsd_sort_qty')==='0'?false:true;
+let DOC=null;      // шапка отгрузки
+let ITEM=null;     // текущая позиция товара
+let PALLET=null;   // текущая паллета (SSCC)
+let MARKS=[];      // отсканированные марки
+let SERIALS=[];    // отсканированные серийники
+let PENDING_QTY=0; // введённое количество
+let ASM=null;      // состояние сборки отгрузки (буфер отбора)
+function toast(t,ms){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',ms||2600)}
+function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json','X-Tsd-Token':TOKEN},o.headers||{});return fetch('sort.php'+p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN),o)}
+const post=(a,b)=>api('?action='+a,{method:'POST',body:JSON.stringify(b||{})}).then(r=>r.json().then(j=>({s:r.status,j})));
+const fmt=n=>Math.round((+n||0)*1000)/1000;
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// --- Навигация: стек кадров, кнопка «← Назад» и ESC ---
+let NAV=[];
+function paintBack(){const b=$('navback');if(b)b.style.display=NAV.length>1?'block':'none'}
+function go(name,fn){NAV.push({name,fn});if(NAV.length>40)NAV.splice(0,NAV.length-40);paintBack();const r=fn();if(r&&r.catch)r.catch(()=>{})}
+function goReplace(name,fn){if(NAV.length)NAV[NAV.length-1]={name,fn};else NAV.push({name,fn});paintBack();const r=fn();if(r&&r.catch)r.catch(()=>{})}
+function back(){if(NAV.length>1){NAV.pop();paintBack();const r=NAV[NAV.length-1].fn();if(r&&r.catch)r.catch(()=>{})}}
+$('navback').onclick=()=>back();
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();back();}});
+// Шапка документа: код, клиент, % собрана, задания.
+function head(){
+ if(!DOC){$('dhead').textContent='сканируй код отгрузки';return}
+ $('dhead').textContent=`Отгрузка ${DOC.doc_no}${DOC.is_crossdock?' · кросдок':''} · ${DOC.consignee||''} · собрано ${DOC.pct}%`;
+}
+function docCard(){
+ if(!DOC)return '';
+ const tn=DOC.tasks_total||0, td=DOC.tasks_done||0;
+ return `<div class="card"><div class="kv"><i>Отгрузка</i><b>${esc(DOC.doc_no)}${DOC.is_crossdock?' · кросдок':''}</b></div>
+ <div class="kv"><i>Клиент</i><b>${esc(DOC.consignee||'—')}</b></div>
+ <div class="kv"><i>Собрана</i><b>${fmt(DOC.fact_qty)} / ${fmt(DOC.plan_qty)} шт · ${DOC.pct}%</b></div>
+ <div class="kv"><i>Задания</i><b>${td} / ${tn}</b></div>
+ ${(DOC.doc_nos||[]).length?`<div class="kv"><i>Номера доков</i><b>${esc((DOC.doc_nos||[]).join(', '))}</b></div>`:''}</div>`;
+}
+function qtySwitch(){
+ return `<div class="hint" style="display:flex;justify-content:space-between;align-items:center">
+ <span>Ввод количества штук</span>
+ <label class="switch"><input type="checkbox" id="qsw" ${QTY_INPUT?'checked':''}> включён</label></div>`;
+}
+function bindQtySwitch(){
+ const s=$('qsw');if(!s)return;
+ s.onchange=()=>{QTY_INPUT=s.checked;localStorage.setItem('tsd_sort_qty',QTY_INPUT?'1':'0');toast('Ввод количества: '+(QTY_INPUT?'включён':'выключен'))};
+}
+// ============ ЭКРАН 1: сканируем код отгрузки ============
+function scrShipment(){
+ DOC=null;ITEM=null;PALLET=null;MARKS=[];SERIALS=[];PENDING_QTY=0;head();
+ $('m').innerHTML=`<div class="card"><div class="step">ЭТАП 1 · ОТГРУЗКА</div><h2>Сканируй код отгрузки</h2>
+ <input id="doccode" placeholder="Код отгрузки (напр. S-205107)" autocomplete="off" inputmode="none">
+ <button id="docgo">Открыть</button>
+ <div class="mut">Отсканируй штрихкод отгрузки. Если код не найден — уведомление «Отгрузка не найдена».</div></div>`;
+ const e=$('doccode');e.focus();
+ e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();openShipment()}};
+ $('docgo').onclick=openShipment;
+}
+async function openShipment(){
+  const e=$('doccode');const v=(e.value||'').trim();
+  if(!v){toast('Отсканируй код отгрузки');return}
+  const r=await api('?action=shipment&code='+encodeURIComponent(v));
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){toast(j.error||'Отгрузка не найдена');e.value='';e.focus();return}
+  DOC=j.head;head();toast('Отгрузка '+DOC.doc_no);
+  await loadAsm();
+  go('doc',()=>scrDoc());
+}
+// ============ СБОРКА НА СБОРОЧНОЙ ПАЛЛЕТЕ (по SSCC) ============
+// Состояние буфера отбора: что на воротах, что уже собрано на сборочной паллете.
+async function loadAsm(){
+  try{
+    const r=await api('?action=assembly_state&id='+(DOC?DOC.id:0));
+    const j=await r.json().catch(()=>({}));
+    ASM=(j&&!j.error)?j:null;
+  }catch(e){ASM=null}
+  return ASM;
+}
+function asmCard(){
+  const st=(ASM&&ASM.state)||{};
+  const parts=[];
+  if(st.picked)parts.push('в промежуточной ячейке: '+st.picked);
+  if(st.at_gate)parts.push('на воротах: '+st.at_gate);
+  if(st.assembled)parts.push('собрано: '+st.assembled);
+  return `<div class="card"><div class="step">СБОРКА НА СБОРОЧНОЙ ПАЛЛЕТЕ</div>
+  <div class="kv"><i>Товар на воротах</i><b>${st.at_gate||0}</b></div>
+  <div class="kv"><i>Собрано на паллете</i><b>${st.assembled||0}</b></div>
+  ${st.assembly_sscc?`<div class="kv"><i>Сборочная паллета</i><b>${esc(st.assembly_sscc)}</b></div>`:''}
+  ${st.picked?`<div class="mut">Товар не перемещён на ворота: ${st.picked} позиций — сборка запрещена.</div>`:''}
+  ${parts.length?`<div class="mut">${esc(parts.join(' · '))}</div>`:''}
+  <button id="asm" class="green">Сканировать SSCC сборки</button></div>`;
+}
+function bindAsm(){
+  const b=$('asm');if(!b)return;
+  b.onclick=()=>go('assembly',()=>scrAssembly());
+}
+function scrAssembly(){
+  head();
+  $('m').innerHTML=docCard()+`<div class="card"><div class="step">СБОРКА НА СБОРОЧНОЙ ПАЛЛЕТЕ</div>
+  <h2>Отсканируй SSCC сборочной паллеты</h2>
+  <div class="mut">Товар с ворот сортировки переносится на сборочную паллету. После сборки отбор снова разрешён.</div>
+  <input id="sscc" placeholder="Сканировать SSCC сборки" autocomplete="off" inputmode="none">
+  <button id="go" class="green">Подтвердить сборку</button>
+  <button class="ghost" id="bk">Назад</button></div>`;
+  const e=$('sscc');e.focus();
+  e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();confirmAsm()}};
+  $('go').onclick=confirmAsm;
+  $('bk').onclick=()=>back();
+}
+async function confirmAsm(){
+  const e=$('sscc');const v=(e.value||'').trim();
+  if(!v){toast('Отсканируй SSCC сборочной паллеты');return}
+  const {s,j}=await post('assembly',{shipment_id:DOC?DOC.id:0,sscc:v,user_id:uid(),user_fio:ME?ME.fio:''});
+  if(!s||j.error){toast(j.error||'Ошибка сборки',5000);return}
+  toast('Собрано на сборочной паллете '+v+' ✓');
+  await loadAsm();
+  $('m').innerHTML=docCard()+`<div class="card green"><div class="step">СБОРКА ВЫПОЛНЕНА</div>
+  <h2>Сборочная паллета: ${esc(v)}</h2>
+  <div class="mut">Позиций собрано: ${(j.state&&j.state.assembled)||0}. Отбор по отгрузке снова разрешён.</div>
+  <button class="ghost" id="bk">К отгрузке</button></div>`;
+  $('bk').onclick=()=>{goReplace('doc',()=>scrDoc())};
+}
+// ============ ЭКРАН 2: кроссдок — сканируем паллеты ============
+function scrCrossdock(){
+ head();
+ $('m').innerHTML=docCard()+`<div class="card"><div class="step">КРОСС-ДОК · СКАНИРУЕМ ПАЛЛЕТЫ</div><h2>Сканируй паллету</h2>
+ <div class="mut">В шапке: код отгрузки — кросдок, наименование клиента.</div>
+ <input id="sscc" placeholder="SSCC паллеты" autocomplete="off" inputmode="none">
+ <button id="go">Проверить паллету</button>
+ <div class="mut">Паллета должна принадлежать отгрузке и находиться в зоне сортировки — иначе перенос в зону отгрузки.</div></div>`;
+ const e=$('sscc');e.focus();
+ e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();checkPallet(true)}};
+ $('go').onclick=()=>checkPallet(true);
+}
+// ============ ЭКРАН 3: шапка отгрузки + скан товара ============
+function scrDoc(){
+  head();
+  $('m').innerHTML=docCard()+asmCard()+`<div class="card"><div class="step">ЭТАП 2 · ШТРИХКОД ТОВАРА</div><h2>Сканируй товар</h2>
+  <input id="code" placeholder="Штрихкод товара" autocomplete="off" inputmode="none">
+  <button id="go">Найти товар</button>
+  <div class="mut">Товар должен принадлежать отгрузке. Далее — сканирование паллеты.</div></div>`;
+  bindAsm();
+  const e=$('code');e.focus();
+  e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();findItem()}};
+  $('go').onclick=findItem;
+}
+async function findItem(){
+ const e=$('code');const v=(e.value||'').trim();
+ if(!v){toast('Отсканируй штрихкод товара');return}
+ const r=await api('?action=product&id='+(DOC?DOC.id:0)+'&code='+encodeURIComponent(v));
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok){toast(j.error||'Товар не принадлежит отгрузке');e.value='';e.focus();return}
+ ITEM=j.item;if(j.head)DOC=j.head;MARKS=[];SERIALS=[];PENDING_QTY=0;head();
+ toast('Товар: '+ITEM.name);
+ go('pallet',()=>scrPallet());
+}
+// ============ ЭКРАН 4: сканируем паллету ============
+function scrPallet(){
+ head();
+ const ph=ITEM&&ITEM.photo?`<img class="photo" src="${esc(ITEM.photo)}" alt="">`:`<div class="photo">📦</div>`;
+ $('m').innerHTML=docCard()+`<div class="card"><div class="step">ЭТАП 3 · ПАЛЛЕТА</div>
+ <div style="display:flex;gap:12px;align-items:center">${ph}<div style="flex:1">
+ <b style="font-size:18px">${esc(ITEM.name)}</b><br><span class="mut">${esc(ITEM.sku)} · нужно ${fmt(ITEM.need_qty)} ${esc(ITEM.unit)}</span>
+ </div></div>
+ <input id="sscc" placeholder="SSCC паллеты" autocomplete="off" inputmode="none">
+ <button id="go">Проверить паллету</button></div>`;
+ const e=$('sscc');e.focus();
+ e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();checkPallet(false)}};
+ $('go').onclick=()=>checkPallet(false);
+}
+// Проверки паллеты: чужая отгрузка / чужой клиент / не отобрана.
+async function checkPallet(crossdock){
+ const e=$('sscc');const v=(e.value||'').trim();
+ if(!v){toast('Отсканируй SSCC паллеты');return}
+ const r=await api('?action=pallet&id='+(DOC?DOC.id:0)+'&code='+encodeURIComponent(v));
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok){toast(j.error||'Паллета не подходит');e.value='';e.focus();return}
+ PALLET=j.pallet;
+ if(crossdock){
+  if(j.pallet.in_sort_zone===false){toast('Паллета не отобрана');e.value='';e.focus();return}
+  const {s,j:j2}=await post('crossdock',{shipment_id:DOC.id,pallet_id:v,user_id:uid(),user_fio:ME?ME.fio:''});
+  if(!s||j2.error){toast(j2.error||'Ошибка переноса');e.value='';e.focus();return}
+  toast('Паллета '+v+' → зона отгрузки ✓');
+  e.value='';e.focus();
+  return;
+ }
+ // обычная ветка: марки или количество
+ go('item',()=>scrItem());
+}
+// ============ ЭКРАН 5: позиция товара — марка или количество ============
+function scrItem(){
+ head();
+ if(ITEM.marking_scan){goReplace('marks',()=>scrMarks());return}
+ // Ввод количества выключен — берём требуемое количество автоматически.
+ if(!QTY_INPUT){
+  PENDING_QTY=ITEM.need_qty;
+  if(ITEM.serial_scan){goReplace('serials',()=>scrSerials());return}
+  goReplace('done',()=>scrDone());return;
+ }
+ goReplace('qty',()=>scrQty());
+}
+function itemCard(){
+ const it=ITEM||{};
+ const photo=it.photo?`<img class="photo" src="${esc(it.photo)}" alt="">`:`<div class="photo">📦</div>`;
+ return `<div class="card"><div class="step">ОТГРУЗКА ${esc(DOC?DOC.doc_no:'')} · ${esc(DOC?DOC.consignee:'')}</div>
+ <div style="display:flex;gap:12px;align-items:center">${photo}<div style="flex:1">
+ <b style="font-size:18px">${esc(it.name)}</b><br><span class="mut">${esc(it.sku)}</span><br>
+ <span class="mut">Требуется для клиента: <b style="font-size:20px;color:var(--vio)">${fmt(it.need_qty)}</b> ${esc(it.unit)}</span>
+ </div></div></div>`;
+}
+// --- 5a: цикл сканирования марок (честный знак) ---
+function scrMarks(){
+ head();
+ $('m').innerHTML=itemCard()+`<div class="card"><div class="step">МАРКИ ЧЕСТНОГО ЗНАКА</div>
+ <div class="kv"><i>Всего марок</i><b>${ITEM.marks_total||0}</b></div>
+ <div class="kv"><i>Отсканировано</i><b id="mdone">${MARKS.length}</b></div>
+ <input id="mark" placeholder="Код марки (ЧЗ)" autocomplete="off" inputmode="none">
+ <button id="go">Сканировать марку</button>
+ <div class="list" id="mlist">${marksList()}</div>
+ <button id="fin" class="green">Завершить по маркам (Enter)</button>
+ <div class="mut">Марка должна быть принята и введена в оборот. Если нет — «Распечатать марку?».</div></div>`;
+ const e=$('mark');e.focus();
+ e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();scanMark()}};
+ $('go').onclick=scanMark;
+ $('fin').onclick=()=>finishMarks();
+}
+function marksList(){
+ if(!MARKS.length)return '<div class="mut">Марки не отсканированы</div>';
+ return MARKS.map(m=>`<div>✓ ${esc(m.code)} ${m.status?('· '+esc(m.status)):''}</div>`).join('');
+}
+async function scanMark(){
+ const e=$('mark');const v=(e.value||'').trim();
+ if(!v){toast('Отсканируй код марки');return}
+ const r=await api('?action=mark&id='+(DOC?DOC.id:0)+'&code='+encodeURIComponent(v)+'&sku='+encodeURIComponent(ITEM.sku));
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok){markProblem(j.error||'Марка не принята',v,j.reason||'Марка не принята');e.value='';e.focus();return}
+ if(!j.mark.accepted){markProblem('Марка не принята. Распечатать марку?',v,'Марка не принята');e.value='';e.focus();return}
+ if(!j.mark.circulated){markProblem('Марка не введена в оборот. Распечатать марку',v,'Марка не введена в оборот');e.value='';e.focus();return}
+ MARKS.push({code:j.mark.code,status:j.mark.status});
+ toast('Марка принята ✓');
+ goReplace('marks',()=>scrMarks());
+}
+// Проблема с маркой: предложить распечатать (подбор марки в статусе «принята»).
+// Проблемная марка пишется в лог сортировки: марка, id отгрузки, причина, операция.
+function markProblem(msg,code,reason){
+ toast(msg,4000);
+ logMark(code,reason||'Марка не принята');
+ const box=document.createElement('div');
+ box.className='card amber';
+ box.innerHTML=`<div class="step">МАРКА</div><div>${esc(msg)}</div>
+ <div class="mut">Код: ${esc(code)}</div>
+ <div class="row2" style="margin-top:8px"><button class="amber small" id="pr">Распечатать марку</button><button class="ghost small" id="sk">Пропустить</button></div>`;
+ $('m').insertBefore(box,$('m').firstChild);
+ $('pr').onclick=async()=>{
+  const pd=ITEM.prod_date||'';
+  const r=await api('?action=mark_any&id='+(DOC?DOC.id:0)+'&sku='+encodeURIComponent(ITEM.sku)+'&prod_date='+encodeURIComponent(pd));
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){toast(j.error||'Нет марок в статусе принята');return}
+  MARKS.push({code:j.mark.code,status:j.mark.status});
+  toast('Подобрана марка '+j.mark.code);
+  goReplace('marks',()=>scrMarks());
+ };
+ $('sk').onclick=()=>{box.remove();const e=$('mark');if(e){e.focus()}};
+}
+// Запись проблемной марки в лог сортировки.
+async function logMark(code,reason){
+ try{
+  await post('mark_log',{shipment_id:DOC?DOC.id:0,marking_code:code,reason:reason,
+   sku:ITEM?ITEM.sku:'',pallet_id:PALLET?PALLET.sscc:'',user_id:uid()});
+ }catch(e){}
+}
+function finishMarks(){
+ if(!MARKS.length){toast('Отсканируй хотя бы одну марку');return}
+ goReplace('done',()=>scrDone());
+}
+// --- 5b: ввод количества штук/коробов ---
+function scrQty(){
+ head();
+ const max=ITEM.need_qty;
+ $('m').innerHTML=itemCard()+`<div class="card"><div class="step">КОЛИЧЕСТВО ШТУК / КОРОБОВ</div>
+ ${qtySwitch()}
+ <input id="qty" inputmode="decimal" value="${fmt(max)}">
+ <button id="go">Подтвердить количество</button>
+ <div class="mut">Количество не должно превышать требуемое (${fmt(max)} ${esc(ITEM.unit)}).</div></div>`;
+ bindQtySwitch();
+ const e=$('qty');e.focus();e.select();
+ e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();checkQty()}};
+ $('go').onclick=checkQty;
+}
+function checkQty(){
+ const e=$('qty');
+ let q;
+ if(!QTY_INPUT){q=ITEM.need_qty;toast('Количество: '+fmt(q)+' (ввод отключён)');}
+ else{
+  q=parseFloat((e.value||'').replace(',','.'));
+  if(isNaN(q)||q<=0){toast('Введи количество');return}
+  if(q-(ITEM.need_qty+1e-9)>0){toast('Указано большее количество');e.focus();e.select();return}
+ }
+ PENDING_QTY=q;
+ if(ITEM.serial_scan){goReplace('serials',()=>scrSerials());return}
+ goReplace('done',()=>scrDone());
+}
+// --- 5c: цикл сканирования серийных номеров ---
+function serialTotal(){return Math.max(1,Math.ceil(PENDING_QTY||ITEM.need_qty||1))}
+function scrSerials(){
+ head();
+ const total=serialTotal();
+ const acc=ITEM.accepted_serials||0;
+ // Сверка по всему списку принятых на входе с/н — если они есть.
+ const chk=acc
+  ?`<div class="hint">Сверка по всему списку: с/н должен совпадать с одним из <b>${acc}</b> принятых на входе по позиции ${esc(ITEM.sku)}.</div>`
+  :`<div class="card amber"><div class="step">СВЕРКА НЕВОЗМОЖНА</div>
+     <div>По позиции ${esc(ITEM.sku)} на входе серийные номера не сканировались — сверять не с чем.</div>
+     <button id="skip" class="ghost">Продолжить без сверки с/н</button></div>`;
+ $('m').innerHTML=itemCard()+`<div class="card"><div class="step">СЕРИЙНЫЕ НОМЕРА</div>
+  <div class="kv"><i>Всего с/н (равно кол-ву штук)</i><b>${total}</b></div>
+  <div class="kv"><i>Отсканировано</i><b id="sdone">${SERIALS.length}</b></div>
+  ${chk}
+  <input id="sn" placeholder="Серийный номер" autocomplete="off" inputmode="none">
+  <button id="go">Сканировать</button>
+  <div class="list" id="slist">${serialsList()}</div>
+  <button id="fin" class="green">Завершить (Enter)</button></div>`;
+ const e=$('sn');e.focus();
+ e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();scanSerial()}};
+ $('go').onclick=scanSerial;
+ $('fin').onclick=()=>finishSerials();
+ const sk=$('skip');if(sk)sk.onclick=()=>{SERIALS=[];goReplace('done',()=>scrDone())};
+}
+function serialsList(){
+ if(!SERIALS.length)return '<div class="mut">Серийники не отсканированы</div>';
+ return SERIALS.map(s=>`<div>✓ ${esc(s)}</div>`).join('');
+}
+async function scanSerial(){
+ const e=$('sn');const v=(e.value||'').trim();
+ if(!v){toast('Отсканируй серийный номер');return}
+ const total=serialTotal();
+ if(SERIALS.length>=total){toast('Все серийные номера уже отсканированы');e.value='';e.focus();return}
+ const r=await api('?action=serial&id='+(DOC?DOC.id:0)+'&code='+encodeURIComponent(v)+'&sku='+encodeURIComponent(ITEM.sku));
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok){toast(j.error||'Серийник уже отсканирован',4500);e.value='';e.focus();return}
+ SERIALS.push(v);
+ if(SERIALS.length>=total){toast('Все серийные номера отсканированы ✓');finishSerials();return}
+ goReplace('serials',()=>scrSerials());
+}
+function finishSerials(){
+ const total=serialTotal();
+ if(SERIALS.length<total){toast('Отсканировано '+SERIALS.length+' из '+total+' серийных номеров',4000);return}
+ goReplace('done',()=>scrDone());
+}
+// --- 6: перенос товара на паллету в зону сортировки + уведомление ---
+function scrDone(){
+ head();
+ const qty=MARKS.length?MARKS.length:PENDING_QTY;
+ $('m').innerHTML=itemCard()+`<div class="card"><div class="step">ПЕРЕНОС В ЗОНУ СОРТИРОВКИ</div>
+ <div class="kv"><i>Паллета</i><b>${esc(PALLET?PALLET.sscc:'—')}</b></div>
+ <div class="kv"><i>Марок</i><b>${MARKS.length}</b></div>
+ <div class="kv"><i>Серийных номеров</i><b>${SERIALS.length}</b></div>
+ <button id="go" class="green">Перенести на паллету</button>
+ <div class="mut">Товар автоматически переносится на указанную паллету и в зону сортировки.</div></div>`;
+ $('go').onclick=confirmSort;
+}
+async function confirmSort(){
+ const {s,j}=await post('confirm',{
+  shipment_id:DOC.id,item_id:ITEM.id,sku:ITEM.sku,
+  qty:PENDING_QTY||ITEM.need_qty,pallet_id:PALLET?PALLET.sscc:'',
+  serials:SERIALS,markings:MARKS.map(m=>m.code),user_id:uid(),user_fio:ME?ME.fio:''});
+ if(!s||j.error){toast(j.error||'Ошибка подтверждения',4500);
+  if(j&&j.need_serials){SERIALS=[];goReplace('serials',()=>scrSerials())}
+  return}
+ toast(`${ITEM.name} для клиента ${DOC.consignee||''} отсканировано ${fmt(PENDING_QTY||ITEM.need_qty)} шт на паллет ✓`);
+ if(j.progress){DOC=j.progress;head()}
+MARKS=[];SERIALS=[];PENDING_QTY=0;ITEM=null;PALLET=null;
+  await loadAsm();
+  goReplace('doc',()=>scrDoc());
+}
+go('ship',()=>scrShipment());
+</script>
+</body>
+</html>

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/ProductStatus.php';
 require_once __DIR__ . '/ProductFilter.php';
+require_once __DIR__ . '/../shared/pg.php';
+require_once __DIR__ . '/../shared/Counterparties.php';
 
 // Репозиторий реестра "Номенклатура". PDO, работает и с MySQL, и с SQLite (демо).
 //  1. Поиск (артикул, штрихкод, наименование) -> WHERE LIKE + JOIN barcodes
@@ -25,12 +27,17 @@ final class ProductRepository
         $total = (int)$cnt->fetchColumn();
 
         $offset = ($f->page - 1) * $f->perPage;
+        // Сортировка по любому столбцу реестра (А→Я / Я→А).
         $sortMap = [
-            'sku' => 'p.sku', 'code' => 'p.code', 'name' => 'p.name',
-            'qty' => 'p.qty', 'created_at' => 'p.created_at',
-            'updated_at' => 'p.updated_at', 'id' => 'p.id',
+            'sku' => ['p.sku', 't'], 'code' => ['p.code', 't'], 'name' => ['p.name', 't'],
+            'qty' => ['p.qty', 'n'], 'created_at' => ['p.created_at', 'd'],
+            'updated_at' => ['p.updated_at', 'd'], 'id' => ['p.id', 'n'],
+            'unit' => ['p.unit', 't'], 'category' => ['p.category', 't'],
+            'reserved' => ['p.reserved_qty', 'n'],
+            'status' => ['(CASE WHEN p.is_archived = 1 THEN 2 WHEN p.is_active = 1 THEN 0 ELSE 1 END)', 'n'],
+            'barcode' => ['MIN(b.barcode)', 't'],
         ];
-        $orderBy = ($sortMap[$f->sort] ?? 'p.sku') . ' ' . $f->dir;
+        $orderBy = wms_order_by($this->pdo, $f->sort, $f->dir, $sortMap, 'p.sku');
         $sql = "SELECT p.*,
                   (SELECT COUNT(*) FROM product_stock s WHERE s.product_id = p.id) AS cells_count
                 FROM products p
@@ -76,6 +83,21 @@ final class ProductRepository
         $b->execute([':id' => $id]);
         $row['barcode_list'] = $b->fetchAll(PDO::FETCH_COLUMN);
         $row['barcodes'] = implode(', ', $row['barcode_list']);
+        // Правила сканирования с/н: эффективное значение + признак наследования от клиента.
+        $row['scan_serial_in'] = (int)($row['scan_serial_in'] ?? 0);
+        $row['scan_serial_out'] = (int)($row['scan_serial_out'] ?? 0);
+        $row['control_prod_date'] = (int)($row['control_prod_date'] ?? 0);
+        $cid = (isset($row['contractor_id']) && $row['contractor_id'] !== '' && $row['contractor_id'] !== null)
+            ? (int)$row['contractor_id'] : null;
+        $row['contractor_id'] = $cid;
+        $cp = $cid ? WmsCounterparties::find($this->pdo, $cid) : null;
+        $row['contractor_name'] = $cp ? (string)($cp['name'] ?? '') : null;
+        $flags = WmsCounterparties::serialFlags($this->pdo, $cid);
+        $row['client_scan_serial_in'] = $flags['in'];
+        $row['client_scan_serial_out'] = $flags['out'];
+        // override IS NULL → значение унаследовано от клиента (точечного решения нет).
+        $row['scan_serial_in_inherited'] = ($row['scan_serial_in_override'] === null || $row['scan_serial_in_override'] === '') ? 1 : 0;
+        $row['scan_serial_out_inherited'] = ($row['scan_serial_out_override'] === null || $row['scan_serial_out_override'] === '') ? 1 : 0;
         return $row;
     }
 
@@ -161,14 +183,27 @@ final class ProductRepository
     {
         $p = $this->findById($productId);
         if (!$p) return [];
-        $sku = $p['sku'];
+        $sku = (string)$p['sku'];
         try {
-            $st = $this->pdo->prepare("SELECT * FROM tasks WHERE sku = :s OR product_id = :id ORDER BY id DESC LIMIT 50");
-            $st->execute([':s' => $sku, ':id' => $productId]);
+            // Задания по артикулу лежат в task_items: у таблицы tasks колонки sku нет.
+            // Прежний запрос (WHERE sku = ... на tasks) падал всегда, и функция
+            // молча отдавала только ссылку на модуль заданий.
+            $st = $this->pdo->prepare(
+                "SELECT t.id, t.doc_no, t.type, t.status, t.plan_qty, t.fact_qty, t.warehouse_id,
+                        ti.sku, ti.cell_from, ti.cell_to, ti.state
+                 FROM task_items ti JOIN tasks t ON t.id = ti.task_id
+                 WHERE ti.sku = :s ORDER BY t.id DESC LIMIT 50"
+            );
+            $st->execute([':s' => $sku]);
             $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as &$r) {
+                $r['name'] = trim((string)($r['doc_no'] ?? '') . ' · ' . (string)($r['sku'] ?? $sku));
+            }
+            unset($r);
             if ($rows) return $rows;
-        } catch (Throwable) {}
-        // Fallback: deep-link в модуль заданий, если таблицы tasks нет в этой БД.
+        } catch (Throwable) {
+        }
+        // Fallback: deep-link в модуль заданий, если таблицы заданий нет в этой БД.
         return [['href' => '../07-zadaniya/app.html?sku=' . urlencode($sku), 'name' => 'Задания по ' . $sku, 'kind' => 'link']];
     }
 
@@ -228,6 +263,8 @@ final class ProductRepository
             [$f->flagDanger, 'p.is_danger'], [$f->flagPartial, 'p.allow_partial_pick'],
             [$f->flagCheck, 'p.need_check'], [$f->flagPack, 'p.need_pack'],
             [$f->flagReplenish, 'p.auto_replenish'],
+            [$f->flagScanIn, 'p.scan_serial_in'], [$f->flagScanOut, 'p.scan_serial_out'],
+            [$f->flagProdDate, 'p.control_prod_date'],
         ] as [$val, $col]) {
             if ($val !== null) { $w[] = "$col = " . (int)$val; }
         }
@@ -252,6 +289,13 @@ final class ProductRepository
                     }
                 }
                 return $this->placementCache = false;
+            }
+            if ($drv === 'pgsql') {
+                $st = $this->pdo->prepare(
+                    "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='products' AND column_name='placement_strategy'"
+                );
+                $st->execute();
+                return $this->placementCache = ((int)$st->fetchColumn() > 0);
             }
             $st = $this->pdo->prepare(
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'placement_strategy'"

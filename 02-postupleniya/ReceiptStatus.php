@@ -16,7 +16,7 @@ enum ReceiptStatus: string
     case ReadyPlace  = 'ready_place';  // Готова к размещению (10)
     case Placing     = 'placing';      // Размещение (11)
     case Closed      = 'closed';       // Закрыто (99)
-    case ClosedShort = 'closed_short'; // Закрыто с недостачей (98)
+    case ClosedShort = 'closed_short'; // Закрыто с отклонением (98) — излишки/недостача
     case Cancelled   = 'cancelled';    // Отменено (3)
     case Archived    = 'archived';     // В архиве (служебный)
 
@@ -33,7 +33,7 @@ enum ReceiptStatus: string
             self::ReadyPlace  => 'Готова к размещению',
             self::Placing     => 'Размещение',
             self::Closed      => 'Закрыто',
-            self::ClosedShort => 'Закрыто с недостачей',
+            self::ClosedShort => 'Закрыто с отклонением',
             self::Cancelled   => 'Отменено',
             self::Archived    => 'В архиве',
         };
@@ -64,7 +64,7 @@ enum ReceiptStatus: string
             self::Unloading   => in_array($to, [self::OnStock, self::Cancelled], true),
             self::OnStock     => in_array($to, [self::ReadyAccept, self::Cancelled], true),
             self::ReadyAccept => in_array($to, [self::Accepting, self::Cancelled], true),
-            self::Accepting   => in_array($to, [self::ReadyPlace, self::Placing, self::Cancelled], true),
+            self::Accepting   => in_array($to, [self::ReadyPlace, self::Placing, self::Closed, self::ClosedShort, self::Cancelled], true),
             self::ReadyPlace  => in_array($to, [self::Placing, self::Cancelled], true),
             self::Placing     => in_array($to, [self::Closed, self::ClosedShort, self::Cancelled], true),
             self::Closed      => in_array($to, [self::Archived], true),

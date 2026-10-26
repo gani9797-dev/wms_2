@@ -210,9 +210,19 @@ final class TaskService
     // ПКМ: Вернуть к началу
     public function restart(int $id, ?int $userId): void
     {
-        $this->pdo->prepare("UPDATE task_items SET fact_qty=0 WHERE task_id=:id")->execute([':id' => $id]);
-        $this->pdo->prepare("UPDATE tasks SET fact_qty=0, progress=0 WHERE id=:id")->execute([':id' => $id]);
+        // СНАЧАЛА проверяем переход. Раньше количества обнулялись ДО проверки,
+        // и для задания в статусе «Выполнен» (переход запрещён) оператор
+        // получал ошибку, а факт при этом уже был стёрт.
         $this->changeStatus($id, TaskStatus::New, $userId);
+        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->prepare("UPDATE task_items SET fact_qty=0, state=NULL WHERE task_id=:id")->execute([':id' => $id]);
+            $this->pdo->prepare("UPDATE tasks SET fact_qty=0, progress=0 WHERE id=:id")->execute([':id' => $id]);
+            $this->pdo->commit();
+        } catch (Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
         $this->history($id, $userId, 'restart', null, null, null);
     }
 
@@ -274,6 +284,15 @@ final class TaskService
             try {
                 $this->pdo->prepare('DELETE FROM task_history WHERE task_id=:id')->execute([':id' => $id]);
             } catch (Throwable) {
+            }
+            // Связанные записи: без их удаления остаётся «вечная» блокировка
+            // (tsd_task_locks) — сотрудник остаётся заблокирован («У тебя уже
+            // есть задание в работе»), а задание ещё и числится в списке отбора.
+            foreach (['task_list_items' => 'task_id', 'tsd_task_locks' => 'task_id', 'tsd_task_logs' => 'task_id'] as $t => $col) {
+                try {
+                    $this->pdo->prepare("DELETE FROM $t WHERE $col = :id")->execute([':id' => $id]);
+                } catch (Throwable) {
+                }
             }
             $this->pdo->prepare('DELETE FROM tasks WHERE id=:id')->execute([':id' => $id]);
             $this->pdo->commit();

@@ -31,82 +31,171 @@ button.amber{background:#EF6C00;border-color:#EF6C00}
 table.mini{width:100%;border-collapse:collapse;font-size:14px}table.mini td,table.mini th{border-bottom:1px solid #F0F0F0;padding:8px;text-align:left}
 .hidden{display:none}
 #navback{position:fixed;left:12px;bottom:16px;z-index:98;width:auto;padding:12px 18px;min-height:48px;font-size:16px;display:none;background:#fff;color:#1C2331;border:1px solid #EAEAEA;border-radius:12px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;margin:0}
+.hint{background:#F3F0FF;border:1px solid #D8CEFF;border-radius:10px;padding:8px 10px;font-size:13px;color:#3B2A80;margin:8px 0}
+.kbd{display:inline-block;border:1px solid #B9A9FF;background:#fff;border-radius:6px;padding:0 6px;font-weight:700;color:#4B2FD0}
+/* Признак «Приёмка без с/н» в шапке — заметно, чтобы оператор видел режим сразу. */
+.badge{display:none;background:#EF6C00;color:#fff;font-size:14px;font-weight:700;padding:8px 12px;border-radius:10px;margin:8px 0 0;text-align:center;letter-spacing:.3px}
+.badge.on{display:block}
+.mini-badge{display:inline-block;background:#EF6C00;color:#fff;border-radius:6px;padding:2px 6px;font-size:11px;font-weight:700}
+.mini-badge.ok{background:var(--ok)}
+.list{max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px;margin:8px 0}
+.list div{padding:5px 4px;border-bottom:1px solid #F5F5F5;font-size:14px;word-break:break-all}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #F0F0F0;font-size:15px}
+.kv i{font-style:normal;color:var(--mut)}.kv b{color:var(--vio);text-align:right}
+.tw{overflow-x:auto}
+table.mini input{font-size:15px;padding:8px;margin:0;min-width:150px}
 </style>
 </head>
 <body>
-<header><div class="t"><a href="app.html">‹ Меню</a><b>ТСД — Приход</b><span id="who" style="font-size:12px;color:#7CFC9A"></span></div><small id="dhead">этап 1 · сканируй ворота</small></header>
+<header><div class="t"><a href="app.html">‹ Меню</a><b>ТСД — Приход</b><span id="who" style="font-size:12px;color:#7CFC9A"></span></div><small id="dhead">этап 1 · сканируй ворота</small>
+<div id="noserial" class="badge">Приёмка без с/н</div></header>
 <main id="m"></main>
 <div id="toast"></div>
 <button id="navback">← Назад</button>
 <script>
 const $=id=>document.getElementById(id);
-const TOKEN=localStorage.getItem('tsd_token')||'tsd-12345';
+const TOKEN=localStorage.getItem('tsd_token')||(window.WMS_TSD_TOKEN||'tsd-12345');
 const ME=JSON.parse(localStorage.getItem('tsd_me')||'null');
 if(ME)$('who').textContent=ME.fio;
 const uid=()=>ME?ME.id:null;
-let DOC=null,ITEM=null,PALLET=null,CROSS=false,MARKS=0,CHECK=null,CHZ=false,GATE='',PENDING_QTY=0,UNIT_COUNT=0;
+let DOC=null,ITEM=null,PALLET=null,CROSS=false,MARKS=0,CHZ=false,GATE='',PENDING_QTY=0,BATCH='',BATCHES=[];
+let SCREEN=''; // текущий экран — для горячих клавиш формы «Приёмка»
+let PALLET_OPENED=''; // SSCC, для которого уже открыто тарное место
+let QTY_POSTED=false; // количество по текущему шагу уже записано (защита от повторного POST)
+let ALLOW_EXCESS=false; // оператор подтвердил приёмку с излишком по строке
+// Серийные номера и дата производства (новое требование приёмки).
+let SER=[];            // отсканированные с/н текущей позиции
+let NOSERIAL=false;    // режим «Приёмка без с/н» (оператор ввёл «000»)
+let NEED_SERIAL=false; // по позиции включено сканирование с/н на входе
+let NEED_PDATE=false;  // по позиции включён контроль даты производства
+let PROD_DATE='';      // дата производства партии
+let REJECT_REASON='';  // причина отбраковки по строке
 function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',2600)}
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Признак «Приёмка без с/н» — в шапке ТСД.
+function noSerialBadge(on){const b=$('noserial');if(b)b.classList.toggle('on',!!on)}
 function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json','X-Tsd-Token':TOKEN},o.headers||{});return fetch('prihod.php'+p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN),o)}
 const post=(a,b)=>api('?action='+a,{method:'POST',body:JSON.stringify(b||{})}).then(r=>r.json().then(j=>({s:r.status,j})));
+const fmt=n=>Math.round((+n||0)*1000)/1000;
 function head(){$('dhead').textContent=DOC?('№ '+(DOC.doc_no||DOC.id)+' · '+(DOC.status||'')):'этап 1 · сканируй ворота'}
 // --- Навигация: стек кадров; кнопка «← Назад» и ESC возвращают на предыдущий кадр ---
 let NAV=[];
 function paintBack(){const b=$('navback');if(b)b.style.display=NAV.length>1?'block':'none'}
 function go(name,fn){NAV.push({name,fn});if(NAV.length>40)NAV.splice(0,NAV.length-40);paintBack();const r=fn();if(r&&r.catch)r.catch(()=>{})}
+function goReplace(name,fn){if(NAV.length)NAV[NAV.length-1]={name,fn};else NAV.push({name,fn});paintBack();const r=fn();if(r&&r.catch)r.catch(()=>{})}
 function back(){if(NAV.length>1){NAV.pop();paintBack();const r=NAV[NAV.length-1].fn();if(r&&r.catch)r.catch(()=>{})}}
 $('navback').onclick=()=>back();
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();back()}});
-// --- 1. Этап: сканируем ворота ---
-function scrGate(){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 1 · ВОРОТА</div><h2>Сканируй ворота</h2>
-<input id="gate" placeholder="Ячейка ворот (напр. 11)" autocomplete="off" value="${GATE}">
-<button id="go">Далее</button></div>`;
+document.addEventListener('keydown',e=>{
+  // ESC — назад на предыдущий шаг (работает на каждом экране)
+  if(e.key==='Escape'){e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();back();return}
+});
+// --- 1. Этап: сканируем ворота (это ячейка хранения из зоны «Приёмка») ---
+let CELLS=[]; // ячейки приёмки (DOK-01…DOK-10) из таблицы ячеек хранения
+async function scrGate(){
+ try{const r=await api('?action=receiving_cells');const j=await r.json();CELLS=j.cells||[]}catch(e){}
+ const list=CELLS.length?CELLS.map(c=>`<option value="${c}">`).join(''):'';
+ $('m').innerHTML=`<div class="card"><div class="step">ЭТАП 1 · ВОРОТА (ЯЧЕЙКА ПРИЁМКИ)</div><h2>Сканируй ворота</h2>
+<input id="gate" placeholder="Ячейка приёмки (напр. DOK-01)" autocomplete="off" value="${GATE}" list="cells">
+<datalist id="cells">${list}</datalist>
+<button id="go">Далее</button>
+<div class="mut">${CELLS.length?('Ячейки приёмки: '+CELLS.join(', ')):'Справочник ячеек приёмки недоступен'}</div></div>`;
 const e=$('gate');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();next()}};
 $('go').onclick=next;
-function next(){const v=e.value.trim();if(!v){toast('Отсканируй ворота');return}GATE=v;go('docs',scrDocs)}}
+function next(){const v=e.value.trim();if(!v){toast('Отсканируй ворота');return}
+ // Проверка: ворота = ячейка приёмки (зона «Приёмка» в таблице ячеек хранения).
+ if(CELLS.length&&!CELLS.some(c=>c.toUpperCase()===v.toUpperCase())){
+  toast('Ячейка приёмки не найдена: '+v+' · доступны: '+CELLS.join(', '));e.focus();return}
+ GATE=v;go('docs',scrDocs)}}
 // --- 2. Этап: документы с этими воротами + штрихкод документа ---
-async function scrDocs(){ITEM=null;PALLET=null;CROSS=false;DOC=null;head();
+async function scrDocs(){ITEM=null;PALLET=null;CROSS=false;DOC=null;BATCH='';BATCHES=[];SCREEN='docs';
+SER=[];NOSERIAL=false;NEED_SERIAL=false;NEED_PDATE=false;PROD_DATE='';REJECT_REASON='';noSerialBadge(false);head();
 const r=await api('?action=docs&gate='+encodeURIComponent(GATE));const j=await r.json();const rows=j.rows||[];
 $('m').innerHTML=`<div class="card"><div class="step">ЭТАП 2 · ДОКУМЕНТ · ВОРОТА ${GATE}</div><h2>Выбор документа поставки</h2>
 <input id="doccode" placeholder="Штрихкод документа (№ прихода)" autocomplete="off">
 <button id="docgo">Открыть по штрихкоду</button>
-<div class="mut">Документов с воротами ${GATE}: ${rows.length} · выбери Приход из списка или отсканируй штрихкод документа</div></div>`
-+(rows.length?'':`<div class="card amber"><div class="mut">С этими воротами документов в работе нет — отсканируй штрихкод документа выше.</div></div>`)
-+rows.map(t=>`<div class="doc" data-id="${t.id}"><b>${t.doc_no}</b> <span class="mut">${t.external_no||''} · ${t.supplier||''}</span><br><span class="mut">${t.warehouse||''} · ворота ${t.gate||'—'} · ${t.status}</span><div class="prog"><i style="width:${t.pct}%"></i></div><span class="mut">${t.fact_qty||0} / ${t.plan_qty||0}</span></div>`).join('');
+<div class="mut">Документов с воротами ${GATE}: ${rows.length} · показаны только непринятые · выбери Приход из списка или отсканируй штрихкод документа</div></div>`
++(rows.length?'':`<div class="card amber"><div class="mut">С этими воротами непринятых документов нет — отсканируй штрихкод документа выше.</div></div>`)
++rows.map(t=>`<div class="doc" data-id="${t.id}"><b>${t.doc_no}</b> <span class="mut">${t.external_no||''} · ${t.supplier||''}</span><br><span class="mut">${t.warehouse||''} · ворота ${t.gate||'—'} · ${t.status}</span><div class="prog"><i style="width:${t.pct}%"></i></div><span class="mut">${t.fact_qty||0} / ${t.plan_qty||0}</span><button class="ghost" style="width:auto;min-width:90px;padding:8px 12px;font-size:13px;margin-top:6px" data-info="${t.id}">Информация</button></div>`).join('');
 async function openDoc(id){
 // Ворота из этапа 1 проставляются в документ (в Поступлениях номер ворот обновляется).
 const {s,j:jj}=await post('start',{receipt_id:id,gate:GATE,user_id:uid()});
 if(jj.error){toast('Ошибка: '+jj.error);return}
 const st=await (await api('?action=state&receipt_id='+id)).json();DOC=st.head;head();go('ean',scrEan)}
 document.querySelectorAll('.doc').forEach(el=>el.onclick=()=>openDoc(+el.dataset.id));
+document.querySelectorAll('.doc [data-info]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();const id=btn.dataset.info;const t=rows.find(r=>r.id==+id);if(t){toast('Приход '+t.doc_no+': принято '+(t.fact_qty||0)+' / '+t.plan_qty+' шт ('+t.pct+'%)')}});
 const dc=$('doccode');dc.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();openByCode()}};
 $('docgo').onclick=openByCode;
 async function openByCode(){const v=dc.value.trim();if(!v){toast('Отсканируй штрихкод документа');return}
 const r=await api('?action=doc_by_code&code='+encodeURIComponent(v));const j=await r.json();
 if(!j.found){toast('Документ не найден среди документов в работе');return}
 toast('Приход '+j.doc.doc_no);openDoc(j.doc.id)}}
-// --- 4. Этап: вопрос «это кросс-док?» (пока оставляем, после скана товара) ---
-function scrCrossQ(ms){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 4 · КРОСС-ДОК?</div><h2>Это кросс-док?</h2>
+// --- 4. Этап: вопрос «это кросс-док?» ---
+function scrCrossQ(ms){SCREEN='crossq';$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 4 · КРОСС-ДОК?</div><h2>Это кросс-док?</h2>
 <div class="row2"><button class="amber" id="y">Да</button><button class="ghost" id="n">Нет</button></div></div>`;
 $('y').onclick=()=>{CROSS=true;go('cross',()=>scrCross(ms))};$('n').onclick=()=>{CROSS=false;go('measure',()=>scrMeasure(ms,afterMeasure))}}
-function scrCross(ms){$('m').innerHTML=`<div class="card"><div class="step">КРОСС-ДОК</div><h2>Паллет кросдок (SSCC KD)</h2>
+function scrCross(ms){SCREEN='cross';$('m').innerHTML=`<div class="card"><div class="step">КРОСС-ДОК</div><h2>Паллет кросдок (SSCC KD)</h2>
 <input id="sscc" placeholder="Сканируй SSCC паллета"><input id="cg" placeholder="Ячейка ворот" value="${GATE||(DOC.gate||'')}">
 <button id="go">Создать строку кросдока</button></div>`;
 $('sscc').focus();$('go').onclick=async()=>{const ss=$('sscc').value.trim();if(!ss){toast('Отсканируй SSCC');return}
 const {j}=await post('crossdock',{receipt_id:DOC.id,gate_id:$('cg').value.trim(),sscc:ss});
 if(j.error){toast('Ошибка: '+j.error);return}PALLET=ss;toast('Строка кросдока создана');go('measure',()=>scrMeasure(ms,afterMeasure))}}
-// --- Дальше после обмеров: марки (ЧЗ) или поштучные сканы ---
-function afterMeasure(){if(CHZ){MARKS=0;toast('Группа «Легкая промышленность» — сканирование Честного знака обязательно');go('marks',scrMarks)}else{UNIT_COUNT=0;go('units',scrUnits)}}
+// --- Дальше после обмеров: марки (ЧЗ) или сразу форма «Приёмка» (ввод количества вручную) ---
+function afterMeasure(){if(CHZ){MARKS=0;toast('Группа «Легкая промышленность» — сканирование Честного знака обязательно');go('marks',scrMarks)}else{go('accept',()=>scrAccept(0))}}
 // --- Скан EAN ---
-function scrEan(){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 3 · СКАН ТОВАРА</div><h2>Штрихкод товара (EAN-13)</h2>
+function scrEan(){SCREEN='ean';$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 3 · СКАН ТОВАРА</div><h2>Штрихкод товара (EAN-13)</h2>
 <input id="ean" placeholder="Скан..." autocomplete="off"><button id="go">Найти</button>
+<button class="ghost" id="all">Принять весь приход</button>
 <button class="ghost" id="fin">Завершить приёмку</button>
-<div class="mut">Паллета: ${PALLET||'—'}${CROSS?' · кросс-док':''}</div></div>`;
+<div class="mut">Паллета: ${PALLET||'—'}${CROSS?' · кросс-док':''}</div>
+<div class="mut">«Принять весь приход» — всё количество по документу без номеров паллет. Не сработает для товаров со сканированием с/н или Честного знака.</div></div>`;
 const e=$('ean');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();find()}};$('go').onclick=find;$('fin').onclick=()=>go('finish',scrFinish);
-async function find(){const v=e.value.trim();if(!v){toast('Отсканируй штрихкод');return}
-const r=await api('?action=ean&receipt_id='+DOC.id+'&ean='+encodeURIComponent(v));const j=await r.json();
-if(!j.found){go('unclaimed',()=>scrUnclaimed(v));return}ITEM=j.item;CHZ=!!j.chz_required;go('crossq',()=>scrCrossQ(j.measure))}}
+$('all').onclick=acceptAllReceipt;
+ async function find(){const v=e.value.trim();if(!v){toast('Отсканируй штрихкод');return}
+ const r=await api('?action=ean&receipt_id='+DOC.id+'&ean='+encodeURIComponent(v));const j=await r.json();
+ if(!j.found){go('unclaimed',()=>scrUnclaimed(v));return}ITEM=j.item;CHZ=!!j.chz_required;BATCHES=j.batches||[];
+ // Флаги позиции: сканирование с/н на входе и контроль даты производства.
+ const f=j.flags||{};NEED_SERIAL=!!f.serial_in;NEED_PDATE=!!f.prod_date;
+ SER=[];NOSERIAL=false;PROD_DATE='';REJECT_REASON='';ALLOW_EXCESS=false;noSerialBadge(false);
+ const nb=BATCHES.filter(b=>String(b.batch||'')!=='' && batchRest(b)>0.0001);
+ if(BATCHES.length>1&&nb.length>1){BATCH='';go('batch',()=>scrBatch(j.measure))}
+ else{BATCH=nb.length===1?String(nb[0].batch):(BATCHES.length===1?String(BATCHES[0].batch||''):'');go('crossq',()=>scrCrossQ(j.measure))}}}
+// «Принять весь приход»: остатки всех строк без паллет. Позиции с с/н и ЧЗ
+// принять оптом нельзя — backend вернёт их в skipped, их принимаем вручную.
+async function acceptAllReceipt(){
+ if(!DOC){toast('Сначала выбери документ');return}
+ if(!confirm('Принять весь приход в полном объёме? Товар будет принят без номеров паллет.'))return;
+ const {s,j}=await post('accept_all',{receipt_id:DOC.id,user_id:uid(),user_fio:ME?ME.fio:''});
+ if(j.error){toast('Ошибка: '+j.error);return}
+ const acc=j.accepted||[], skip=j.skipped||[];
+ if(skip.length){
+  $('m').innerHTML=`<div class="card amber"><div class="step">ПРИНЯТЬ ВЕСЬ ПРИХОД</div>
+  <h2>Принято оптом: ${acc.length} поз.</h2>
+  <div class="mut">Эти позиции нельзя принять автоматически: требуется сканирование с/н или Честного знака.</div>
+  <table class="mini"><tr><th>Артикул</th><th>Причина</th></tr>${skip.map(x=>`<tr><td>${esc(x.sku)}</td><td>${esc(x.reason)}</td></tr>`).join('')}</table>
+  <button id="allbk" class="green">Продолжить приёмку вручную</button></div>`;
+  $('allbk').onclick=()=>go('ean',scrEan);
+  toast('Принято: '+acc.length+', требуют ручной приёмки: '+skip.length);
+  return;
+ }
+ toast('Принят весь приход: позиций '+acc.length);
+ PALLET=null;scrNext();
+}
+function batchLabel(b){return b===''?'— без партии —':b}
+// --- Выбор партии поставщика: показываем только непринятые партии ---
+function batchRest(b){return Math.round(((+b.plan||0)-(+b.fact||0))*1000)/1000}
+function scrBatch(ms){SCREEN='batch';
+const pending=BATCHES.filter(b=>batchRest(b)>0.0001);
+if(!pending.length){$('m').innerHTML=`<div class="card green"><div class="step">ПАРТИИ · ${ITEM.sku}</div>
+<h2>Все партии приняты</h2><div class="mut">По позиции не осталось непринятых партий.</div>
+<button class="ghost" id="bk">Назад к сканированию</button></div>`;$('bk').onclick=()=>back();return}
+const rows=pending.map((b,i)=>{const pl=+b.plan||0,fa=+b.fact||0,rest=batchRest(b);
+return `<div class="doc" data-b="${i}"><b>Партия: ${batchLabel(b.batch)}</b><br><span class="mut">План: ${pl} · Принято: ${fa} · Осталось: ${rest}</span></div>`}).join('');
+$('m').innerHTML=`<div class="card"><div class="step">ПАРТИЯ ПОСТАВЩИКА · ${ITEM.sku}</div><h2>${ITEM.name||''}</h2>
+<div class="mut">Выбери непринятую партию. Осталось партий: ${pending.length}</div>${rows}</div>`;
+document.querySelectorAll('.doc').forEach(el=>el.onclick=()=>{const b=pending[+el.dataset.b];BATCH=String(b.batch||'');
+toast('Партия: '+batchLabel(BATCH));go('crossq',()=>scrCrossQ(ms))})}
 // --- Обмеры: новый товар -> ввести габариты; существующий -> показать + подтвердить ---
-function scrMeasure(ms,next){ms=ms||null;
+function scrMeasure(ms,next){SCREEN='measure';ms=ms||null;
 if(ms&&!ms.need&&ms.length_mm!=null){
 $('m').innerHTML=`<div class="card green"><div class="step">ЗАМЕРЫ ТОВАРА · ${ITEM.sku}</div>
 <h2>${ms.length_mm} × ${ms.width_mm} × ${ms.height_mm} мм · ${ms.weight_g} г</h2>
@@ -125,131 +214,371 @@ const {j}=await post('measure_save',b);
 if(j.error){toast('Ошибка: '+j.error);return}
 toast('Обмеры сохранены');scrMeasure({need:false,length_mm:j.length_mm,width_mm:j.width_mm,height_mm:j.height_mm,weight_g:j.weight_g},next)}}
 // --- Не числится: отклонить / не заявлен (шаг 3) ---
-function scrUnclaimed(ean){$('m').innerHTML=`<div class="card red"><div class="step">ТОВАР НЕ В ДОКУМЕНТЕ</div>
+function scrUnclaimed(ean){SCREEN='unclaimed';$('m').innerHTML=`<div class="card red"><div class="step">ТОВАР НЕ В ДОКУМЕНТЕ</div>
 <h2>${ean}</h2><div class="mut">ШК нет в документе. Отклонить или принять как «не заявленный»?</div>
 <button class="red" id="rej">Отклонить</button><button class="amber" id="acc">Принять как не заявленный</button></div>`;
 $('rej').onclick=()=>back();$('acc').onclick=async()=>{const {j}=await post('unclaimed',{receipt_id:DOC.id,ean,user_id:uid()});
-if(j.error){toast('Ошибка: '+j.error);return}ITEM={sku:j.sku,name:'Не заявлен: '+ean,code:ean,qty:0,unit:'шт',fact:0};CHZ=false;toast('Строка «не заявлен» создана');go('measure',()=>scrMeasure(null,afterMeasure))}}
-// --- 5. Этап: сканируем штрихкода товара (поштучно, немаркированные) ---
-function scrUnits(){UNIT_COUNT=0;const f=+ITEM.fact||0;
-$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 5 · ШТРИХКОДЫ · ${ITEM.sku}</div>
-<h2>${ITEM.name||''}</h2><div class="mut">Код: ${ITEM.code||'—'} · План: ${ITEM.qty||0} · Факт: ${f}</div>
-<div class="big" id="uc">Отсканировано: 0</div>
-<input id="uscan" placeholder="Сканируй штрихкод единицы" autocomplete="off">
-<button id="ugo">Сканировать</button>
-<div class="row2"><button class="ghost" id="uman">Ввести вручную</button><button id="unext">Далее →</button></div></div>`;
-const e=$('uscan');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();scanOne()}};
-$('ugo').onclick=scanOne;
-function scanOne(){const v=e.value.trim();if(!v){toast('Отсканируй штрихкод');return}
-if(v!==ITEM.sku&&v!==ITEM.code){toast('Уведомление: штрихкод не этого товара');return}
-UNIT_COUNT++;const mc=$('uc');if(mc)mc.textContent='Отсканировано: '+UNIT_COUNT;e.value='';e.focus()}
-$('uman').onclick=()=>go('qty',()=>scrQty(0));
-$('unext').onclick=()=>go('qty',()=>scrQty(UNIT_COUNT))}
-// --- 7. Этап: вводим количество штук (пустое поле по умолчанию) ---
-function scrQty(preset){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 7 · КОЛИЧЕСТВО · ${ITEM.sku}</div><h2>Количество</h2>
-<input id="q" value="${preset>0?preset:''}" placeholder="Введи количество" inputmode="numeric">
-<div class="mut">Отсканировано единиц: ${UNIT_COUNT}</div>
-<button id="go">Далее</button></div>`;
-$('q').focus();$('go').onclick=()=>{const q=+$('q').value||0;if(q<=0){toast('Введи количество');return}PENDING_QTY=q;go('pallet',scrPalletStep)}}
-// --- 8. Этап: сканируем тарное место ---
-function scrPalletStep(){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 8 · ТАРНОЕ МЕСТО · ${ITEM.sku}</div>
-<h2>Паллета / короб (SSCC)</h2><input id="sscc" placeholder="Сканируй тарное место" autocomplete="off" value="${PALLET||''}">
-<button id="go">Далее</button></div>`;
-$('sscc').focus();$('go').onclick=async()=>{const ss=$('sscc').value.trim();if(!ss){toast('Отсканируй тарное место');return}
-const {j}=await post('pallet_open',{receipt_id:DOC.id,sscc:ss});
-if(j.error){toast('Ошибка: '+j.error);return}PALLET=ss;go('quality',scrQuality)}}
-// --- 9. Этап: выбираем качество товара ---
-function scrQuality(){$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 9 · КАЧЕСТВО · ${ITEM.sku}</div>
-<h2>Качество товара? (${PENDING_QTY} шт)</h2>
-<div class="row2"><button class="green" id="g">Годный</button><button class="red" id="b">Брак</button></div>
+if(j.error){toast('Ошибка: '+j.error);return}ITEM={sku:j.sku,name:'Не заявлен: '+ean,code:ean,qty:0,unit:'шт',fact:0};CHZ=false;BATCH='';BATCHES=[];toast('Строка «не заявлен» создана');go('measure',()=>scrMeasure(null,afterMeasure))}}
+// --- 5. Этап: ввод количества штук — всегда вручную (скан ШК единицы убран) ---
+function batchBanner(){return BATCH!==''?`<div class="mut">Партия поставщика: <b>${BATCH}</b></div>`:(BATCHES.length?`<div class="mut">Партия: —</div>`:'')}
+// --- ФОРМА «ПРИЁМКА»: только количество, затем номер паллеты; излишек — после подтверждения ---
+// План/факт позиции (по выбранной партии, если партий несколько).
+async function factOf(){const q='?action=fact&receipt_id='+DOC.id+'&sku='+encodeURIComponent(ITEM.sku)+(BATCH!==''?'&batch='+encodeURIComponent(BATCH):'');
+ const j=await (await api(q)).json();
+ const multi=!!(j.batches&&j.batches.length>1),useB=multi&&BATCH!=='';
+ return{multi:multi,useB:useB,state:useB?(j.batch_state||j.state):j.state,
+ plan:useB?j.batch_plan:j.plan,fact:useB?j.batch_fact:j.fact,dev:useB?j.batch_dev:j.dev,batches:j.batches||[]}}
+// Состояние позиции: с/н, признак «без с/н», причина отбраковки, дата производства.
+async function posState(){try{
+ const q='?action=item_state&receipt_id='+DOC.id+'&sku='+encodeURIComponent(ITEM.sku)+(BATCH!==''?'&batch='+encodeURIComponent(BATCH):'');
+ const j=await (await api(q)).json();
+ return j&&!j.error?j:{serial_in:NEED_SERIAL,prod_date_required:NEED_PDATE,serials:[],no_serial:0,reject_reason:'',prod_date:PROD_DATE};
+ }catch(e){return{serial_in:NEED_SERIAL,prod_date_required:NEED_PDATE,serials:[],no_serial:0,reject_reason:'',prod_date:PROD_DATE}}}
+async function scrAccept(prefill){SCREEN='accept';ALLOW_EXCESS=false;
+const F=await factOf();
+if(F.multi&&BATCH===''){BATCHES=F.batches;go('batch',()=>scrBatch(null));return}
+const rest=Math.max(0,fmt(F.plan-F.fact)),done=F.state==='exact',undecl=F.plan<=0;
+const cls=undecl?'':(done?'green':(F.state==='excess'?'red':'amber'));
+const P=await posState();
+const needSer=NEED_SERIAL||!!P.serial_in,needPd=NEED_PDATE||!!P.prod_date_required;
+$('m').innerHTML=`<div class="card ${cls}"><div class="step">ЭТАП 5 · ПРИЁМКА · ${ITEM.sku}</div><h2>${ITEM.name||''}</h2>${batchBanner()}
+${needPd?`<input id="pd" type="date" value="${esc(P.prod_date||PROD_DATE||'')}" placeholder="Дата производства">`:''}
+<input id="q" value="${prefill>0?prefill:''}" placeholder="Количество к приёму" inputmode="numeric">
+<div class="mut">По документу: <b>${fmt(F.plan)}</b> шт · принято: <b>${fmt(F.fact)}</b> шт · осталось: <b>${rest}</b> шт</div>
+<button id="go" class="green">${needSer?'Далее: сканировать с/н':'Далее: номер паллеты'}</button>
+${needSer?`<div class="hint">По позиции включено сканирование серийных номеров: сначала количество, затем цикл с/н, затем номер паллеты (SSCC).</div>`:''}
+<div id="excwarn" class="hidden" style="border:2px solid #C62828;background:#FFEBEE;border-radius:12px;padding:12px;margin:10px 0">
+ <h2 style="color:#C62828;font-size:18px">Введено неправильное количество</h2>
+ <div id="excmsg" class="mut" style="color:#7A1C1C;font-size:15px"></div>
+ <div class="row2"><button id="excno" class="ghost">Нет</button><button id="excyes" class="red">Да, принять с излишком</button></div>
+</div>
+<button id="cx" class="ghost">Отменить принятый паллет</button>
+<div class="mut">Ячейка приёмки: <b>${DOC.gate||'—'}</b></div>
+<div class="hint">ESC — назад.</div>
+</div>`;
+async function proceedQty(q){
+ PROD_DATE=needPd?($('pd').value||''):'';
+ if(needPd&&!PROD_DATE){toast('Укажите дату производства');$('pd').focus();return}
+ if(needSer){PENDING_QTY=q;SER=[];NOSERIAL=false;noSerialBadge(false);REJECT_REASON='';go('serials',()=>scrSerials());return}
+ PENDING_QTY=q;QTY_POSTED=false;
+ if(CHZ){await acceptQty(q);return}
+ go('pallet',()=>scrPallet())}
+$('go').onclick=async()=>{const q=+$('q').value||0;if(q<=0){toast('Введи количество');$('q').focus();return}
+ if(F.plan>0 && q>rest+0.0001){
+  $('excmsg').innerHTML=`По документу ожидалось к приёму <b>${rest}</b> шт (всего ${fmt(F.plan)}), а введено <b>${fmt(q)}</b> шт.<br>Принять с излишком?`;
+  $('excwarn').classList.remove('hidden');
+  $('excyes').onclick=()=>{ALLOW_EXCESS=true;$('excwarn').classList.add('hidden');proceedQty(q)};
+  $('excno').onclick=()=>{$('excwarn').classList.add('hidden');$('q').focus();$('q').select()};
+  return;
+ }
+ proceedQty(q)};
+$('cx').onclick=()=>go('cancel',()=>scrPalletCancel())}
+// --- Экран ввода тарного места (SSCC) после количества --- с проверкой паллеты в остатке ---
+async function scrPallet(){SCREEN='pallet';
+$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 5б · ТАРНОЕ МЕСТО (SSCC) · ${ITEM.sku}</div>
+<h2>Сканируй паллету</h2>${batchBanner()}
+<div class="kv"><i>Принимаем</i><b>${fmt(PENDING_QTY)} шт</b></div>
+<div class="mut">Введи номер паллеты (SSCC). Если паллета уже есть в остатке — использовать нельзя.</div>
+<input id="sscc" placeholder="Номер паллеты (SSCC)" autocomplete="off">
+<button id="go" class="green">Далее: качество</button>
+<button class="ghost" id="bk">Назад</button></div>`;
+const e=$('sscc');e.focus();
+e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();acceptPallet()}};
+$('go').onclick=acceptPallet;
+$('bk').onclick=()=>back()}
+async function acceptPallet(){const ss=($('sscc').value||'').trim();
+ if(!ss){toast('Отсканируй тарное место (SSCC)');return}
+ // Проверка: паллета не должна быть в товарном запасе
+ const {s:rs,j:rj}=await post('pallet_check',{receipt_id:DOC.id,pallet:ss,user_id:uid()});
+ if(rj.error){toast('Ошибка: '+rj.error);return}
+ if(rj.pallet_busy){toast('Паллета не пустая, используйте другую');$('sscc').focus();return}
+ if(ss!==PALLET||PALLET_OPENED!==ss){const {j:pj}=await post('pallet_open',{receipt_id:DOC.id,sscc:ss});
+ if(pj.error){toast('Ошибка: '+pj.error);return}PALLET=ss;PALLET_OPENED=ss}
+ QTY_POSTED=false;
+ if(CHZ){await acceptQty(PENDING_QTY);return}
+ go('quality',scrQuality)}
+// --- ЭТАП 5а: цикл сканирования серийных номеров (после количества) ---
+function scrSerials(){SCREEN='serials';
+const need=Math.max(1,Math.round(PENDING_QTY||1));
+const done=SER.length;
+$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 5а · СЕРИЙНЫЕ НОМЕРА · ${ITEM.sku}</div>
+<h2>Сканируй серийные номера</h2>${batchBanner()}
+<div class="kv"><i>Отсканировано</i><b id="sdone">${done} из ${need}</b></div>
+<div class="mut">Количество к приёму: <b>${fmt(PENDING_QTY)}</b> шт · цикл до ${need}</div>
+<input id="sn" placeholder="Серийный номер" autocomplete="off">
+<button id="add">Добавить</button>
+<div class="list" id="sl">${serialsList()}</div>
+<button id="nx" class="green" ${done>=need?'':'disabled'}>Далее: сканировать паллету</button>
+<button id="ns" class="amber">Приёмка без с/н</button>
+<div class="hint">Каждый с/н — один штучный товар. Если с/н отсканировать невозможно — нажми
+<span class="kbd">Приёмка без с/н</span>, введи в поле <span class="kbd">000</span> и нажми «Добавить»: позиция примется без с/н,
+а в шапке появится признак «Приёмка без с/н».</div></div>`;
+const e=$('sn');e.focus();
+e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();addSerial()}};
+$('add').onclick=addSerial;
+$('ns').onclick=()=>{toast('Введите 000 в поле серийного номера и нажмите «Добавить»');e.value='';e.focus()};
+const nx=$('nx');if(nx)nx.onclick=()=>{if(SER.length<need){toast('Отсканировано '+SER.length+' из '+need+' серийных номеров');return}go('pallet',()=>scrPalletScan())}}
+function serialsList(){if(!SER.length)return '<div class="mut">Серийные номера не отсканированы</div>';
+ return SER.map(s=>`<div>✓ ${esc(s)}</div>`).join('')}
+async function addSerial(){const e=$('sn');const v=(e.value||'').trim();
+ if(!v){toast('Отсканируй серийный номер');return}
+ if(v==='000'){ // «000» — серийные номера отсканировать невозможно
+  NOSERIAL=true;SER=[];noSerialBadge(true);toast('Приёмка без с/н — укажите причину отбраковки');
+  go('pallet',()=>scrPalletScan());return}
+ if(SER.indexOf(v)>=0){toast('Серийный номер уже добавлен');e.value='';e.focus();return}
+ const r=await api('?action=serial_check&receipt_id='+DOC.id+'&sku='+encodeURIComponent(ITEM.sku)+'&serial='+encodeURIComponent(v));
+ if(!r.ok){let msg='Серийный номер уже отсканирован';try{const jj=await r.json();if(jj&&jj.error)msg=jj.error}catch(e){}
+  toast(msg);e.value='';e.focus();return}
+ SER.push(v);e.value='';e.focus();
+ goReplace('serials',()=>scrSerials())}
+// --- ЭТАП 5б: тарное место (SSCC) после сканирования с/н ---
+async function scrPalletScan(){SCREEN='pallet';
+$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 5б · ТАРНОЕ МЕСТО (SSCC) · ${ITEM.sku}</div>
+<h2>Сканируй паллету</h2>${batchBanner()}
+${NOSERIAL?`<div class="badge on">Приёмка без с/н</div>`:''}
+<div class="kv"><i>Принимаем</i><b>${fmt(PENDING_QTY)} шт</b></div>
+<div class="kv"><i>Серийных номеров</i><b>${NOSERIAL?'нет (режим «000»)':SER.length}</b></div>
+<input id="sscc" placeholder="Номер паллеты (SSCC)" autocomplete="off">
+${NOSERIAL?`<input id="rr" placeholder="Причина приёмки без с/н" value="${esc(REJECT_REASON||'')}">`:''}
+<button id="go" class="green">Принять</button>
+<button class="ghost" id="bk">Назад</button></div>`;
+const e=$('sscc');e.focus();
+e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();acceptWithSerials()}};
+$('go').onclick=acceptWithSerials;
+$('bk').onclick=()=>back()}
+async function acceptWithSerials(){const ss=($('sscc').value||'').trim();
+ if(!ss){toast('Отсканируй тарное место (SSCC)');return}
+ REJECT_REASON=NOSERIAL?(($('rr')||{value:''}).value||'').trim():'';
+ if(NOSERIAL&&!REJECT_REASON){toast('Укажите причину отбраковки (приёмка без с/н)');$('rr').focus();return}
+ if(ss!==PALLET||PALLET_OPENED!==ss){const {j:pj}=await post('pallet_open',{receipt_id:DOC.id,sscc:ss});
+  if(pj.error){toast('Ошибка: '+pj.error);return}PALLET=ss;PALLET_OPENED=ss}
+ QTY_POSTED=false;
+ if(CHZ){await acceptQty(PENDING_QTY);return}
+ go('quality',scrQuality)}
+// --- Строки документа: список позиций с признаком «причина отбраковки» ---
+async function scrLines(){SCREEN='lines';
+const r=await api('?action=lines&receipt_id='+DOC.id);const j=await r.json().catch(()=>({}));
+const rows=j.rows||[];
+const tr=rows.map(x=>{const b=String(x.batch||'');
+ return `<tr><td>${x.line_no||''}</td><td>${esc(x.sku)}</td><td>${esc(x.name)}</td><td>${fmt(x.plan_qty)}</td><td>${fmt(x.fact_qty)}</td>
+<td>${x.no_serial?'<span class="mini-badge">без с/н</span>':(x.scanned?('<span class="mini-badge ok">'+x.scanned+' с/н</span>'):'—')}</td>
+<td>${x.prod_date?esc(x.prod_date):''}</td>
+<td><input data-sku="${esc(x.sku)}" data-b="${esc(b)}" class="rr" value="${esc(x.reject_reason||'')}" placeholder="Причина отбраковки">
+<button class="ghost small" data-save="${esc(x.sku)}" data-b="${esc(b)}" style="font-size:13px;padding:8px;min-height:36px">Сохранить</button></td></tr>`}).join('');
+$('m').innerHTML=`<div class="card"><div class="step">СТРОКИ ДОКУМЕНТА · ${DOC?DOC.doc_no:''}</div>
+<h2>Позиции поступления</h2>
+<div class="tw"><table class="mini"><tr><th>№</th><th>Артикул</th><th>Наименование</th><th>План</th><th>Факт</th><th>с/н</th><th>Дата пр-ва</th><th>Причина отбраковки</th></tr>${tr}</table></div>
+<div class="mut">Причина отбраковки — комментарий по строке (например «с/н нечитаемы, принято без с/н»). Правь и сохраняй прямо здесь.</div>
+<button class="ghost" id="bk">Назад</button></div>`;
+document.querySelectorAll('[data-save]').forEach(b=>b.onclick=async()=>{
+ const sku=b.dataset.save,inp=document.querySelector('input[data-sku="'+sku+'"]');
+ const {j:jj}=await post('item_meta',{receipt_id:DOC.id,sku:sku,reject_reason:inp?inp.value.trim():'',user_id:uid()});
+ if(jj.error){toast('Ошибка: '+jj.error);return}
+ toast('Причина отбраковки сохранена')});
+$('bk').onclick=()=>back()}
+// --- Отмена принятого паллета: сканируем паллету, отменяем (по партии, если указана) ---
+async function scrPalletCancel(){SCREEN='cancel';
+$('m').innerHTML=`<div class="card red"><div class="step">ОТМЕНА ПАЛЛЕТЫ</div><h2>Сканируй паллету</h2>
+<div class="mut">Принятая паллета будет снята с приёмки. Если выбрана партия — отменится только она.</div>
+<input id="cs" placeholder="SSCC паллеты" autocomplete="off">
+<button id="cg">Найти паллету</button>
+<button class="ghost" id="bk">Назад к приёмке</button></div>`;
+const e=$('cs');e.focus();
+e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();findPal()}};
+$('cg').onclick=findPal;$('bk').onclick=()=>back();
+async function findPal(){const ss=e.value.trim();if(!ss){toast('Отсканируй паллету');return}
+const r=await api('?action=pallet_info&receipt_id='+DOC.id+'&sscc='+encodeURIComponent(ss));const j=await r.json();
+if(j.error){toast(j.error);return}
+if(!j.rows||!j.rows.length){toast('Паллета '+ss+' в приёмке не найдена');return}
+const opts=j.batches.map(b=>`<option value="${b}" ${b===BATCH?'selected':''}>${batchLabel(b)}</option>`).join('');
+const rows=j.rows.map(x=>`<tr><td>${x.sku}</td><td>${batchLabel(x.batch)}</td><td>${x.qty}</td></tr>`).join('');
+$('m').innerHTML=`<div class="card red"><div class="step">ОТМЕНА ПАЛЛЕТЫ · ${ss}</div><h2>Отменить приёмку?</h2>
+<div class="mut">В паллете принято ${j.total} шт. Выбери партию — если указана, отменится только она.</div>
+<select id="cb"><option value="">Вся паллета</option>${opts}</select>
+<table class="mini"><tr><th>Артикул</th><th>Партия</th><th>Принято</th></tr>${rows}</table>
+<button id="ok" class="red">Отменить паллету</button>
+<button class="ghost" id="bk2">Назад</button></div>`;
+$('ok').onclick=async()=>{const b=$('cb').value;
+const {s,j:jj}=await post('pallet_cancel',{receipt_id:DOC.id,sscc:ss,batch:b,user_id:uid()});
+if(jj.error){toast('Ошибка: '+jj.error);return}
+toast('Паллета отменена: снято '+fmt(jj.cancelled_qty)+' шт');
+goReplace('ean',scrEan)};
+$('bk2').onclick=()=>back()}}
+// Записать принятое количество (единый вход для марок и обычного товара).
+// После записи возвращаемся на форму сканирования штрихкода (этап 3).
+async function acceptQty(q,allowExcess){const ae=allowExcess===true||ALLOW_EXCESS;
+const {s,j}=await post('qty',{receipt_id:DOC.id,sku:ITEM.sku,qty:q,pallet:PALLET,batch:BATCH,user_id:uid(),user_fio:ME?ME.fio:'',
+ serials:SER,no_serial:NOSERIAL?1:0,reject_reason:REJECT_REASON,prod_date:PROD_DATE,allow_excess:ae?1:0});
+if(j.error){if(j.need_batch){BATCHES=j.batches||BATCHES;toast('Выбери партию');go('batch',()=>scrBatch(null));return}
+if(j.need_serials){toast(j.error);go('serials',()=>scrSerials());return}
+if(j.need_prod_date){toast(j.error);go('accept',()=>scrAccept(q));return}
+if(j.need_reject_reason){toast(j.error);go('pallet',()=>scrPalletScan());return}
+if(j.need_excess){
+ const rem=(j.remaining!=null?j.remaining:0),ent=(j.entered!=null?j.entered:q);
+ if(confirm('Введено '+ent+' шт, а по документу ожидалось '+rem+' шт.\nПринять с излишком?')){ALLOW_EXCESS=true;return acceptQty(q,true)}
+ toast('Количество не принято — исправьте количество');go('accept',()=>scrAccept(ent));return}
+toast('Ошибка: '+j.error);return}
+QTY_POSTED=true;ALLOW_EXCESS=false;
+SER=[];NOSERIAL=false;noSerialBadge(false);PROD_DATE='';REJECT_REASON='';
+toast((j.excess?'Принято с излишком: ':'Принято: ')+fmt(q)+' шт');
+goReplace('ean',scrEan)}
+// --- Ветка «НЕДОСТАЧА» (клавиша 2): явная фиксация расхождения ---
+async function scrShortage(){SCREEN='shortage';
+const F=await factOf();
+const rest=Math.max(0,fmt(F.plan-F.fact));
+if(rest<=0){$('m').innerHTML=`<div class="card green"><div class="step">НЕДОСТАЧИ НЕТ · ${ITEM.sku}</div>
+<h2>${fmt(F.fact)} / ${fmt(F.plan)}</h2>
+<div class="mut">Строка принята полностью — недоставать нечего. Если товар лишний — используй «Излишки (3)».</div>
+<button class="ghost" id="bk">Назад к приёмке</button></div>`;$('bk').onclick=()=>back();return}
+$('m').innerHTML=`<div class="card amber"><div class="step">НЕДОСТАЧА · ${ITEM.sku}</div><h2>${fmt(F.fact)} / ${fmt(F.plan)}</h2>
+<div class="mut">Недостача <b>${rest}</b> шт. Фиксация создаст «Акт о недостаче» по позиции${BATCH!==''?' (партия '+BATCH+')':''} и закроет строку.</div>
+<button id="ok" class="amber">Зафиксировать недостачу</button>
+<button class="ghost" id="bk">Назад к приёмке</button>
+<div class="hint">ESC — назад. Если товар ещё приедет — вернись и прими остаток, недостача пока не зафиксирована.</div></div>`;
+$('ok').onclick=async()=>{const {s,j}=await post('fix',{receipt_id:DOC.id,sku:ITEM.sku,batch:BATCH,pallet:PALLET,mode:'shortage',user_id:uid()});
+if(j.error){toast('Ошибка: '+j.error);return}
+toast('Недостача зафиксирована: '+fmt(j.dev));
+goReplace('confirm',scrConfirm)};
+$('bk').onclick=()=>back()}
+// --- Ветка «ИЗЛИШКИ» (клавиша 3): подтверждение пересчётом, можно указывать несколько раз ---
+async function scrExcess(proposed){SCREEN='excess';
+const F=await factOf();
+const total0=proposed!=null?fmt(proposed):fmt(F.fact);
+const over=Math.max(0,fmt(total0-F.plan));
+const notFull=fmt(F.fact)<fmt(F.plan);
+const warn=notFull
+?`Сначала прими заявленное количество по строке: принято <b>${fmt(F.fact)}</b>, по документу <b>${fmt(F.plan)}</b> шт. Излишек можно зафиксировать, когда строка принята по документу.`
+:(over>0
+?`ВНИМАНИЕ: вы приняли <b>${total0}</b> шт, а по документу в партии <b>${batchLabel(BATCH)}</b> — <b>${fmt(F.plan)}</b> шт. Излишек <b>${over}</b> шт — подтверди пересчётом, будет сформирован «Акт об излишке».`
+:`Принято <b>${fmt(F.fact)}</b> / по документу <b>${fmt(F.plan)}</b> шт. Если приёмка лишняя — вбей фактическое количество после пересчёта.`);
+$('m').innerHTML=`<div class="card red"><div class="step">ИЗЛИШКИ · ${ITEM.sku}</div><h2>${total0} / ${fmt(F.plan)}</h2>
+<div class="mut">${warn}</div>
+<input id="tt" value="${total0}" inputmode="numeric" placeholder="Итого принято (после пересчёта)">
+<button id="ok" class="red">Подтвердить излишек</button>
+<button class="ghost" id="bk">Назад к приёмке</button>
+<div class="hint">Излишки можно указывать несколько раз — акт обновляется, а не дублируется. ESC — назад.</div></div>`;
+$('ok').onclick=async()=>{const t=+$('tt').value||0;if(t<=0){toast('Введи количество');return}
+const {s,j}=await post('fix',{receipt_id:DOC.id,sku:ITEM.sku,batch:BATCH,pallet:PALLET,mode:'excess',total_qty:t,user_id:uid()});
+if(j.error){toast('Ошибка: '+j.error);return}
+toast(j.dev>0?('Излишек подтверждён: +'+fmt(j.dev)):('Количество подтверждено: '+fmt(j.fact)));
+goReplace('accept',()=>scrAccept(0))};
+$('bk').onclick=()=>back()}
+// --- Этап: выбираем качество товара ---
+function scrQuality(){SCREEN='quality';$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 6 · КАЧЕСТВО · ${ITEM.sku}</div>
+<h2>Качество товара? (${PENDING_QTY} шт)</h2>${batchBanner()}
+<div class="mut">По умолчанию товар принимается с качеством «новый». Если брак — нажми «Брак».</div>
+<div class="row2"><button class="green" id="g">Годный (новый)</button><button class="red" id="b">Брак</button></div>
 <div id="rz" class="hidden"><select id="rs"><option value="">Причина брака...</option><option>бой</option><option>мятая упаковка</option></select><button class="red" id="bok">Записать брак</button></div></div>`;
-$('g').onclick=async()=>{
-const {j}=await post('qty',{receipt_id:DOC.id,sku:ITEM.sku,qty:PENDING_QTY,pallet:PALLET,user_id:uid()});
-if(j.error){toast('Ошибка: '+j.error);return}go('check',scrCheck)};
+$('g').onclick=async()=>{if(QTY_POSTED){toast('Количество уже принято');return}await acceptQty(PENDING_QTY)};
 $('b').onclick=()=>$('rz').classList.remove('hidden');
 $('bok').onclick=async()=>{const rs=$('rs').value;if(!rs){toast('Выбери причину брака');return}
-const {j}=await post('qty',{receipt_id:DOC.id,sku:ITEM.sku,qty:PENDING_QTY,quality:'defect',reason:rs,pallet:PALLET,user_id:uid()});
-if(j.error){toast('Ошибка: '+j.error);return}toast('Брак записан: '+rs);go('check',scrCheck)}}
+const sendDefect=async(allowExcess)=>{const {s,j}=await post('qty',{receipt_id:DOC.id,sku:ITEM.sku,qty:PENDING_QTY,quality:'defect',reason:rs,pallet:PALLET,batch:BATCH,user_id:uid(),user_fio:ME?ME.fio:'',allow_excess:allowExcess?1:0});return {s,j}};
+let r=await sendDefect(ALLOW_EXCESS);
+if(r.j.need_excess){
+ const rem=(r.j.remaining!=null?r.j.remaining:0),ent=(r.j.entered!=null?r.j.entered:PENDING_QTY);
+ if(!confirm('Введено '+ent+' шт, а по документу ожидалось '+rem+' шт.\nПринять с излишком?')){toast('Количество не принято — исправьте количество');go('accept',()=>scrAccept(ent));return}
+ ALLOW_EXCESS=true;r=await sendDefect(true);
+}
+const j=r.j;
+if(j.error){if(j.need_batch){BATCHES=j.batches||BATCHES;toast('Выбери партию');go('batch',()=>scrBatch(null));return}toast('Ошибка: '+j.error);return}
+ALLOW_EXCESS=false;toast('Брак записан: '+rs);goReplace('ean',scrEan)}}
 // --- Марки DataMatrix, цикл (шаги 6-9) ---
-function scrMarks(){$('m').innerHTML=`<div class="card"><div class="step">МАРКИ · ${ITEM.sku} · в буфере: <b id="mc">${MARKS}</b></div>
-<h2>Скан DataMatrix</h2><input id="mk" placeholder="Марка..." autocomplete="off">
+function scrMarks(){SCREEN='marks';$('m').innerHTML=`<div class="card"><div class="step">МАРКИ · ${ITEM.sku} · в буфере: <b id="mc">${MARKS}</b></div>
+<h2>Скан DataMatrix</h2>${batchBanner()}<input id="mk" placeholder="Марка..." autocomplete="off">
 <div class="row2"><button class="green" id="g">Годный</button><button class="amber" id="u">Нечитаемая</button></div>
 <button class="red" id="b">Брак</button>
 <div id="rz" class="hidden"><select id="rs"><option value="">Причина...</option><option>бой</option><option>мятая упаковка</option><option>нечитаемая марка</option></select><button class="red" id="bok">Записать брак</button></div>
 <button class="ghost" id="sscc">Принять целиком по SSCC (без вскрытия)</button>
-<button class="ghost" id="done">Все марки (${MARKS}→ сверка)</button></div>`;
+<button class="ghost" id="done">Все марки (${MARKS}→ приёмка)</button></div>`;
 const e=$('mk');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();send('good')}};
 $('g').onclick=()=>send('good');$('u').onclick=()=>send('unreadable');
 $('b').onclick=()=>$('rz').classList.remove('hidden');$('bok').onclick=()=>send('defect');
 $('sscc').onclick=()=>go('ssccitems',scrSsccItems);
-// --- Вложенность SSCC целиком без вскрытия (шаг 5 схемы: приём всей вложенности по SSCC) ---
-function scrSsccItems(){let rows=[{sku:ITEM.sku,qty:1}];
-function draw(){$('m').innerHTML=`<div class="card"><div class="step">SSCC ${PALLET} · ВЛОЖЕННОСТЬ</div><h2>Состав паллета</h2>
+$('done').onclick=()=>{if(!MARKS){if(CHZ){toast('Отсканируй хотя бы одну марку Честного знака');return}if(!confirm('Ни одной годной марки. К приёмке?'))return}go('accept',()=>scrAccept(MARKS))};
+async function send(q){const mk=e.value.trim();if(!mk){toast('Отсканируй марку');return}
+const b={receipt_id:DOC.id,sku:ITEM.sku,mark:mk,quality:q,batch:BATCH,user_id:uid()};
+if(q==='defect'){b.reason=$('rs').value;if(!b.reason){toast('Выбери причину брака');return}}
+const {s,j}=await post('mark',b);
+if(j.error){if(j.need_batch){BATCHES=j.batches||BATCHES;toast('Выбери партию');go('batch',()=>scrBatch(null));return}toast('Ошибка: '+j.error);return}
+if(q==='good'){MARKS++;toast('Марка в буфере ('+MARKS+')')}else if(q==='unreadable'){toast('Нечитаемая — отложи товар')}else{toast('Брак записан')}
+scrMarksRefresh();async function scrMarksRefresh(){const mc=$('mc');if(mc)mc.textContent=MARKS;e.value='';e.focus();
+const d=$('done');if(d)d.textContent=`Все марки (${MARKS}→ приёмка)`}}}
+// --- Вложенность SSCC целиком без вскрытия (шаг 5 схемы) ---
+function scrSsccItems(){SCREEN='ssccitems';let rows=[{sku:ITEM.sku,qty:1,batch:BATCH}];
+function draw(){$('m').innerHTML=`<div class="card"><div class="step">SSCC ${PALLET} · ВЛОЖЕННОСТЬ</div><h2>Состав паллета</h2>${batchBanner()}
 <div id="rw">${rows.map((r,i)=>`<div class="row2"><input data-i="${i}" data-k="sku" value="${r.sku}"><input data-i="${i}" data-k="qty" value="${r.qty}" inputmode="numeric"></div>`).join('')}</div>
 <button class="ghost" id="add">+ строка</button><button id="go">Принять вложенность</button></div>`;
 document.querySelectorAll('#rw input').forEach(inp=>inp.onchange=()=>{rows[+inp.dataset.i][inp.dataset.k]=inp.dataset.k==='qty'?+inp.value||0:inp.value});
-$('add').onclick=()=>{rows.push({sku:'',qty:1});draw()};$('go').onclick=async()=>{
-const items=rows.filter(r=>r.sku&&r.qty>0);if(!items.length){toast('Заполни состав');return}
-const {j}=await post('sscc_accept',{receipt_id:DOC.id,sscc:PALLET,items,user_id:uid()});
-if(j.error){toast('Ошибка: '+j.error);return}toast('Вложенность принята');scrNext()}}
-draw()}
-$('done').onclick=()=>{if(!MARKS){if(CHZ){toast('Отсканируй хотя бы одну марку Честного знака');return}if(!confirm('Ни одной годной марки. К сверке?'))return}go('check',scrCheck)};
-async function send(q){const mk=e.value.trim();if(!mk){toast('Отсканируй марку');return}
-const b={receipt_id:DOC.id,sku:ITEM.sku,mark:mk,quality:q,user_id:uid()};
-if(q==='defect'){b.reason=$('rs').value;if(!b.reason){toast('Выбери причину брака');return}}
-const {s,j}=await post('mark',b);
+$('add').onclick=()=>{rows.push({sku:'',qty:1,batch:BATCH});draw()};$('go').onclick=async()=>{
+const items=rows.filter(r=>r.sku&&r.qty>0).map(r=>({sku:r.sku,qty:r.qty,batch:r.batch||BATCH}));if(!items.length){toast('Заполни состав');return}
+const send=async(allowExcess)=>{const {j}=await post('sscc_accept',{receipt_id:DOC.id,sscc:PALLET,items,user_id:uid(),user_fio:ME?ME.fio:'',allow_excess:allowExcess?1:0});return j};
+let j=await send(false);
+if(j.need_excess){
+ const rem=(j.remaining!=null?j.remaining:0),ent=(j.entered!=null?j.entered:0);
+ if(!confirm('Введено '+ent+' шт, а по документу ожидалось '+rem+' шт.\nПринять с излишком?'))return;
+ j=await send(true);
+}
 if(j.error){toast('Ошибка: '+j.error);return}
-if(q==='good'){MARKS++;toast('Марка в буфере ('+MARKS+')')}else if(q==='unreadable'){toast('Нечитаемая — отложи товар')}else{toast('Брак записан')}
-scrMarksRefresh();async function scrMarksRefresh(){const mc=$('mc');if(mc)mc.textContent=MARKS;e.value='';e.focus();
-const d=$('done');if(d)d.textContent=`Все марки (${MARKS}→ сверка)`}}}
-// --- Сверка факт vs документ (ромб) ---
-async function scrCheck(){const r=await api('?action=fact&receipt_id='+DOC.id+'&sku='+encodeURIComponent(ITEM.sku));CHECK=await r.json();
-const st=CHECK.state,cls=st==='exact'?'green':(st==='shortage'?'amber':'red');
-const txt=st==='exact'?`СОШЛОСЬ · ${CHECK.fact} / ${CHECK.plan}`:(st==='shortage'?`НЕДОСТАЧА · факт ${CHECK.fact} / план ${CHECK.plan} — довнеси или прими с расхождением`:`ИЗЛИШЕК/ПЕРЕСОРТ · факт ${CHECK.fact} / план ${CHECK.plan} — блокировка, отложи товар`);
-$('m').innerHTML=`<div class="card ${cls}"><div class="step">СВЕРКА · ${ITEM.sku}</div><h2>${txt}</h2>
-${st==='shortage'?'<button id="more">Ввести ещё количество</button><button id="fix" class="amber">Принять с недостачей</button><div class="mut">Принимай по несколько штук, пока не дойдёшь до плана. «Принять с недостачей» — завершить позицию и создать акт о недостаче.</div>':''}
-${st==='excess'?'<h2>Пересчитай товар и вбей количество</h2><input id="rc" value="'+CHECK.fact+'" inputmode="decimal"><button id="fix">Принять с излишками</button><div class="mut">Этим ты подтвердишь излишек и создашь акт о нём.</div>':''}
-${st==='exact'?'<button id="fix">Зафиксировать</button>':''}</div>`;
-const mo=$('more');if(mo)mo.onclick=()=>{if(CHZ){scrMarks()}else{scrQty()}};
-$('fix').onclick=async()=>{const b={receipt_id:DOC.id,sku:ITEM.sku,pallet:PALLET,user_id:uid()};
-if(st==='excess'){const v=+$('rc').value||0;if(v<=0){toast('Вбей количество после пересчета');return}b.recount_qty=v}
-const {j}=await post('fix',b);
-if(j.error){toast('Ошибка: '+j.error);return}CHECK=j;go('confirm',scrConfirm)}}
-// --- Подтвердить позицию + закрыть паллету (шаги 11-12) ---
-function scrConfirm(){$('m').innerHTML=`<div class="card"><div class="step">ФАКТ ${CHECK.fact} / ${CHECK.plan}</div>
-<h2>Подтверди позицию</h2><button id="cf">Подтвердить позицию</button>
-<div id="nx" class="hidden"><h2>Тарное место ${PALLET||'—'}</h2><input id="w" placeholder="Вес, кг (необязательно)" inputmode="decimal">
-<button id="pc">Закрыть тарное место</button></div></div>`;
-$('cf').onclick=async()=>{const {j}=await post('confirm',{receipt_id:DOC.id,sku:ITEM.sku,user_id:uid()});
-if(j&&j.error){toast('Ошибка: '+j.error);return}$('nx').classList.remove('hidden');toast('Позиция подтверждена')};
-$('pc').onclick=async()=>{if(!PALLET){scrNext();return}
-const {j}=await post('pallet_close',{receipt_id:DOC.id,sscc:PALLET,weight:+$('w').value||0});
-if(j.error){toast('Ошибка: '+j.error);return}toast('Паллета закрыта: '+j.qty_total+' шт');PALLET=null;scrNext()}}
+toast('Вложенность принята');if(typeof scrNextSmart==='function'){scrNextSmart()}else{scrNext()}}}
+draw()}
+// --- Подтвердить позицию + закрыть тарные места ---
+async function scrConfirm(){SCREEN='confirm';
+const F=await factOf();const cfPlan=F.plan,cfFact=F.fact;
+// Открытые тарные места документа (приёмка идёт по SSCC — их может быть несколько).
+const st=await (await api('?action=state&receipt_id='+DOC.id)).json();
+const openPal=(st.pallets||[]).filter(p=>p.status!=='Закрыта');
+const palTxt=openPal.length?openPal.map(p=>`${p.sscc} (${p.qty_total||0} шт)`).join(', '):(PALLET||'—');
+$('m').innerHTML=`<div class="card"><div class="step">ФАКТ ${fmt(cfFact)} / ${fmt(cfPlan)}${BATCH!==''?' · ПАРТИЯ '+BATCH:''}</div>
+<h2>Подтверди ${BATCH!==''?'партию':'позицию'}</h2><button id="cf">Подтвердить ${BATCH!==''?'партию':'позицию'}</button>
+<div id="nx" class="hidden"><h2>Тарные места: ${palTxt}</h2><input id="w" placeholder="Вес, кг (необязательно)" inputmode="decimal">
+<button id="pc">Закрыть тарные места</button></div></div>`;
+$('cf').onclick=async()=>{const {j}=await post('confirm',{receipt_id:DOC.id,sku:ITEM.sku,batch:(BATCH||''),user_id:uid()});
+if(j&&j.error){toast('Ошибка: '+j.error);return}$('nx').classList.remove('hidden');toast('Партия/позиция подтверждена')};
+$('pc').onclick=async()=>{const list=openPal.length?openPal.map(p=>p.sscc):(PALLET?[PALLET]:[]);
+for(const ss of list){const {j}=await post('pallet_close',{receipt_id:DOC.id,sscc:ss,weight:+$('w').value||0});
+if(j.error){toast('Ошибка: '+j.error);return}}
+if(list.length)toast('Тарные места закрыты: '+list.length);PALLET=null;scrNextSmart()}}
+// После партии того же SKU с остатком — предложить следующую партию,
+// а не прыгать сразу на скан другого штрихкода (иначе теряется контекст SSCC/партии).
+async function scrNextSmart(){try{
+if(ITEM&&ITEM.sku){const r=await api('?action=fact&receipt_id='+DOC.id+'&sku='+encodeURIComponent(ITEM.sku));const jj=await r.json();
+BATCHES=jj.batches||BATCHES;
+const unf=(BATCHES||[]).filter(b=>Math.round(((+b.plan||0)-(+b.fact||0))*1000)/1000>0);
+if(BATCHES.length>1&&unf.length>0){BATCH='';toast('Партия принята. Осталось партий по '+ITEM.sku+': '+unf.length+' — выбери следующую');go('batch',()=>scrBatch(null));return}}
+}catch(e){}
+scrNext()}
 // --- Куда дальше — решает система: осталось что принимать -> скан штрихкода,
 // всё принято -> автозакрытие (кросс-док закрывается вручную через scrFinish) ---
-async function scrNext(){const st=await (await api('?action=state&receipt_id='+DOC.id)).json();
-let rem=0;for(const i of (st.items||[])){rem+=Math.max(0,(+i.qty||0)-(+i.fact||0))}
+async function scrNext(){SCREEN='next';const st=await (await api('?action=state&receipt_id='+DOC.id)).json();
+let rem=0;
+// Считаем по позициям-партиям: закрытая позиция (принята полностью или с зафиксированным
+// расхождением — недостача/излишек) больше не требует приёмки.
+if(st.scopes&&st.scopes.length){for(const s of st.scopes){if(s.closed)continue;rem+=Math.max(0,(+s.plan||0)-(+s.fact||0))}}
+else{for(const i of (st.items||[])){rem+=Math.max(0,(+i.qty||0)-(+i.fact||0))}}
 rem=Math.round(rem*1000)/1000;
 if(rem>0){toast('Осталось принять: '+rem+' шт — следующий товар');go('ean',scrEan);return}
 if(CROSS){go('finish',scrFinish);return}
 const {j}=await post('close',{receipt_id:DOC.id,user_id:uid()});
 if(j.error){toast('Ошибка закрытия: '+j.error);go('finish',scrFinish);return}
-const d=Math.round(((+j.progress.fact||0)-(+j.progress.plan||0))*1000)/1000;
-toast(d===0?'Приходный ордер закрыт в полном объеме ✓':(d<0?'Приходный ордер закрыт с недостачей ('+d+')':'Приходный ордер закрыт с излишками (+'+d+')'));
-go('docs',scrDocs)}
-// --- Финал: кросс-док перемещение + закрытие + акт ---
-async function scrFinish(){let h=`<div class="card"><div class="step">ЗАКРЫТИЕ</div><h2>Закрытие документа</h2>`;
-if(CROSS){const {j}=await post('crossdock_move',{receipt_id:DOC.id});
-h+=j.error?`<div class="mut">Кросс-док: ${j.error}</div>`:`<div class="mut">Кросс-док → в зоне отгрузки ✓</div>`}
-h+=`<button id="cl">Закрыть документ / сформировать акт</button></div>`;$('m').innerHTML=h;
-$('cl').onclick=async()=>{const {j}=await post('close',{receipt_id:DOC.id,user_id:uid()});
-if(j.error){toast('Ошибка: '+j.error);return}
-const rows=(j.act||[]).map(a=>`<tr><td>${a.sku}</td><td>${a.type}</td><td>${a.qty_diff}</td></tr>`).join('')||'<tr><td colspan=3>Расхождений нет</td></tr>';
+showClosed(j)}
+// --- Финал: закрытие документа + сформированные акты ---
+function showClosed(j){const acts=(j.acts&&j.acts.length)?j.acts:[];
+const rows=acts.map(a=>`<tr><td>${a.title||a.type}</td><td>${a.count}</td><td>${a.qty}</td></tr>`).join('')
+||'<tr><td colspan=3>Акты не формировались</td></tr>';
+const dev=j.deviation?`<div class="mut">Отклонение: <b>${j.deviation}</b> (излишек ${fmt(j.excess_qty||0)} шт, недостача ${fmt(j.shortage_qty||0)} шт)</div>`:'';
 $('m').innerHTML=`<div class="card green"><div class="step">КОНЕЦ ПРИЁМКИ</div><h2>Документ закрыт ✓</h2>
-<div class="mut">Прогресс: ${j.progress.fact} / ${j.progress.plan} · ${j.progress.pct}%</div>
-<h2>Акт расхождений</h2><table class="mini"><tr><th>SKU</th><th>Тип</th><th>Откл.</th></tr>${rows}</table>
+<div class="mut">Статус: <b>${j.status_label||'Закрыто'}</b></div>
+<div class="mut">Прогресс: ${j.progress.fact} / ${j.progress.plan} · ${j.progress.pct}%</div>${dev}
+<h2>Сформированные акты</h2><table class="mini"><tr><th>Акт</th><th>Строк</th><th>Штук</th></tr>${rows}</table>
 <button class="ghost" id="bk">К документам</button></div>`;
-$('bk').onclick=()=>go('docs',scrDocs)}}
+$('bk').onclick=()=>go('docs',scrDocs)}
+async function scrFinish(){SCREEN='finish';let h=`<div class="card"><div class="step">ЗАКРЫТИЕ</div><h2>Закрытие документа</h2>`;
+if(CROSS){const {j}=await post('crossdock_move',{receipt_id:DOC.id,sscc:PALLET||''});
+h+=j.error?`<div class="mut">Кросс-док: ${j.error}</div>`:`<div class="mut">Кросс-док → в зоне отгрузки ✓</div>`}
+h+=`<button id="cl">Закрыть документ / сформировать акты</button></div>`;$('m').innerHTML=h;
+$('cl').onclick=async()=>{const {j}=await post('close',{receipt_id:DOC.id,user_id:uid()});
+if(j.error){toast('Ошибка закрытия: '+j.error);return}
+showClosed(j)}}
 go('gate',scrGate);
 </script>
 </body>

@@ -8,13 +8,14 @@ declare(strict_types=1);
 
 final class Notifications
 {
-    public const KINDS = ['receipt', 'shipment', 'task', 'nomenclature'];
+    public const KINDS = ['receipt', 'shipment', 'task', 'nomenclature', 'robot'];
 
     public const KIND_LABEL = [
         'receipt' => 'Поступления',
         'shipment' => 'Отгрузки',
         'task' => 'Задания',
         'nomenclature' => 'Номенклатура',
+        'robot' => 'Робот',
     ];
 
     /** @return array{rows: array, counts: array{all:int,unread:int,important:int}} */
@@ -42,6 +43,7 @@ final class Notifications
                 'all' => (int)$pdo->query("SELECT COUNT(*) FROM notifications")->fetchColumn(),
                 'unread' => (int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE is_read = 0")->fetchColumn(),
                 'important' => (int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE is_important = 1")->fetchColumn(),
+                'robot' => (int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE kind = 'robot'")->fetchColumn(),
             ];
         } catch (Throwable) {
             return ['all' => 0, 'unread' => 0, 'important' => 0];
@@ -119,17 +121,37 @@ final class Notifications
 
     /**
      * Создать уведомление (тихий no-op, если таблицы нет).
-     * Учитывает подписку: если есть запись event_kind с is_on=0 — не создаём.
+     * Учитывает подписку: если вид событий выключен — не создаём.
+     * Лента уведомлений общая для склада, поэтому для broadcast-вызова
+     * (без user_id) вид считается выключенным только если его выключили ВСЕ
+     * подписчики. Раньше достаточно было ОДНОГО выключенного пользователя,
+     * чтобы отключить вид событий для всех остальных.
      */
     public static function push(PDO $pdo, string $kind, string $title, ?string $body = null, ?string $sku = null, int $important = 0, ?int $userId = null): void
     {
         try {
             if (in_array($kind, self::KINDS, true)) {
                 try {
-                    $st = $pdo->prepare("SELECT is_on FROM notification_subscriptions WHERE event_kind = :k LIMIT 1");
-                    $st->execute([':k' => $kind]);
-                    $on = $st->fetchColumn();
-                    if ($on !== false && (int)$on === 0) return;
+                    if ($userId !== null) {
+                        $st = $pdo->prepare("SELECT is_on FROM notification_subscriptions WHERE event_kind = :k AND user_id = :u LIMIT 1");
+                        $st->execute([':k' => $kind, ':u' => $userId]);
+                        $on = $st->fetchColumn();
+                        if ($on !== false && (int)$on === 0) {
+                            return;
+                        }
+                    } else {
+                        $st = $pdo->prepare("SELECT COUNT(*) FROM notification_subscriptions WHERE event_kind = :k AND is_on = 1");
+                        $st->execute([':k' => $kind]);
+                        $enabled = (int)$st->fetchColumn();
+                        if ($enabled === 0) {
+                            $any = $pdo->prepare("SELECT COUNT(*) FROM notification_subscriptions WHERE event_kind = :k");
+                            $any->execute([':k' => $kind]);
+                            // Подписчиков на вид нет вовсе — вид считаем включённым.
+                            if ((int)$any->fetchColumn() > 0) {
+                                return;
+                            }
+                        }
+                    }
                 } catch (Throwable) {}
             }
             $pdo->prepare(

@@ -5,6 +5,7 @@ require_once __DIR__ . '/ShipmentFilter.php';
 require_once __DIR__ . '/ShipmentRepository.php';
 require_once __DIR__ . '/ShipmentService.php';
 require_once __DIR__ . '/ShipmentStatus.php';
+require_once __DIR__ . '/../shared/Counterparties.php';
 
 // REST-контроллер реестра. Маппинг на UI макета:
 //  GET /shipments?search=&status[]=delivering&page=1  -> реестр + "Показано x–y из z"
@@ -53,31 +54,11 @@ final class ShipmentController
             $this->json(['error' => 'contractor_id и warehouse_id обязательны'], 422);
             return;
         }
-        $pdo = $this->prop('pdo');
-        $pdo->beginTransaction();
         try {
-            $no = $this->service->nextDocNo();
-            $st = $pdo->prepare(
-                "INSERT INTO shipments (doc_no,doc_date,order_id,contractor_id,contract_no,warehouse_id,
-                 status,vat_rate,plan_shipment_date,plan_delivery_date,delivery_type,delivery_method,
-                 responsible_id,comment,created_by)
-                 VALUES (:no,NOW(),:ord,:ctr,:cn,:wh,'draft',:vat,:psd,:pdd,:dt,:dm,:resp,:cmt,:cb)"
-            );
-            $st->execute([
-                ':no' => $no, ':ord' => $body['order_id'] ?? null, ':ctr' => (int)$body['contractor_id'],
-                ':cn' => $body['contract_no'] ?? null, ':wh' => (int)$body['warehouse_id'],
-                ':vat' => (int)($body['vat_rate'] ?? 20), ':psd' => $body['plan_shipment_date'] ?? null,
-                ':pdd' => $body['plan_delivery_date'] ?? null, ':dt' => $body['delivery_type'] ?? null,
-                ':dm' => $body['delivery_method'] ?? null, ':resp' => $body['responsible_id'] ?? $this->userId,
-                ':cmt' => $body['comment'] ?? null, ':cb' => $this->userId,
-            ]);
-            $id = (int)$pdo->lastInsertId();
-            $this->service->recalc($id);
-            $pdo->commit();
-            $this->json(['id' => $id, 'doc_no' => $no], 201);
+            $res = $this->service->createShipment($body, $this->userId);
+            $this->json(['id' => $res['id'], 'doc_no' => $res['doc_no']], 201);
         } catch (Throwable $e) {
-            $pdo->rollBack();
-            $this->json(['error' => $e->getMessage()], 500);
+            $this->json(['error' => $e->getMessage()], 400);
         }
     }
 
@@ -277,19 +258,34 @@ final class ShipmentController
     public function import(array $body): void
     {
         // Импорт из Excel: в проде — очередь чанками; здесь принимаем строки и создаем черновики.
+        // Раньше в цикле звался store(), который САМ печатал JSON: ответ состоял из
+        // N склеенных JSON-документов (невалидный JSON), а счётчик created рос
+        // даже для строк, упавших с ошибкой. Теперь создаём через сервис и
+        // отвечаем один раз, со списком созданных и списком ошибок.
         $rows = (array)($body['rows'] ?? []);
-        $created = 0;
-        foreach ($rows as $r) {
-            if (!empty($r['contractor_id']) && !empty($r['warehouse_id'])) {
-                try {
-                    $this->store((array)$r);
-                    // store уже ответил json — подавляем повтор; считаем только валидные
-                    $created++;
-                } catch (Throwable $e) {
-                }
+        $created = [];
+        $errors = [];
+        foreach ($rows as $idx => $r) {
+            $r = (array)$r;
+            if (empty($r['contractor_id']) || empty($r['warehouse_id'])) {
+                $errors[] = 'строка ' . ($idx + 1) . ': нет contractor_id / warehouse_id';
+                continue;
+            }
+            try {
+                $res = $this->service->createShipment($r, $this->userId);
+                $created[] = $res['doc_no'];
+            } catch (Throwable $e) {
+                $errors[] = 'строка ' . ($idx + 1) . ': ' . $e->getMessage();
             }
         }
-        $this->json(['ok' => true, 'note' => 'Импорт принят (демо): ' . $created]);
+        $this->json([
+            'ok' => true,
+            'created' => count($created),
+            'doc_nos' => $created,
+            'errors' => $errors,
+            'note' => 'Импорт: создано ' . count($created) . ' из ' . count($rows)
+                . ($errors ? ', ошибок: ' . count($errors) : ''),
+        ]);
     }
 
     public function export(array $query): void
@@ -301,6 +297,106 @@ final class ShipmentController
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="shipments.csv"');
         echo $csv;
+    }
+
+    /**
+     * Справочники для форм: контрагенты и склады.
+     * Перенесено из legacy-дубля shipments/ при сведении модулей.
+     */
+    public function refs(): void
+    {
+        $pdo = $this->prop('pdo');
+        $this->json([
+            'contractors' => $pdo->query("SELECT id, name FROM contractors ORDER BY name")->fetchAll(),
+            'warehouses' => $pdo->query("SELECT id, name FROM warehouses ORDER BY id")->fetchAll(),
+        ]);
+    }
+
+    /**
+     * Загрузка отгрузки из CSV/Excel-заявки: наряд + автоматическая отгрузка.
+     * Перенесено из legacy-дубля shipments/ при сведении модулей.
+     */
+    public function csvShipment(): void
+    {
+        require_once __DIR__ . '/../shared/CsvUpload.php';
+        require_once __DIR__ . '/../shared/ShipmentExcel.php';
+        $pdo = $this->prop('pdo');
+        try {
+            $parsed = shipment_upload_parse_file($_FILES['file'] ?? []);
+            if (!$parsed['rows']) {
+                $this->json(['error' => implode('; ', $parsed['errors']) ?: 'Нет корректных строк'], 422);
+                return;
+            }
+            $wh = (int)($_POST['warehouse_id'] ?? 0);
+            $hdr = $parsed['header'] ?? [];
+            $cc = csv_upload_resolve_contractor($pdo, (string)($hdr['contractor'] ?? ''));
+            $r = csv_upload_import_orders($pdo, $pdo, $parsed['rows'],
+                $cc['id'], $wh, 1,
+                (string)($_FILES['file']['name'] ?? 'upload.csv'), null, $hdr);
+            // Грузополучатель из отгрузки автоматически попадает в справочник (тип «грузополучатель»).
+            WmsCounterparties::ensure($pdo, (string)($hdr['consignee'] ?? ''), 'consignee');
+            $r += ['contractor' => $cc['name'], 'contractor_new' => $cc['created'],
+                'format' => ($parsed['format'] ?? '')];
+            // Отгрузка из наряда формируется автоматически — вручную не нужно.
+            $ship = [];
+            try {
+                $formId = $this->service->formFromOrders([$r['id']], [
+                    'warehouse_id' => $wh,
+                    'consignee' => ($hdr['consignee'] ?? '') !== '' ? $hdr['consignee'] : null,
+                    'delivery_type' => ($hdr['ship_type'] ?? '') !== '' ? $hdr['ship_type'] : null,
+                    'plan_shipment_date' => ($hdr['plan_date'] ?? '') !== '' ? $hdr['plan_date'] : null,
+                    'comment' => isset($r['order_no']) ? ('Авто: наряд ' . $r['order_no']) : null,
+                ], $this->userId);
+                csv_upload_apply_shipment_header($pdo, $formId, $hdr);
+                $ship = ['shipment_id' => $formId,
+                    'shipment_no' => (string)$pdo->query('SELECT doc_no FROM shipments WHERE id=' . (int)$formId)->fetchColumn()];
+            } catch (Throwable) {
+            }
+            $this->json($r + ['row_errors' => $parsed['errors']] + $ship, 201);
+        } catch (Throwable $e) {
+            $this->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * Загрузка наряда из CSV/Excel-заявки (номер or_XXXXXX, один файл = один наряд).
+     * Перенесено из legacy-дубля shipments/ при сведении модулей.
+     */
+    public function csvOrders(): void
+    {
+        require_once __DIR__ . '/../shared/CsvUpload.php';
+        require_once __DIR__ . '/../shared/ShipmentExcel.php';
+        $pdo = $this->prop('pdo');
+        try {
+            $parsed = shipment_upload_parse_file($_FILES['file'] ?? []);
+            if (!$parsed['rows']) {
+                $this->json(['error' => implode('; ', $parsed['errors']) ?: 'Нет корректных строк'], 422);
+                return;
+            }
+            $wh = (int)($_POST['warehouse_id'] ?? 0);
+            $hdr = $parsed['header'] ?? [];
+            // Контрагент — из файла (шапка/колонка) либо явно переданный contractor_id.
+            $contractorId = (int)($_POST['contractor_id'] ?? 0);
+            if ($contractorId <= 0) {
+                $contractorId = csv_upload_resolve_contractor($pdo, (string)($hdr['contractor'] ?? ''))['id'];
+            }
+            $r = csv_upload_import_orders($pdo, $pdo, $parsed['rows'],
+                $contractorId, $wh, $this->userId,
+                (string)($_FILES['file']['name'] ?? 'upload.csv'), null, $hdr);
+            // Грузополучатель из отгрузки автоматически попадает в справочник (тип «грузополучатель»).
+            WmsCounterparties::ensure($pdo, (string)($hdr['consignee'] ?? ''), 'consignee');
+            // Отгрузка из наряда формируется автоматически — вручную не нужно.
+            $ship = [];
+            try {
+                $formId = $this->service->formFromOrders([$r['id']], ['warehouse_id' => $wh], $this->userId);
+                $ship = ['shipment_id' => $formId,
+                    'shipment_no' => (string)$pdo->query('SELECT doc_no FROM shipments WHERE id=' . (int)$formId)->fetchColumn()];
+            } catch (Throwable) {
+            }
+            $this->json($r + ['row_errors' => $parsed['errors']] + $ship, 201);
+        } catch (Throwable $e) {
+            $this->json(['error' => $e->getMessage()], 400);
+        }
     }
 
     private function prop(string $name): mixed

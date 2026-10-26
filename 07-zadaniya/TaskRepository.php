@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/TaskStatus.php';
 require_once __DIR__ . '/TaskFilter.php';
+require_once __DIR__ . '/../shared/pg.php';
 
 // Репозиторий реестра "Задания". Чистый PHP + PDO, зеркалит ShipmentRepository.
 //  1. Поиск (№ задания, тип, сотрудник, товар) -> WHERE LIKE / JOIN items
@@ -20,11 +21,15 @@ final class TaskRepository
         return $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
     }
 
-    /** GROUP_CONCAT с переносимым синтаксисом разделителя (MySQL vs SQLite). */
+    /** GROUP_CONCAT с переносимым синтаксисом (MySQL vs SQLite vs PostgreSQL). */
     private function gc(string $expr, string $sep = ', '): string
     {
+        $drv = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
         $q = str_replace("'", "''", $sep);
-        if ($this->isSqlite()) {
+        if ($drv === 'pgsql') {
+            return "STRING_AGG($expr::text, '$q')";
+        }
+        if ($drv === 'sqlite') {
             return "GROUP_CONCAT($expr, '$q')";
         }
         return "GROUP_CONCAT($expr SEPARATOR '$sep')";
@@ -42,6 +47,16 @@ final class TaskRepository
         return "CASE WHEN i.cell_from IS NOT NULL AND i.cell_from <> '' AND i.cell_from = i.cell_to THEN i.cell_from"
             . " WHEN i.cell_from IS NOT NULL AND i.cell_from <> '' AND i.cell_to IS NOT NULL AND i.cell_to <> '' THEN $both"
             . " ELSE COALESCE(NULLIF(i.cell_from,''), NULLIF(i.cell_to,'')) END";
+    }
+
+    /**
+     * Коды списков заданий, в которые входит задание (PK-000001, PK-000002 ...).
+     * Подзапрос, а не JOIN: JOIN размножил бы строки и сломал агрегаты по позициям.
+     */
+    private function listCodesExpr(): string
+    {
+        return "(SELECT " . $this->gc('l.code') . " FROM task_list_items li"
+            . " JOIN task_lists l ON l.id = li.list_id WHERE li.task_id = t.id)";
     }
 
     /** @return string[] уникальные непустые значения с сохранением порядка */
@@ -77,7 +92,7 @@ final class TaskRepository
     public function paginate(TaskFilter $f): array
     {
         [$where, $params] = $this->buildWhere($f);
-        if (!$this->isSqlite()) {
+        if ($this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
             try {
                 $this->pdo->exec('SET SESSION group_concat_max_len = 100000');
             } catch (Throwable) {
@@ -89,11 +104,21 @@ final class TaskRepository
         $total = (int)$cnt->fetchColumn();
 
         $offset = ($f->page - 1) * $f->perPage;
+        // Сортировка по любому столбцу реестра (А→Я / Я→А).
         $sortMap = [
-            'created_at' => 't.created_at', 'doc_no' => 't.doc_no',
-            'progress' => 't.progress', 'priority' => 't.priority', 'id' => 't.id',
+            'created_at' => ['t.created_at', 'd'], 'doc_no' => ['t.doc_no', 't'],
+            'progress' => ['t.progress', 'n'], 'priority' => ['t.priority', 't'], 'id' => ['t.id', 'n'],
+            'type' => ['t.type', 't'], 'status' => ['t.status', 't'], 'warehouse' => ['w.name', 't'],
+            'goods' => ['t.plan_qty', 'n'],
+            'cell' => [$this->gc('(' . $this->cellExpr() . ')'), 't'],
+            'pallet' => [$this->gc('i.pallet'), 't'],
+            'sku' => [$this->gc('i.sku'), 't'],
+            'name' => [$this->gc('i.name', ' | '), 't'],
+            'list' => [$this->listCodesExpr(), 't'],
+            'cells' => ['t.cells_count', 'n'], 'doc_ref' => ['t.doc_ref', 't'],
+            'executor' => ['t.executor_fio', 't'], 'flags' => ['t.flags', 't'],
         ];
-        $orderBy = ($sortMap[$f->sort] ?? 't.created_at') . ' ' . $f->dir;
+        $orderBy = wms_order_by($this->pdo, $f->sort, $f->dir, $sortMap, 't.created_at', 'd');
 
         $sql = "SELECT t.id, t.doc_no, t.created_at, t.type, t.status, t.priority,
                        t.warehouse_id, w.name AS warehouse,
@@ -104,12 +129,13 @@ final class TaskRepository
                        {$this->gc('(' . $this->cellExpr() . ')')} AS cell_storage_list,
                        {$this->gc('i.pallet')} AS pallet_list,
                        {$this->gc('i.sku')} AS sku_list,
-                       {$this->gc('i.name', ' | ')} AS item_names_list
+                       {$this->gc('i.name', ' | ')} AS item_names_list,
+                       {$this->listCodesExpr()} AS list_codes
                 FROM tasks t
                 LEFT JOIN warehouses w ON w.id = t.warehouse_id
                 LEFT JOIN task_items i ON i.task_id = t.id
                 $where
-                GROUP BY t.id
+                GROUP BY t.id, w.id, w.name
                 ORDER BY $orderBy LIMIT :lim OFFSET :off";
         $st = $this->pdo->prepare($sql);
         foreach ($params as $k => $v) {
@@ -214,8 +240,16 @@ final class TaskRepository
         $w = ['1=1'];
         $p = [];
         if ($f->search !== null) {
-            $w[] = '(t.doc_no LIKE :q OR t.type LIKE :q OR t.executor_fio LIKE :q OR i.sku LIKE :q OR i.name LIKE :q OR t.doc_ref LIKE :q)';
+            $w[] = '(t.doc_no LIKE :q OR t.type LIKE :q OR t.executor_fio LIKE :q OR i.sku LIKE :q OR i.name LIKE :q OR t.doc_ref LIKE :q'
+                . ' OR EXISTS (SELECT 1 FROM task_list_items li JOIN task_lists l ON l.id = li.list_id'
+                . ' WHERE li.task_id = t.id AND l.code LIKE :q))';
             $p[':q'] = '%' . $f->search . '%';
+        }
+        // Поиск по списку заданий (PK-000001 ...).
+        if ($f->listCode !== null && $f->listCode !== '') {
+            $w[] = 'EXISTS (SELECT 1 FROM task_list_items li JOIN task_lists l ON l.id = li.list_id'
+                . ' WHERE li.task_id = t.id AND l.code LIKE :lc)';
+            $p[':lc'] = '%' . $f->listCode . '%';
         }
         if ($f->createdFrom) {
             $w[] = 't.created_at >= :cf';

@@ -95,9 +95,13 @@ final class ReceiptService
                 ':vat' => $src['vat_rate'] ?? 20, ':cmt' => $src['comment'] ?? null, ':cb' => $userId,
             ]);
             $newId = (int)$this->pdo->lastInsertId();
+            try {
+                $this->pdo->exec("ALTER TABLE receipt_items ADD COLUMN supplier_batch VARCHAR(100) NULL");
+            } catch (Throwable) {
+            }
             $this->pdo->prepare(
-                "INSERT INTO receipt_items (receipt_id,line_no,code,sku,name,unit,qty,boxes,price,vat_rate,vat_sum_unit,price_wvat,sum_novat,vat_sum,sum_vat)
-                 SELECT :nid,line_no,code,sku,name,unit,qty,boxes,price,vat_rate,vat_sum_unit,price_wvat,sum_novat,vat_sum,sum_vat
+                "INSERT INTO receipt_items (receipt_id,line_no,code,sku,name,unit,qty,boxes,price,vat_rate,vat_sum_unit,price_wvat,sum_novat,vat_sum,sum_vat,supplier_batch)
+                 SELECT :nid,line_no,code,sku,name,unit,qty,boxes,price,vat_rate,vat_sum_unit,price_wvat,sum_novat,vat_sum,sum_vat,supplier_batch
                  FROM receipt_items WHERE receipt_id=:oid"
             )->execute([':nid' => $newId, ':oid' => $id]);
             $this->recalc($newId);
@@ -110,7 +114,13 @@ final class ReceiptService
         }
     }
 
-    public function changeStatus(int $id, ReceiptStatus $to, ?int $userId): void
+    /**
+     * Смена статуса по конвейеру переходов.
+     * Для закрытия (Закрыто / Закрыто с отклонением) идёт через
+     * wms_close_receipt_guarded(): гарды + акты расхождений + статус по факту.
+     * @return array|null результат закрытия (акты, излишки, недостача) — если закрывали
+     */
+    public function changeStatus(int $id, ReceiptStatus $to, ?int $userId): ?array
     {
         $this->pdo->beginTransaction();
         try {
@@ -125,10 +135,26 @@ final class ReceiptService
                 throw new RuntimeException("Нельзя перевести {$from->label()} → {$to->label()}");
             }
             $posted = in_array($to, [ReceiptStatus::Closed, ReceiptStatus::ClosedShort], true) ? 1 : 0;
+            if ($posted) {
+                require_once __DIR__ . '/../shared/ReceiptClose.php';
+                if ($to === ReceiptStatus::ClosedShort) {
+                    // Кнопка «Закрыть с недостачей»: закрываем принудительно,
+                    // даже если недостача ещё не была зафиксирована отдельным актом.
+                    $closed = wms_close_receipt($this->pdo, $id, $userId, 'Реестр поступлений', 'closed_short');
+                } else {
+                    // Обычное закрытие — через гарды: неподтверждённый излишек
+                    // и незафиксированная недостача не дают закрыть документ.
+                    $closed = wms_close_receipt_guarded($this->pdo, $id, $userId, 'Реестр поступлений');
+                }
+                $this->pdo->prepare("UPDATE receipts SET is_posted=1 WHERE id=:id")->execute([':id' => $id]);
+                $this->pdo->commit();
+                return $closed;
+            }
             $this->pdo->prepare("UPDATE receipts SET status=:s, is_posted=:p WHERE id=:id")
                 ->execute([':s' => $to->value, ':p' => $posted, ':id' => $id]);
             $this->history($id, $userId, 'status', 'Статус', $from->label(), $to->label(), $from->value, $to->value);
             $this->pdo->commit();
+            return null;
         } catch (Throwable $e) {
             $this->pdo->rollBack();
             throw $e;
@@ -155,7 +181,9 @@ final class ReceiptService
     }
 
     // Кнопка "Изменить" в карточке: дата поставки (план) + статус через конвейер переходов.
-    // Сначала статус (при запрещенном переходе ничего не пишется), затем план. Возвращает новый статус.
+    // ПКМ "Указать атрибуты": дата прибытия (факт), статус, ТС, ворота.
+    // Сначала статус (при запрещенном переходе ничего не пишется), затем остальные поля.
+    // Возвращает новый статус.
     public function updateHead(int $id, array $b, ?int $userId): string
     {
         $st = $this->pdo->prepare("SELECT * FROM receipts WHERE id=:id");
@@ -171,8 +199,11 @@ final class ReceiptService
             } catch (Throwable) {
                 throw new RuntimeException('Недопустимый статус');
             }
-            $this->changeStatus($id, $to, $userId);
-            $row['status'] = $to->value;
+            $closed = $this->changeStatus($id, $to, $userId);
+            // При закрытии статус выводится из факта расхождений
+            // («Закрыто» / «Закрыто с отклонением»), а не из того, что выбрал оператор.
+            $row['status'] = is_array($closed) && isset($closed['status'])
+                ? (string)$closed['status'] : $to->value;
         }
         if (array_key_exists('plan_delivery_date', $b)) {
             $nv = $this->normPlanDate($b['plan_delivery_date']);
@@ -184,7 +215,68 @@ final class ReceiptService
                     $ov === null ? null : (string)$ov, $nv === null ? null : (string)$nv);
             }
         }
+        if (array_key_exists('arrival_date', $b)) {
+            $nv = $this->normDateTime($b['arrival_date'], 'Неверная дата прибытия (нужен формат ГГГГ-ММ-ДД)');
+            $ov = $row['arrival_date'] ?? null;
+            if ((string)$nv !== (string)$ov) {
+                $this->pdo->prepare("UPDATE receipts SET arrival_date=:d WHERE id=:id")
+                    ->execute([':d' => $nv, ':id' => $id]);
+                $this->history($id, $userId, 'update', 'Дата прибытия',
+                    $ov === null ? null : (string)$ov, $nv === null ? null : (string)$nv);
+            }
+        }
+        if (array_key_exists('vehicle', $b)) {
+            $nv = trim((string)($b['vehicle'] ?? ''));
+            if (function_exists('mb_strlen') ? mb_strlen($nv, 'UTF-8') > 30 : strlen($nv) > 30) {
+                throw new RuntimeException('Номер ТС слишком длинный (макс. 30 символов)');
+            }
+            $nv = $nv === '' ? null : $nv;
+            $ov = $row['vehicle_fact'] ?? null;
+            if ((string)$nv !== (string)$ov) {
+                $this->pdo->prepare("UPDATE receipts SET vehicle_fact=:v, vehicle=:v WHERE id=:id")
+                    ->execute([':v' => $nv, ':id' => $id]);
+                $this->history($id, $userId, 'update', 'ТС',
+                    $ov === null ? null : (string)$ov, $nv === null ? null : (string)$nv);
+            }
+        }
+        if (array_key_exists('gate', $b)) {
+            $nv = trim((string)($b['gate'] ?? ''));
+            if (function_exists('mb_strlen') ? mb_strlen($nv, 'UTF-8') > 20 : strlen($nv) > 20) {
+                throw new RuntimeException('Номер ворот слишком длинный (макс. 20 символов)');
+            }
+            $nv = $nv === '' ? null : $nv;
+            $ov = $row['gate'] ?? null;
+            if ((string)$nv !== (string)$ov) {
+                $this->pdo->prepare("UPDATE receipts SET gate=:g WHERE id=:id")
+                    ->execute([':g' => $nv, ':id' => $id]);
+                $this->history($id, $userId, 'update', 'Ворота',
+                    $ov === null ? null : (string)$ov, $nv === null ? null : (string)$nv);
+            }
+        }
         return (string)($row['status'] ?? '');
+    }
+
+    private function normDateTime(mixed $v, string $err): ?string
+    {
+        if ($v === null || trim((string)$v) === '') {
+            return null;
+        }
+        $s = trim((string)$v);
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $s, $m)) {
+            if (!checkdate((int)$m[2], (int)$m[3], (int)$m[1])) {
+                throw new RuntimeException($err);
+            }
+            return $s . ' 00:00:00';
+        }
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/', $s, $m)) {
+            if (!checkdate((int)$m[2], (int)$m[3], (int)$m[1])
+                || (int)$m[4] > 23 || (int)$m[5] > 59 || (int)($m[6] ?? 0) > 59) {
+                throw new RuntimeException($err);
+            }
+            return sprintf('%04d-%02d-%02d %02d:%02d:%02d',
+                (int)$m[1], (int)$m[2], (int)$m[3], (int)$m[4], (int)$m[5], (int)($m[6] ?? 0));
+        }
+        throw new RuntimeException($err);
     }
 
     private function normPlanDate(mixed $v): ?string
@@ -299,6 +391,7 @@ final class ReceiptService
         try {
             $rows = $this->pdo->prepare(
                 "SELECT a.sku, a.type, a.qty_diff, a.created_at,
+                        COALESCE(a.supplier_batch,'') AS supplier_batch,
                         (SELECT i.code FROM receipt_items i WHERE i.receipt_id = a.receipt_id AND i.sku = a.sku LIMIT 1) AS barcode,
                         (SELECT i.name FROM receipt_items i WHERE i.receipt_id = a.receipt_id AND i.sku = a.sku LIMIT 1) AS name
                  FROM tsd_act_rasx a WHERE a.receipt_id = :id$where ORDER BY a.id"
@@ -306,7 +399,19 @@ final class ReceiptService
             $rows->execute($p);
             $items = $rows->fetchAll(PDO::FETCH_ASSOC);
         } catch (Throwable) {
-            $items = [];
+            // Старая схема без партии в акте.
+            try {
+                $rows = $this->pdo->prepare(
+                    "SELECT a.sku, a.type, a.qty_diff, a.created_at, '' AS supplier_batch,
+                            (SELECT i.code FROM receipt_items i WHERE i.receipt_id = a.receipt_id AND i.sku = a.sku LIMIT 1) AS barcode,
+                            (SELECT i.name FROM receipt_items i WHERE i.receipt_id = a.receipt_id AND i.sku = a.sku LIMIT 1) AS name
+                     FROM tsd_act_rasx a WHERE a.receipt_id = :id$where ORDER BY a.id"
+                );
+                $rows->execute($p);
+                $items = $rows->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Throwable) {
+                $items = [];
+            }
         }
         $title = ($type === '' || $type === 'all') ? 'Сводный акт о расхождениях' : self::ACT_TYPES[$type];
         return ['kind' => 'act_rasx', 'type' => $type === '' ? 'all' : $type, 'title' => $title,
@@ -328,11 +433,29 @@ final class ReceiptService
         if (!$head) {
             throw new RuntimeException('Документ не найден');
         }
-        $rows = $this->pdo->prepare(
-            "SELECT i.line_no, i.code AS barcode, i.sku, i.name, i.qty AS plan_qty,
-                    COALESCE((SELECT SUM(o.qty) FROM receipt_operations o WHERE o.receipt_id = i.receipt_id AND o.sku = i.sku AND o.accept_status = 'Принято'), 0) AS fact_qty
-             FROM receipt_items i WHERE i.receipt_id = :id ORDER BY i.line_no, i.id"
-        );
+        try {
+            // Факт — по паре (SKU, партия) и только ПРИНЯТОЕ.
+            // Раньше корреляция была лишь по SKU: при повторе артикула в двух
+            // строках (разные партии) обе строки показывали общий факт,
+            // и сумма в «Документе приемщика» была завышена в N раз.
+            $rows = $this->pdo->prepare(
+                "SELECT i.line_no, i.code AS barcode, i.sku, i.name, i.qty AS plan_qty, i.supplier_batch,
+                        COALESCE((SELECT SUM(o.qty) FROM receipt_operations o
+                                  WHERE o.receipt_id = i.receipt_id AND o.sku = i.sku
+                                    AND o.accept_status = 'Принято'
+                                    AND COALESCE(o.supplier_batch,'') = COALESCE(i.supplier_batch,'')), 0) AS fact_qty
+                 FROM receipt_items i WHERE i.receipt_id = :id ORDER BY i.line_no, i.id"
+            );
+        } catch (Throwable) {
+            // Старая схема без supplier_batch — считаем по SKU.
+            $rows = $this->pdo->prepare(
+                "SELECT i.line_no, i.code AS barcode, i.sku, i.name, i.qty AS plan_qty,
+                        COALESCE((SELECT SUM(o.qty) FROM receipt_operations o
+                                  WHERE o.receipt_id = i.receipt_id AND o.sku = i.sku
+                                    AND o.accept_status = 'Принято'), 0) AS fact_qty
+                 FROM receipt_items i WHERE i.receipt_id = :id ORDER BY i.line_no, i.id"
+            );
+        }
         $rows->execute([':id' => $id]);
         return ['kind' => 'receiver_doc', 'title' => 'Документ приемщика',
             'head' => $head, 'rows' => $rows->fetchAll(PDO::FETCH_ASSOC)];

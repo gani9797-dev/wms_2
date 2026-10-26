@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>14 Журнал — TiMLog</title>
+<style>
+:root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);display:flex}
+aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14px;position:sticky;top:0;max-height:100vh;overflow:auto}
+aside .logo{font-size:22px;font-weight:700;margin:6px 0 22px}
+aside a{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
+aside a.on{background:var(--vio);color:#fff}
+main{flex:1;padding:18px 22px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:4px 0;font-size:24px}
+.user{display:flex;gap:10px;align-items:center;font-size:14px}
+.ava{width:36px;height:36px;border-radius:50%;background:#CBD5E0;color:#4A5568;display:flex;align-items:center;justify-content:center;font-weight:700}
+.bar{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap;align-items:center}
+.bar input[type=text]{width:420px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:14px}
+.btn.pri{background:var(--vio);color:#fff;border-color:var(--vio);font-weight:700}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px;color:#2C313C;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+tr:hover td{background:#fafaff}
+.st{display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap}
+.opIn{background:#C6F6D5;color:#276749}.opPick{background:#E0EEFF;color:#1A365D}
+.opMove{background:#FFF3CD;color:#7B5A00}.opPlace{background:#E9D5FF;color:#553C9A}
+.opRepl{background:#D6F5F3;color:#1C5B57}.opShip{background:#FED7D7;color:#C53030}
+.opInv{background:#E6E6E6;color:#555}
+.pager{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;color:var(--mut);font-size:13px}
+.pg button{border:1px solid var(--line);background:#fff;border-radius:8px;min-width:34px;padding:6px 8px;margin:0 2px;cursor:pointer}
+.pg button.on{background:var(--vio);color:#fff;border-color:var(--vio)}
+.fpanel{position:fixed;top:0;right:-560px;width:520px;max-width:96vw;height:100vh;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.15);transition:right .25s;padding:18px;overflow:auto;z-index:50}
+.fpanel.open{right:0}.fpanel label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:12px 0 4px}
+.fpanel input,.fpanel select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px}
+.frow{display:flex;gap:8px}.frow>*{flex:1}
+.chk{font-weight:400 !important;display:flex !important;align-items:center;gap:6px;margin:4px 0 !important}
+.chk input{width:auto !important}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.chip{background:#F4F0FB;color:#663EB2;border-radius:12px;padding:5px 10px;font-size:12px}
+.hint{font-size:12px;color:var(--mut)}
+.tiles{display:flex;gap:10px;margin:12px 0}
+.tile{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;text-align:left;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer}
+.tile:hover{border-color:var(--vio);color:var(--vio)}
+.tile small{display:block;font-weight:400;color:var(--mut);font-size:11px;margin-top:6px}
+.acc{background:#fff;border:1px solid var(--line);border-radius:10px;margin:0 0 14px;overflow:hidden}
+.acc>summary{cursor:pointer;padding:14px 16px;font-size:15px;list-style:none;display:flex;align-items:center;gap:8px;user-select:none}
+.acc>summary::-webkit-details-marker{display:none}
+.acc>summary:before{content:'▸';color:var(--vio);font-size:14px;transition:transform .15s}
+.acc[open]>summary:before{transform:rotate(90deg)}
+.acc>summary:hover{background:#FAF9FF}
+.acc .sec{padding:0 16px 16px}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:99;max-width:90vw}
+</style>
+<style>
+#navhidebtn{width:100%;background:#2A3446;color:#8A92A6;border:0;border-radius:8px;padding:8px;cursor:pointer;font-size:13px;margin-bottom:10px}
+#navhidebtn:hover{background:#3A4658;color:#fff}
+#navshowbtn{position:fixed;top:12px;left:8px;z-index:200;display:none;background:#1C2331;color:#fff;border:1px solid #444;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:14px}
+body.navhide aside{display:none}
+body.navhide #navshowbtn{display:block}
+body.navhide main{max-width:none}
+</style>
+<style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
+<body>
+<button id="navshowbtn" title="Показать меню">▶</button>
+<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><a class="mi on" href="../14-zhurnal/app.html">📜 14 Журнал</a></nav></aside>
+<main>
+<div class="top"><h1>Журнал</h1><div class="user"><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span><span style="color:var(--mut)">▼</span></div></div>
+<div class="hint">Журнал склада — все движения паллет и товаров. Журнал серийных номеров — приёмка и отгрузка по серийным номерам.</div>
+
+<div class="tiles"><div class="tile" id="exp">⬇ Экспорт CSV<small id="expinfo">Активный журнал: Журнал склада</small></div></div>
+
+<details class="acc" id="secStock" open>
+<summary>📦 <b>Журнал склада</b> <span class="hint">— все движения паллет и товаров</span></summary>
+<div class="sec">
+<div class="bar">
+<input id="q" type="text" placeholder="🔍 Поиск: артикул, наименование, документ, паллета, SSCC, ячейка ...">
+<button class="btn" id="fbtn">Фильтры (<span id="fbadge">0</span>)</button>
+</div>
+<div class="chips" id="chips"></div>
+<div class="card" style="overflow:auto">
+<table id="tblStock" data-sort-mode="server"><thead><tr>
+<th data-col="doc_date" data-sort="doc_date">Дата/время</th>
+<th data-col="op_type" data-sort="op_type">Тип операции</th>
+<th data-col="doc_no" data-sort="doc_no">Документ</th>
+<th data-col="sku" data-sort="sku">Артикул</th>
+<th>Наименование</th>
+<th data-col="qty" data-sort="qty">Количество</th>
+<th>Паллета</th>
+<th>SSCC</th>
+<th data-col="cell_from" data-sort="cell_from">Откуда</th>
+<th data-col="cell_to" data-sort="cell_to">Куда</th>
+<th>Зона</th>
+<th>Пользователь</th>
+<th>Комментарий</th>
+</tr></thead>
+<tbody id="rows"><tr><td colspan="13">Загрузка…</td></tr></tbody></table>
+<div class="pager"><div><span id="info">…</span> &nbsp; Показывать по <select id="pp"><option>24</option><option selected>50</option><option>100</option><option>200</option></select></div><div class="pg" id="pg"></div></div>
+</div>
+</div>
+</details>
+
+<details class="acc" id="secSerial">
+<summary>🔢 <b>Журнал серийных номеров</b> <span class="hint">— приход и отгрузка по с/н</span></summary>
+<div class="sec">
+<div class="bar">
+<input id="qs" type="text" placeholder="🔍 Поиск: с/н, артикул, паллета, документ ...">
+<button class="btn" id="fbtns">Фильтры (<span id="fbadges">0</span>)</button>
+</div>
+<div class="chips" id="chipss"></div>
+<div class="hint" style="margin:2px 0 10px">Паллета фиксируется та, на которую серийные номера приняты или отгружены изначально. При расформировании паллеты данные журнала не изменяются.</div>
+<div class="card" style="overflow:auto">
+<table id="tblSerial" data-sort-mode="server"><thead><tr>
+<th data-col="doc_date" data-sort="doc_date">Дата/время</th>
+<th data-col="serial_no" data-sort="serial_no">Серийный номер</th>
+<th data-col="op_type" data-sort="op_type">Операция</th>
+<th data-col="sku" data-sort="sku">Артикул</th>
+<th>Наименование</th>
+<th>Приход</th>
+<th>Отгрузка</th>
+<th data-col="pallet" data-sort="pallet">Паллета</th>
+<th>Количество</th>
+<th>Ячейка</th>
+<th>Пользователь</th>
+</tr></thead>
+<tbody id="rowsSerial"><tr><td colspan="11">Загрузка…</td></tr></tbody></table>
+<div class="pager"><div><span id="infos">…</span> &nbsp; Показывать по <select id="pps"><option>24</option><option selected>50</option><option>100</option><option>200</option></select></div><div class="pg" id="pgs"></div></div>
+</div>
+</div>
+</details>
+</main>
+
+<div class="fpanel" id="fp">
+<h2 style="margin:0">Фильтры журнала склада (<span id="fbadge2">0</span>) <a href="#" id="freset" style="font-size:13px;font-weight:400">Сбросить всё</a></h2>
+<label>Тип операции</label><div id="fops"></div>
+<label>Дата с / по</label><div class="frow"><input type="date" id="f_from"><input type="date" id="f_to"></div>
+<label>Артикул</label><input id="f_sku" placeholder="MK-ASM-1315">
+<label>Документ</label><input id="f_doc" placeholder="A-105106">
+<label>Паллета</label><input id="f_pal" placeholder="MEZ223895">
+<div style="display:flex;gap:10px;margin-top:16px"><button class="btn" id="fclr">Сбросить</button><button class="btn pri" id="fok">Применить</button><button class="btn" id="fclose">Закрыть</button></div>
+<p style="color:var(--mut);font-size:13px">Активных фильтров: <span id="factive">0</span></p>
+</div>
+
+<div class="fpanel" id="fps">
+<h2 style="margin:0">Фильтры журнала с/н (<span id="fbadges2">0</span>) <a href="#" id="fresets" style="font-size:13px;font-weight:400">Сбросить всё</a></h2>
+<label>Тип операции</label><div id="fsops"></div>
+<label>Дата с / по</label><div class="frow"><input type="date" id="fs_from"><input type="date" id="fs_to"></div>
+<label>Артикул</label><input id="fs_sku" placeholder="MK-ASM-1315">
+<label>Документ</label><input id="fs_doc" placeholder="A-105106">
+<label>Паллета</label><input id="fs_pal" placeholder="MEZ223895">
+<div style="display:flex;gap:10px;margin-top:16px"><button class="btn" id="fsclr">Сбросить</button><button class="btn pri" id="fsok">Применить</button><button class="btn" id="fsclose">Закрыть</button></div>
+<p style="color:var(--mut);font-size:13px">Активных фильтров: <span id="fsactive">0</span></p>
+</div>
+
+<div id="toast"></div>
+<script src="../shared/sort.js"></script>
+<script>
+const API='demo_sqlite.php';
+const $=id=>document.getElementById(id);
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
+const fmtN=v=>{if(v===null||v===undefined||v==='')return '0';const n=Number(v);return isFinite(n)?n.toLocaleString('ru-RU',{maximumFractionDigits:3}):v};
+// Экранирование значений из БД перед вставкой в innerHTML (защита от XSS).
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const dFmt=s=>(s||'').slice(0,16).replace('T',' ');
+function flagVal(id){const e=$(id);return e&&e.checked?'1':''}
+
+// Типы операций журнала склада и журнала серийных номеров (WmsJournal::OP_TYPES / SERIAL_OP_TYPES).
+const OP_TYPES=['приход','отбор','перемещение','размещение','пополнение','отгрузка','инвентаризация','корректировка'];
+const SERIAL_OP_TYPES=['Приход','Отгрузка'];
+const OPCLS={'приход':'opIn','отбор':'opPick','перемещение':'opMove','размещение':'opPlace','пополнение':'opRepl','отгрузка':'opShip','инвентаризация':'opInv','Приход':'opIn','Отгрузка':'opShip'};
+const cap=s=>s?String(s).charAt(0).toUpperCase()+String(s).slice(1):'';
+const opBadge=o=>`<span class="st ${OPCLS[o]||'opInv'}">${esc(cap(o))}</span>`;
+
+// Состояние по журналам: 'stock' — журнал склада, 'serial' — журнал серийных номеров.
+let cur='stock';
+const ST={stock:{page:1,perPage:50},serial:{page:1,perPage:50}};
+const SORT={stock:{key:'doc_date',dir:'DESC'},serial:{key:'doc_date',dir:'DESC'}};
+
+// --- Панели фильтров: чекбоксы типов операций ---
+function buildOpChecks(){
+  $('fops').innerHTML=OP_TYPES.map(o=>`<label class="chk"><input type="checkbox" id="fo_${esc(o)}" data-op="${esc(o)}"> ${esc(cap(o))}</label>`).join('');
+  $('fsops').innerHTML=SERIAL_OP_TYPES.map(o=>`<label class="chk"><input type="checkbox" id="fso_${esc(o)}" data-op="${esc(o)}"> ${esc(o)}</label>`).join('');
+  document.querySelectorAll('#fops input,#fsops input').forEach(c=>c.onchange=()=>applyFilters(c.closest('#fops')?'stock':'serial'));
+}
+function checkedOps(boxId){return Array.prototype.slice.call(document.querySelectorAll('#'+boxId+' input:checked')).map(c=>c.dataset.op)}
+// Актуальные типы операций с сервера (?action=op_types) — на случай правки справочника.
+async function syncOpTypes(){
+  try{
+    const d=await (await fetch(API+'?action=op_types')).json();
+    if(Array.isArray(d.op_types)&&d.op_types.length&&Array.isArray(d.serial_op_types)&&d.serial_op_types.length){
+      const same=d.op_types.join('|')===OP_TYPES.join('|')&&d.serial_op_types.join('|')===SERIAL_OP_TYPES.join('|');
+      if(!same){OP_TYPES.length=0;d.op_types.forEach(o=>OP_TYPES.push(o));SERIAL_OP_TYPES.length=0;d.serial_op_types.forEach(o=>SERIAL_OP_TYPES.push(o));buildOpChecks()}
+    }
+  }catch(e){}
+}
+
+// --- Параметры запроса ---
+function params(j){
+  const S=ST[j],p=new URLSearchParams({action:j==='stock'?'list':'serial_list',page:S.page,per_page:S.perPage});
+  const q=$(j==='stock'?'q':'qs').value.trim();
+  if(q)p.set('search',q);
+  if(j==='stock'){
+    checkedOps('fops').forEach(o=>p.append('op_type[]',o));
+    if($('f_from').value)p.set('date_from',$('f_from').value);
+    if($('f_to').value)p.set('date_to',$('f_to').value);
+    if($('f_sku').value.trim())p.set('sku',$('f_sku').value.trim());
+    if($('f_doc').value.trim())p.set('doc_no',$('f_doc').value.trim());
+    if($('f_pal').value.trim())p.set('pallet',$('f_pal').value.trim());
+  }else{
+    checkedOps('fsops').forEach(o=>p.append('op_type[]',o));
+    if($('fs_from').value)p.set('date_from',$('fs_from').value);
+    if($('fs_to').value)p.set('date_to',$('fs_to').value);
+    if($('fs_sku').value.trim())p.set('sku',$('fs_sku').value.trim());
+    if($('fs_doc').value.trim())p.set('doc_no',$('fs_doc').value.trim());
+    if($('fs_pal').value.trim())p.set('pallet',$('fs_pal').value.trim());
+  }
+  Sort.params(p);
+  return p}
+
+// --- Отрисовка ---
+function renderStock(rows){
+  $('rows').innerHTML=rows.map(r=>{
+    const palQual = (r.quality||'новый') === 'Брак';
+    return `<tr>
+<td>${esc(dFmt(r.doc_date))}</td>
+<td>${opBadge(r.op_type)}</td>
+<td>${r.doc_type?`<span class="hint">${esc(r.doc_type)}</span> `:''}<b>${esc(r.doc_no||'—')}</b></td>
+<td><b>${esc(r.sku||'')}</b></td>
+<td>${esc(r.product_name||'')}</td>
+<td>${fmtN(r.qty)}</td>
+<td style="color:${palQual?'#B00020':'inherit'};font-weight:${palQual?'700':'400'}">${esc(r.pallet||'—')}${palQual?'  ⚠️ брак':''}</td>
+<td>${esc(r.sscc||'—')}</td>
+<td>${esc(r.cell_from||'—')}</td>
+<td>${esc(r.cell_to||'—')}</td>
+<td>${esc(r.zone||'—')}</td>
+<td>${esc(r.user_fio||'—')}</td>
+<td>${esc(r.comment||'')}</td></tr>`}).join('')||'<tr><td colspan="13">Ничего не найдено</td></tr>'}
+function renderSerial(rows){
+  $('rowsSerial').innerHTML=rows.map(r=>`<tr>
+<td>${esc(dFmt(r.doc_date))}</td>
+<td><b>${esc(r.serial_no||'')}</b></td>
+<td>${opBadge(r.op_type)}</td>
+<td>${esc(r.sku||'—')}</td>
+<td>${esc(r.product_name||'')}</td>
+<td>${esc(r.receipt_doc_no||'—')}</td>
+<td>${esc(r.shipment_doc_no||'—')}</td>
+<td>${esc(r.pallet||'—')}</td>
+<td>${fmtN(r.qty)}</td>
+<td>${esc(r.cell||'—')}</td>
+<td>${esc(r.user_fio||'—')}</td></tr>`).join('')||'<tr><td colspan="11">Ничего не найдено</td></tr>'}
+
+// --- Активные фильтры (чипсы) ---
+function chipsStock(p){
+  const c=[];
+  if(p.get('search'))c.push(['search','Поиск: '+p.get('search')]);
+  checkedOps('fops').forEach(o=>c.push(['op_type:'+o,'Операция: '+cap(o)]));
+  if(p.get('date_from')||p.get('date_to'))c.push(['date','Дата: '+(p.get('date_from')||'…')+' – '+(p.get('date_to')||'…')]);
+  if(p.get('sku'))c.push(['sku','Артикул: '+p.get('sku')]);
+  if(p.get('doc_no'))c.push(['doc_no','Документ: '+p.get('doc_no')]);
+  if(p.get('pallet'))c.push(['pallet','Паллета: '+p.get('pallet')]);
+  return c}
+function chipsSerial(p){
+  const c=[];
+  if(p.get('search'))c.push(['search','Поиск: '+p.get('search')]);
+  checkedOps('fsops').forEach(o=>c.push(['op_type:'+o,'Операция: '+o]));
+  if(p.get('date_from')||p.get('date_to'))c.push(['date','Дата: '+(p.get('date_from')||'…')+' – '+(p.get('date_to')||'…')]);
+  if(p.get('sku'))c.push(['sku','Артикул: '+p.get('sku')]);
+  if(p.get('doc_no'))c.push(['doc_no','Документ: '+p.get('doc_no')]);
+  if(p.get('pallet'))c.push(['pallet','Паллета: '+p.get('pallet')]);
+  return c}
+function paintChips(boxId,list,n){
+  $(boxId).innerHTML=list.map(c=>`<span class="chip">${esc(c[1])} <a href="#" data-chip="${esc(c[0])}" style="color:#663EB2;text-decoration:none" title="Убрать фильтр">✕</a></span>`).join('')+(n?` <a href="#" id="clrall_${boxId}" style="font-size:12px">Сбросить все</a>`:'');
+  document.querySelectorAll('#'+boxId+' [data-chip]').forEach(a=>a.onclick=e=>{e.preventDefault();clearChip(a.dataset.chip)});
+  const ca=$('clrall_'+boxId);if(ca)ca.onclick=e=>{e.preventDefault();clearAll(cur)}}
+function clearChip(key){
+  if(cur==='stock'){
+    if(key==='search')$('q').value='';
+    else if(key==='sku')$('f_sku').value='';
+    else if(key==='doc_no')$('f_doc').value='';
+    else if(key==='pallet')$('f_pal').value='';
+    else if(key==='date'){$('f_from').value='';$('f_to').value=''}
+    else if(key.indexOf('op_type:')===0){const c=document.querySelector('#fops input[data-op="'+key.slice(8)+'"]');if(c)c.checked=false}
+    else return clearAll('stock');
+  }else{
+    if(key==='search')$('qs').value='';
+    else if(key==='sku')$('fs_sku').value='';
+    else if(key==='doc_no')$('fs_doc').value='';
+    else if(key==='pallet')$('fs_pal').value='';
+    else if(key==='date'){$('fs_from').value='';$('fs_to').value=''}
+    else if(key.indexOf('op_type:')===0){const c=document.querySelector('#fsops input[data-op="'+key.slice(8)+'"]');if(c)c.checked=false}
+    else return clearAll('serial');
+  }
+  ST[cur].page=1;load(cur)}
+function clearAll(j){
+  if(j==='stock'){
+    $('q').value='';['f_from','f_to','f_sku','f_doc','f_pal'].forEach(i=>$(i).value='');
+    document.querySelectorAll('#fops input').forEach(c=>c.checked=false);
+  }else{
+    $('qs').value='';['fs_from','fs_to','fs_sku','fs_doc','fs_pal'].forEach(i=>$(i).value='');
+    document.querySelectorAll('#fsops input').forEach(c=>c.checked=false);
+  }
+  ST[j].page=1;load(j)}
+
+// --- Пагинация ---
+function pager(j,total,perPage,boxId){
+  const page=ST[j].page;
+  const pages=Math.max(1,Math.ceil(total/perPage));
+  let h=`<button data-p="1" title="В начало">«</button><button data-p="${Math.max(1,page-1)}" title="Назад">‹</button>`;
+  const s=Math.max(1,Math.min(page-1,pages-2));const nums=[];
+  for(let i=s;i<=Math.min(pages,s+2);i++)nums.push(i);
+  nums.forEach(i=>{h+=`<button class="${i===page?'on':''}" data-p="${esc(i)}">${esc(i)}</button>`});
+  h+=`<button data-p="${Math.min(pages,page+1)}" title="Вперёд">›</button><button data-p="${esc(pages)}" title="В конец">»</button>`;
+  $(boxId).innerHTML=h;
+  document.querySelectorAll('#'+boxId+' button').forEach(b=>b.onclick=()=>{ST[j].page=+b.dataset.p;load(j)})}
+
+// --- Загрузка данных ---
+async function load(j){
+  const p=params(j);
+  const r=await fetch(API+'?'+p);
+  const d=await r.json();
+  if(d.error){toast('Ошибка: '+d.error);return}
+  const n=d.active_filters||0;
+  if(j==='stock'){
+    renderStock(d.rows||[]);
+    $('info').textContent=`Показано ${esc(d.from)}–${esc(d.to)} из ${esc(d.total)}`;
+    $('fbadge').textContent=n;$('fbadge2').textContent=n;$('factive').textContent=n;
+    paintChips('chips',chipsStock(p),n);
+    pager('stock',d.total,ST.stock.perPage,'pg');
+  }else{
+    renderSerial(d.rows||[]);
+    $('infos').textContent=`Показано ${esc(d.from)}–${esc(d.to)} из ${esc(d.total)}`;
+    $('fbadges').textContent=n;$('fbadges2').textContent=n;$('fsactive').textContent=n;
+    paintChips('chipss',chipsSerial(p),n);
+    pager('serial',d.total,ST.serial.perPage,'pgs');
+  }}
+
+// --- Сортировка (server-mode): активная таблица монтируется при переключении журнала ---
+function mountSort(j){
+  const old=$(j==='stock'?'tblStock':'tblSerial');if(!old)return;
+  const fresh=old.cloneNode(true);
+  const tb=fresh.querySelector('tbody');
+  if(tb){tb.innerHTML='<tr><td colspan="'+(j==='stock'?13:11)+'" style="color:var(--mut)">Загрузка…</td></tr>'}
+  old.parentNode.replaceChild(fresh,old);
+  Sort.init({mode:'server',table:fresh,key:SORT[j].key,dir:SORT[j].dir,onChange:(k,d)=>{SORT[j].key=k;SORT[j].dir=d;ST[j].page=1;load(j)}});
+}
+
+// --- Переключение активного журнала (раскрывающий список: открыт один раздел) ---
+function setJournal(j){
+  cur=j;
+  $('expinfo').textContent='Активный журнал: '+(j==='stock'?'Журнал склада':'Журнал серийных номеров');
+  mountSort(j);
+  load(j)}
+function onToggle(e){
+  const el=e.target;
+  if(!el.open)return;
+  const other=(el.id==='secStock')?$('secSerial'):$('secStock');
+  if(other.open)other.open=false;            // аккордеон: открыт один раздел
+  const j=(el.id==='secStock')?'stock':'serial';
+  if(j!==cur)setJournal(j);
+  else $('expinfo').textContent='Активный журнал: '+(cur==='stock'?'Журнал склада':'Журнал серийных номеров')}
+$('secStock').addEventListener('toggle',onToggle);
+$('secSerial').addEventListener('toggle',onToggle);
+
+// --- Фильтры ---
+$('fbtn').onclick=()=>$('fp').classList.add('open');
+$('fclose').onclick=()=>$('fp').classList.remove('open');
+$('fok').onclick=()=>{ST.stock.page=1;$('fp').classList.remove('open');load('stock')};
+$('fclr').onclick=()=>clearAll('stock');
+$('freset').onclick=e=>{e.preventDefault();clearAll('stock')};
+$('fbtns').onclick=()=>$('fps').classList.add('open');
+$('fsclose').onclick=()=>$('fps').classList.remove('open');
+$('fsok').onclick=()=>{ST.serial.page=1;$('fps').classList.remove('open');load('serial')};
+$('fsclr').onclick=()=>clearAll('serial');
+$('fresets').onclick=e=>{e.preventDefault();clearAll('serial')};
+function applyFilters(j){ST[j].page=1;load(j)}
+$('q').onchange=()=>{ST.stock.page=1;load('stock')};
+$('qs').onchange=()=>{ST.serial.page=1;load('serial')};
+$('q').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();ST.stock.page=1;load('stock')}};
+$('qs').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();ST.serial.page=1;load('serial')}};
+$('pp').onchange=e=>{ST.stock.perPage=+e.target.value;ST.stock.page=1;load('stock')};
+$('pps').onchange=e=>{ST.serial.perPage=+e.target.value;ST.serial.page=1;load('serial')};
+
+// --- Экспорт CSV активного журнала ---
+$('exp').onclick=()=>{
+  const p=params(cur);
+  p.delete('action');p.set('action','export');p.set('journal',cur);
+  location.href=API+'?'+p.toString();
+  toast('Выгрузка CSV: '+(cur==='stock'?'журнал склада':'журнал серийных номеров'))};
+
+// --- Скрываемое левое меню (стрелка вверху) ---
+if(localStorage.getItem('navhide')==='1')document.body.classList.add('navhide');
+$('navhidebtn').onclick=()=>{document.body.classList.add('navhide');try{localStorage.setItem('navhide','1')}catch(e){}};
+$('navshowbtn').onclick=()=>{document.body.classList.remove('navhide');try{localStorage.setItem('navhide','0')}catch(e){}};
+
+buildOpChecks();
+syncOpTypes();
+// По умолчанию открыт «Журнал склада»; ?j=serial — сразу журнал серийных номеров.
+if((new URLSearchParams(location.search)).get('j')==='serial'){
+  cur='serial';$('secStock').open=false;$('secSerial').open=true;
+  $('expinfo').textContent='Активный журнал: Журнал серийных номеров';
+}
+mountSort(cur);
+load(cur);
+// ?f=1 — сразу открыть панель фильтров активного журнала.
+if((new URLSearchParams(location.search)).get('f')==='1'){
+  (cur==='stock'?$('fp'):$('fps')).classList.add('open');
+}
+</script>
+<script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>
+</html>

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/ShipmentStatus.php';
 require_once __DIR__ . '/ShipmentFilter.php';
+require_once __DIR__ . '/../shared/pg.php';
+require_once __DIR__ . '/../shared/Volume.php';
 
 // Репозиторий реестра отгрузок. Чистый PHP + PDO, легко переносится в Laravel Eloquent.
 // Алгоритм списка по макету:
@@ -31,11 +33,20 @@ final class ShipmentRepository
         $total = (int)$cnt->fetchColumn();
 
         $offset = ($f->page - 1) * $f->perPage;
+        // Сортировка по любому столбцу реестра (А→Я / Я→А).
         $sortMap = [
-            'doc_date' => 's.doc_date', 'doc_no' => 's.doc_no',
-            'total_with_vat' => 's.total_with_vat', 'id' => 's.id',
+            'doc_date' => ['s.doc_date', 'd'], 'doc_no' => ['s.doc_no', 't'],
+            'total_with_vat' => ['s.total_with_vat', 'n'], 'id' => ['s.id', 'n'],
+            'vehicle_arrival' => ['s.vehicle_arrival', 'd'],
+            'ship_date' => ['COALESCE(s.fact_shipment_date, s.plan_shipment_date)', 'd'],
+            'consignee' => ['s.consignee', 't'], 'vehicle' => ['s.vehicle', 't'],
+            'gate' => ['s.gate', 't'], 'loading_type' => ['s.loading_type', 't'],
+            'warehouse' => ['w.name', 't'], 'status' => ['s.status', 't'],
+            'total' => ['s.total_with_vat', 'n'], 'sku_count' => ['s.sku_count', 'n'],
+            'qty_total' => ['s.qty_total', 'n'], 'readiness' => ['s.readiness', 'n'],
+            'flags' => ['(s.serial_scan + s.marking_scan + s.need_check + s.need_pack)', 'n'],
         ];
-        $orderBy = ($sortMap[$f->sort] ?? 's.doc_date') . ' ' . $f->dir;
+        $orderBy = wms_order_by($this->pdo, $f->sort, $f->dir, $sortMap, 's.doc_date', 'd');
 
         // Колонки реестра по макету: №, Дата создания, Дата прибытия/отгрузки,
         // ТС, Ворота, Тип загрузки, Склад, Статус, Сумма, SKU, шт, Готовность, Флаги, Приоритет...
@@ -48,7 +59,7 @@ final class ShipmentRepository
                        s.vehicle, s.gate, s.loading_type, s.priority,
                        s.volume, s.weight, s.cargo_places, s.readiness, s.has_diff,
                        s.need_check, s.need_pack, s.is_kgt, s.is_danger,
-                       s.serial_scan, s.marking_scan,
+                       s.serial_scan, s.marking_scan, s.is_crossdock,
                        s.assembly_start, s.packing_start, s.check_start,
                        u.fio AS created_by, l.fio AS loaded_by,
                        s.paid, s.debt
@@ -93,11 +104,70 @@ final class ShipmentRepository
             $st->execute();
             $rows = $st->fetchAll(PDO::FETCH_ASSOC);
         }
+        $this->attachVolumes($rows);
 
         $from = $total === 0 ? 0 : $offset + 1;
         $to = min($offset + $f->perPage, $total);
         return ['rows' => $rows, 'total' => $total, 'from' => $from, 'to' => $to,
                 'active_filters' => $f->activeCount()];
+    }
+
+    /**
+     * Объём по отгрузке (м³): план — по shipment_items.qty,
+     * факт — по фактически отобранному количеству (tsd_picks), если оно есть.
+     * Единичный объём = Д × Ш × В товара (без паллеты).
+     */
+    private function attachVolumes(array &$rows): void
+    {
+        if (!$rows) {
+            return;
+        }
+        $ids = array_values(array_filter(array_map(static fn($r): int => (int)($r['id'] ?? 0), $rows)));
+        if (!$ids) {
+            return;
+        }
+        $in = implode(',', array_map('intval', $ids));
+        $plan = [];
+        $fact = [];
+        $skus = [];
+        try {
+            foreach ($this->pdo->query(
+                "SELECT shipment_id, sku, COALESCE(SUM(qty),0) AS q
+                 FROM shipment_items WHERE shipment_id IN ($in) GROUP BY shipment_id, sku"
+            ) as $r) {
+                $sid = (int)$r['shipment_id'];
+                $sku = (string)$r['sku'];
+                $plan[$sid][$sku] = (float)$r['q'];
+                $skus[$sku] = true;
+            }
+            // Факт отбора из ТСД; если по конкретной отгрузке отбора не было —
+            // берём количества самой отгрузки.
+            try {
+                foreach ($this->pdo->query(
+                    "SELECT shipment_id, sku, COALESCE(SUM(qty),0) AS q
+                     FROM tsd_picks WHERE shipment_id IN ($in) GROUP BY shipment_id, sku"
+                ) as $r) {
+                    $sid = (int)$r['shipment_id'];
+                    $sku = (string)$r['sku'];
+                    $fact[$sid][$sku] = (float)$r['q'];
+                    $skus[$sku] = true;
+                }
+            } catch (Throwable) {
+            }
+            foreach ($plan as $sid => $bySku) {
+                if (!isset($fact[$sid])) {
+                    $fact[$sid] = $bySku;
+                }
+            }
+        } catch (Throwable) {
+        }
+        $unit = wms_volume_unit_map(array_keys($skus));
+        foreach ($rows as &$row) {
+            $sid = (int)($row['id'] ?? 0);
+            $row['volume'] = wms_volume_sum($plan[$sid] ?? [], $unit);
+            $row['volume_fact'] = wms_volume_sum($fact[$sid] ?? [], $unit);
+        }
+        unset($row);
     }
 
     public function findById(int $id): ?array
@@ -350,15 +420,22 @@ final class ShipmentRepository
         static $cols = null;
         if ($cols === null) {
             try {
-                $info = $this->pdo->query("PRAGMA table_info(shipments)")->fetchAll(PDO::FETCH_ASSOC);
-                if ($info) {
-                    $cols = array_column($info, 'name');
+                $drv = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+                if ($drv === 'pgsql') {
+                    $st = $this->pdo->prepare("SELECT column_name FROM information_schema.columns WHERE table_name='shipments'");
+                    $st->execute();
+                    $cols = array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN));
                 } else {
-                    // MySQL: INFORMATION_SCHEMA
-                    $cols = [];
-                    $q = $this->pdo->query("SHOW COLUMNS FROM shipments");
-                    foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                        $cols[] = $r['Field'] ?? $r['field'] ?? '';
+                    $info = $this->pdo->query("PRAGMA table_info(shipments)")->fetchAll(PDO::FETCH_ASSOC);
+                    if ($info) {
+                        $cols = array_column($info, 'name');
+                    } else {
+                        // MySQL: INFORMATION_SCHEMA
+                        $cols = [];
+                        $q = $this->pdo->query("SHOW COLUMNS FROM shipments");
+                        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                            $cols[] = $r['Field'] ?? $r['field'] ?? '';
+                        }
                     }
                 }
             } catch (Throwable $e) {

@@ -36,6 +36,7 @@ final class TaskFilter
     public ?float $weightTo = null;
     public ?string $flag = null;        // Флаги: danger/check/confirm...
     public ?string $role = null;        // Роль исполнителя
+    public ?string $listCode = null;    // Список заданий: PK-000001 ...
 
     public int $page = 1;
     public int $perPage = 20;
@@ -82,9 +83,18 @@ final class TaskFilter
         $f->weightTo    = $get('weight_to') !== null ? (float)$get('weight_to') : null;
         $f->flag        = $get('flag') ?? $get('flags');
         $f->role        = $get('role');
+        $f->listCode    = $get('list_code') ?? $get('list') ?? $get('pick_list');
+        if ($f->listCode !== null) {
+            $f->listCode = trim((string)$f->listCode);
+            if ($f->listCode === '') {
+                $f->listCode = null;
+            }
+        }
         $f->page        = max(1, (int)($q['page'] ?? 1));
         $f->perPage     = min(200, max(5, (int)($q['per_page'] ?? 20)));
-        $allowedSort    = ['created_at', 'doc_no', 'progress', 'priority', 'id'];
+        $allowedSort    = ['created_at', 'doc_no', 'progress', 'priority', 'id',
+            'type', 'status', 'warehouse', 'goods', 'cell', 'pallet', 'sku',
+            'name', 'cells', 'doc_ref', 'executor', 'flags', 'list'];
         if (isset($q['sort']) && in_array($q['sort'], $allowedSort, true)) {
             $f->sort = $q['sort'];
         }
@@ -104,7 +114,7 @@ final class TaskFilter
             $this->goodsFrom, $this->goodsTo, $this->linesFrom, $this->linesTo,
             $this->cellsFrom, $this->cellsTo, $this->progressFrom, $this->progressTo,
             $this->volumeFrom, $this->volumeTo, $this->weightFrom, $this->weightTo,
-            $this->flag, $this->role,
+            $this->flag, $this->role, $this->listCode,
         ] as $v) {
             if ($v !== null && $v !== [] && $v !== '') {
                 $n++;

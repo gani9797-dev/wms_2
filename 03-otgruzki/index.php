@@ -70,6 +70,12 @@ if ($action === 'list') {
     $controller->ssccList((int)($_GET['id'] ?? 0));
 } elseif ($action === 'import' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $controller->import($body);
+} elseif ($action === 'refs') {
+    $controller->refs();
+} elseif ($action === 'csv_shipment' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $controller->csvShipment();
+} elseif ($action === 'csv_orders' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $controller->csvOrders();
 } elseif ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $controller->destroy((int)($_GET['id'] ?? 0));
 } elseif ($action === 'disband' && $_SERVER['REQUEST_METHOD'] === 'POST') {

@@ -12,14 +12,16 @@ require_once __DIR__ . '/CellRepository.php';
 require_once __DIR__ . '/CellService.php';
 require_once __DIR__ . '/CellPlacement.php';
 require_once __DIR__ . '/../shared/db.php';
+require_once __DIR__ . '/../shared/StorageZones.php';
 
 $pdo = wms_storage_pdo();
+wms_storage_zones_ensure($pdo);
 $userId = 1;
 
 // --- Сид из схемы 5, если пусто ---
 if ((int)$pdo->query("SELECT COUNT(*) FROM storage_cells")->fetchColumn() === 0) {
     $pdo->exec("INSERT INTO warehouses (id,name) VALUES (1,'Основной склад'),(2,'Холодильный склад')");
-    $pdo->exec("INSERT INTO users (id,fio,role) VALUES (1,'Иванов И.И.','Администратор'),(1788,'1788 - Смирнов Николай','Кладовщик')");
+    // Сотрудники — в общей базе (shared/wms_users.sqlite), сиды там.
 
     // [code, wh, zone, type, category, status, capacity, qty, reserved, pallets, building, row, level, place, x, y, temp_from, temp_to, locked, comment]
     $rows = [
@@ -90,38 +92,61 @@ try {
         echo json_encode($repo->movements((int)($_GET['id'] ?? 0)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'tasks') {
         echo json_encode($repo->tasks((int)($_GET['id'] ?? 0)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    } elseif ($action === 'zones') {
+        // Справочник зон склада — для фильтра, формы ячейки и настроек.
+        $rows = wms_storage_zone_rows($pdo, true);
+        // Базовые зоны ячеек — чтобы фильтр работал даже без справочника.
+        foreach (CellStatus::zones() as $z) {
+            $has = false;
+            foreach ($rows as $r) {
+                if (strcasecmp((string)$r['code'], $z) === 0) {
+                    $has = true;
+                    break;
+                }
+            }
+            if (!$has) {
+                $rows[] = ['code' => $z, 'name' => CellStatus::zoneLabel($z),
+                    'purpose' => '', 'affects_placement' => 0, 'affects_reservation' => 0,
+                    'contractor_id' => null, 'is_virtual' => 0, 'is_active' => 1, 'cells_count' => 0];
+            }
+        }
+        echo json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'suggest') {
-        // Онлайн-подбор ячейки: ?pallet_type=euro|fin&height_mm=1500&warehouse_id=1
+        // Онлайн-подбор ячейки: ?pallet_type=euro|fin&height_mm=1500&warehouse_id=1&contractor_id=2
         $pt = (string)($_GET['pallet_type'] ?? $_GET['pallet'] ?? 'euro');
         $h = isset($_GET['height_mm']) && $_GET['height_mm'] !== '' ? (int)$_GET['height_mm'] : null;
         $w = isset($_GET['warehouse_id']) && $_GET['warehouse_id'] !== '' ? (int)$_GET['warehouse_id'] : null;
-        $s = CellPlacement::suggest($pdo, $pt, $h, $w);
+        $cid = isset($_GET['contractor_id']) && $_GET['contractor_id'] !== '' ? (int)$_GET['contractor_id'] : null;
+        $s = CellPlacement::suggest($pdo, $pt, $h, $w, null, $cid);
         if (!$s) {
             http_response_code(404);
-            echo json_encode(['error' => 'Подходящая ячейка не найдена (высота/тара/секция)'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['error' => 'Подходящая ячейка не найдена (высота/тара/секция/зоны клиента)'], JSON_UNESCAPED_UNICODE);
         } else {
             echo json_encode(['ok' => true, 'pallet_type' => CellPlacement::normalizePalletType($pt),
                 'height_mm' => $h, 'cell' => $s['cell'], 'section' => $s['section'],
-                'hint' => 'Приоритет: добивка непустых секций до полной'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+                'placement' => $s['placement'],
+                'hint' => 'Приоритет: неполные секции, затем близость к клиенту'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         }
     } elseif ($action === 'place' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        // Занять ячейку под паллету: {cell_id?, pallet_type, height_mm?, sscc?, warehouse_id?}
+        // Занять ячейку под паллету: {cell_id?, pallet_type, height_mm?, sscc?, warehouse_id?, contractor_id?}
         // Без cell_id — сначала онлайн-подбор, затем резерв.
         $b = json_decode(file_get_contents('php://input'), true) ?? [];
         $pt = (string)($b['pallet_type'] ?? $b['pallet'] ?? 'euro');
         $h = isset($b['height_mm']) && $b['height_mm'] !== '' ? (int)$b['height_mm'] : null;
         $w = isset($b['warehouse_id']) && $b['warehouse_id'] !== '' ? (int)$b['warehouse_id'] : null;
+        $clientId = isset($b['contractor_id']) && $b['contractor_id'] !== '' ? (int)$b['contractor_id'] : null;
         $sscc = trim((string)($b['sscc'] ?? ''));
         $cid = (int)($b['cell_id'] ?? 0);
         if ($cid <= 0) {
-            $s = CellPlacement::suggest($pdo, $pt, $h, $w);
+            $s = CellPlacement::suggest($pdo, $pt, $h, $w, null, $clientId);
             if (!$s) {
                 http_response_code(404);
-                echo json_encode(['error' => 'Подходящая ячейка не найдена (высота/тара/секция)'], JSON_UNESCAPED_UNICODE);
+                echo json_encode(['error' => 'Подходящая ячейка не найдена (высота/тара/секция/зоны клиента)'], JSON_UNESCAPED_UNICODE);
             } else {
                 $r = CellPlacement::occupy($pdo, (int)$s['cell']['id'], $pt, ($sscc !== '' ? $sscc : null), $userId);
                 http_response_code(201);
                 echo json_encode(['ok' => true, 'cell' => $r['cell'], 'section' => $s['section'],
+                    'placement' => $s['placement'],
                     'temp_blocked' => $r['temp_blocked'], 'section_tuned' => $r['section_tuned']], JSON_UNESCAPED_UNICODE);
             }
         } else {

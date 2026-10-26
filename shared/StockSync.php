@@ -2,24 +2,387 @@
 declare(strict_types=1);
 
 // Проброс факта приемки (receipt_operations accept_status='Принято')
-// в Номенклатуру: products.qty += fact, product_stock, product_movements, product_history.
-// Идемпотентно: повторный close того же receipt_id не удваивает остаток
-// (guard-таблица receipt_stock_sync в БД поступлений).
-// Работает и для SQLite-демо (две БД-файла), и для MySQL-прода (одна БД `wms`).
+// в Номенклатуру: products.qty, product_stock (модуль 08.1), product_movements, product_history.
+// Принятый товар встаёт в ЯЧЕЙКУ ПРИЁМКИ (ворота документа = ячейка хранения из модуля 05,
+// зона «Приёмка», напр. DOK-01). Строка запаса привязана к приходу и паллете:
+// один товар на разных паллетах — разные строки, чтобы номер паллеты (SSCC) был виден в 8.1.
+// Идемпотентно: остаток НЕ накапливается, а приводится к факту приёмки
+// (UPDATE qty = факт по паллете) — повторный вызов и отмена паллеты не двоят остаток.
+// Работает и для SQLite-демо (две БД-файла), и для MySQL/PG-прода (одна БД `wms`).
 
 require_once __DIR__ . '/ProductCode.php';
+require_once __DIR__ . '/pg.php';
+require_once __DIR__ . '/Journal.php';
 
 function wms_now_expr(PDO $pdo): string
 {
-    return $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? 'NOW()' : "datetime('now')";
+    return wms_is_sqlite($pdo) ? "datetime('now')" : 'NOW()';
+}
+
+/** Портированная проверка колонки: mysql SHOW / pgsql information_schema / sqlite PRAGMA. */
+function wms_have_column(PDO $pdo, string $table, string $col): bool
+{
+    if (function_exists('wms_table_columns')) {
+        return in_array($col, wms_table_columns($pdo, $table), true);
+    }
+    return true;
+}
+
+/** Дотягивает колонки product_stock (привязка к приходу, паллета, тара). */
+function wms_stock_ensure_columns(PDO $nomPdo): void
+{
+    $isMysql = wms_is_mysql($nomPdo);
+    $isPg = wms_is_pgsql($nomPdo);
+    try {
+        $have = wms_table_columns($nomPdo, 'product_stock');
+        if (!in_array('receipt_id', $have, true)) {
+            if ($isMysql) {
+                $nomPdo->exec("ALTER TABLE `product_stock` ADD COLUMN receipt_id BIGINT UNSIGNED NULL");
+            } elseif ($isPg) {
+                $nomPdo->exec('ALTER TABLE "product_stock" ADD COLUMN receipt_id BIGINT NULL');
+            } else {
+                $nomPdo->exec('ALTER TABLE product_stock ADD COLUMN receipt_id INTEGER');
+            }
+        }
+        if (!in_array('receipt_no', $have, true)) {
+            if ($isMysql) {
+                $nomPdo->exec("ALTER TABLE `product_stock` ADD COLUMN receipt_no VARCHAR(50) NULL");
+            } elseif ($isPg) {
+                $nomPdo->exec('ALTER TABLE "product_stock" ADD COLUMN receipt_no VARCHAR(50) NULL');
+            } else {
+                $nomPdo->exec('ALTER TABLE product_stock ADD COLUMN receipt_no TEXT');
+            }
+        }
+        if (!in_array('quality', $have, true)) {
+            if ($isMysql) {
+                $nomPdo->exec("ALTER TABLE `product_stock` ADD COLUMN quality VARCHAR(20) NULL DEFAULT 'новый'");
+            } elseif ($isPg) {
+                $nomPdo->exec('ALTER TABLE "product_stock" ADD COLUMN quality VARCHAR(20) NULL DEFAULT \'новый\'');
+            } else {
+                $nomPdo->exec('ALTER TABLE product_stock ADD COLUMN quality TEXT DEFAULT \'новый\'');
+            }
+        }
+        if (!in_array('pallet', $have, true)) {
+            if ($isMysql) {
+                $nomPdo->exec("ALTER TABLE `product_stock` ADD COLUMN pallet VARCHAR(50) NULL");
+            } elseif ($isPg) {
+                $nomPdo->exec('ALTER TABLE "product_stock" ADD COLUMN pallet VARCHAR(50) NULL');
+            } else {
+                $nomPdo->exec('ALTER TABLE product_stock ADD COLUMN pallet TEXT');
+            }
+        }
+    } catch (Throwable) {
+    }
+}
+
+/** Карточка товара по SKU; если нет — создаём минимальную (факт не должен теряться). */
+function wms_ensure_product_card(PDO $nomPdo, string $sku, int $whId, array &$created): int
+{
+    $p = $nomPdo->prepare("SELECT * FROM products WHERE sku=:s LIMIT 1");
+    $p->execute([':s' => $sku]);
+    $prod = $p->fetch(PDO::FETCH_ASSOC);
+    if ($prod) {
+        return (int)$prod['id'];
+    }
+    // SKU из ТСД (в т.ч. «не заявлен») — создаем минимальную карточку.
+    $code = $sku;
+    try {
+        $code = wms_next_product_code($nomPdo);
+    } catch (Throwable $e) {
+    }
+    $isMysql = wms_is_mysql($nomPdo);
+    $isPg = wms_is_pgsql($nomPdo);
+    if ($isMysql || $isPg) {
+        $nomPdo->prepare(
+            "INSERT INTO products (code,sku,name,unit,category,brand,owner,warehouse_id,length_mm,width_mm,height_mm,weight_g,qty,reserved_qty,is_active,is_archived,created_at,updated_at)
+             VALUES (:code,:sku,:name,'шт','Мячи','Wilson','ООО «Эталон»',:wh,100,100,100,500,0,0,1,0,NOW(),NOW())"
+        )->execute([':code' => $code, ':sku' => $sku, ':name' => 'Не заявлен: ' . $sku, ':wh' => $whId]);
+    } else {
+        $nomPdo->prepare(
+            "INSERT INTO products (code,sku,name,unit,category,brand,owner,warehouse_id,length_mm,width_mm,height_mm,weight_g,qty,reserved_qty,is_active,is_archived,created_at)
+             VALUES (:code,:sku,:name,'шт','Мячи','Wilson','ООО «Эталон»',:wh,100,100,100,500,0,0,1,0,datetime('now'))"
+        )->execute([':code' => $code, ':sku' => $sku, ':name' => 'Не заявлен: ' . $sku, ':wh' => $whId]);
+    }
+    $p->execute([':s' => $sku]);
+    $prod = $p->fetch(PDO::FETCH_ASSOC);
+    $created[] = $sku;
+    return (int)($prod['id'] ?? 0);
+}
+
+/** Тип тары паллеты: из ячейки-приёмки, иначе из карточки, иначе euro. */
+function wms_pallet_type_for(PDO $nomPdo, ?PDO $storagePdo, string $cell, array $prod): string
+{
+    $ptype = null;
+    if ($storagePdo) {
+        try {
+            $cs = $storagePdo->prepare("SELECT pallet_type FROM storage_cells WHERE code=:c LIMIT 1");
+            $cs->execute([':c' => $cell]);
+            if ($r0 = $cs->fetch()) {
+                $t = strtolower(trim((string)($r0['pallet_type'] ?? '')));
+                if ($t !== '') {
+                    $ptype = in_array($t, ['фин', 'финская', 'fin'], true) ? 'fin' : 'euro';
+                }
+            }
+        } catch (Throwable) {
+        }
+    }
+    if ($ptype === null) {
+        $ptype = strtolower(trim((string)($prod['pallet_type'] ?? '')));
+        if (!in_array($ptype, ['euro', 'fin'], true)) {
+            $ptype = 'euro';
+        }
+    }
+    return $ptype;
 }
 
 /**
+ * Дата производства партии по позиции приёмки (receipt_items.prod_date).
+ * Берётся строка позиции документа; если у неё даты нет — любая строка
+ * этого артикула с заполненной датой (партии одного товара в разных приходах).
+ * @return string|null дата в формате YYYY-MM-DD
+ */
+function wms_receipt_prod_date(PDO $recPdo, int $receiptId, string $sku): ?string
+{
+    $sku = trim($sku);
+    if ($sku === '') {
+        return null;
+    }
+    try {
+        $st = $recPdo->prepare(
+            "SELECT prod_date FROM receipt_items
+              WHERE receipt_id = :r AND sku = :s AND prod_date IS NOT NULL
+              ORDER BY (supplier_batch IS NULL) DESC, id LIMIT 1"
+        );
+        $st->execute([':r' => $receiptId, ':s' => $sku]);
+        $v = $st->fetchColumn();
+        if ($v !== false && $v !== null && trim((string)$v) !== '') {
+            return substr(trim((string)$v), 0, 10);
+        }
+    } catch (Throwable) {
+    }
+    try {
+        $st = $recPdo->prepare(
+            "SELECT prod_date FROM receipt_items
+              WHERE sku = :s AND prod_date IS NOT NULL ORDER BY id DESC LIMIT 1"
+        );
+        $st->execute([':s' => $sku]);
+        $v = $st->fetchColumn();
+        if ($v !== false && $v !== null && trim((string)$v) !== '') {
+            return substr(trim((string)$v), 0, 10);
+        }
+    } catch (Throwable) {
+    }
+    return null;
+}
+
+/**
+ * Синхронизация ОДНОЙ паллеты прихода в товарный запас (модуль 08.1, product_stock).
+ * Остаток не накапливается, а приводится к факту приёмки по этой паллете (UPDATE),
+ * поэтому повторный вызов и отмена принятого паллета не двоят остаток.
+ * @return array{sku:string,pallet:string,qty:float,cell:string,stock_id:?int,changed:bool}
+ */
+function wms_sync_pallet_stock(PDO $recPdo, PDO $nomPdo, int $receiptId, string $sku, string $pallet, ?int $userId = null, string $userFio = 'ТСД'): array
+{
+    $sku = trim($sku);
+    $pallet = trim($pallet);
+    $out = ['sku' => $sku, 'pallet' => $pallet, 'qty' => 0.0, 'cell' => '', 'stock_id' => null, 'changed' => false];
+    if ($sku === '') {
+        return $out;
+    }
+    $h = $recPdo->prepare("SELECT id, doc_no, warehouse_id, gate FROM receipts WHERE id=:id");
+    $h->execute([':id' => $receiptId]);
+    $head = $h->fetch(PDO::FETCH_ASSOC);
+    if (!$head) {
+        throw new RuntimeException('Поступление не найдено: ' . $receiptId);
+    }
+    $whId = (int)($head['warehouse_id'] ?? 1) ?: 1;
+    $docNo = (string)$head['doc_no'];
+    // Ячейка приёмки = ворота документа (DOK-01…DOK-10).
+    // Если ворота не заданы или не являются реальной ячейкой приёмки —
+    // берём первую существующую. Раньше подставлялась строка 'ЗОНА-ПРИЕМКИ',
+    // которой НЕТ в storage_cells: товар попадал в несуществующее место.
+    $cell = trim((string)($head['gate'] ?? ''));
+    if ($cell === '' || !wms_is_receiving_cell($cell)) {
+        $cell = wms_first_receiving_cell();
+    }
+    if ($cell === '') {
+        // Справочник ячеек недоступен — пишем по воротам документа как есть.
+        $cell = trim((string)($head['gate'] ?? ''));
+    }
+    $out['cell'] = $cell;
+    wms_stock_ensure_columns($nomPdo);
+
+    // Факт приёмки по этой паллете (без паллеты — операции без SSCC).
+    $sql = "SELECT COALESCE(SUM(qty),0) FROM receipt_operations
+            WHERE receipt_id=:r AND sku=:s AND accept_status='Принято'";
+    $p = [':r' => $receiptId, ':s' => $sku];
+    if ($pallet !== '') {
+        $sql .= " AND pallet=:p";
+        $p[':p'] = $pallet;
+    } else {
+        $sql .= " AND COALESCE(pallet,'')=''";
+    }
+    $f = $recPdo->prepare($sql);
+    $f->execute($p);
+    $fact = round((float)$f->fetchColumn(), 3);
+    $out['qty'] = $fact;
+
+    // Качество по паллете: если есть хотя бы одна операция 'Брак' — «Брак», иначе «новый».
+    $quality = 'новый';
+    try {
+        if ($pallet !== '') {
+            $qq = $recPdo->prepare(
+                "SELECT COUNT(*) FROM receipt_operations
+                 WHERE receipt_id=:r AND sku=:s AND accept_status='Брак' AND pallet=:p"
+            );
+            $qq->execute([':r' => $receiptId, ':s' => $sku, ':p' => $pallet]);
+        } else {
+            $qq = $recPdo->prepare(
+                "SELECT COUNT(*) FROM receipt_operations
+                 WHERE receipt_id=:r AND sku=:s AND accept_status='Брак' AND COALESCE(pallet,'')=''"
+            );
+            $qq->execute([':r' => $receiptId, ':s' => $sku]);
+        }
+        $badCnt = (int)$qq->fetchColumn();
+        if ($badCnt > 0) {
+            $quality = 'Брак';
+        }
+    } catch (Throwable) {
+    }
+    $out['quality'] = $quality;
+
+    $created = [];
+    $pid = wms_ensure_product_card($nomPdo, $sku, $whId, $created);
+    if ($pid <= 0) {
+        return $out;
+    }
+    $pp = $nomPdo->prepare("SELECT * FROM products WHERE id=:id");
+    $pp->execute([':id' => $pid]);
+    $prod = $pp->fetch(PDO::FETCH_ASSOC) ?: [];
+
+    // Находим строку запаса: приход + паллета (+ ячейка приёмки).
+    $row = null;
+    try {
+        $sRow = $nomPdo->prepare(
+            "SELECT id, qty FROM product_stock WHERE product_id=:p AND warehouse_id=:w AND cell=:c
+             AND COALESCE(receipt_id,0)=:r AND COALESCE(pallet,'')=:pal LIMIT 1"
+        );
+        $sRow->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':r' => $receiptId, ':pal' => $pallet]);
+        $row = $sRow->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable) {
+        $row = null;
+    }
+    $storage = null;
+    try {
+        require_once __DIR__ . '/db.php';
+        $storage = wms_storage_pdo();
+    } catch (Throwable) {
+        $storage = null;
+    }
+    $ptype = wms_pallet_type_for($nomPdo, $storage, $cell, $prod);
+
+    $oldStock = $row ? (float)($row['qty'] ?? 0) : 0.0;
+    // Дата производства партии (receipt_items.prod_date) — в остаток.
+    $prodDate = wms_receipt_prod_date($recPdo, $receiptId, $sku);
+    if ($row) {
+        // UPDATE — остаток приводится к факту приёмки по паллете.
+        try {
+            $nomPdo->prepare("UPDATE product_stock SET qty=:q, pallet_type=COALESCE(pallet_type,:pt), prod_date=COALESCE(:pd, prod_date), quality=COALESCE(:ql, quality) WHERE id=:id")
+                ->execute([':q' => $fact, ':pt' => $ptype, ':pd' => $prodDate, ':ql' => $quality, ':id' => (int)$row['id']]);
+        } catch (Throwable) {
+            $nomPdo->prepare("UPDATE product_stock SET qty=:q WHERE id=:id")
+                ->execute([':q' => $fact, ':id' => (int)$row['id']]);
+        }
+        $out['stock_id'] = (int)$row['id'];
+    } else {
+        try {
+            $nomPdo->prepare(
+                "INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,pallet_type,qty,receipt_id,receipt_no,prod_date,quality)
+                 VALUES (:p,:w,:c,:pal,:pt,:q,:r,:d,:pd,:ql)"
+            )->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':pal' => ($pallet !== '' ? $pallet : null),
+                ':pt' => $ptype, ':q' => $fact, ':r' => $receiptId, ':d' => $docNo, ':pd' => $prodDate, ':ql' => $quality]);
+            $out['stock_id'] = (int)$nomPdo->lastInsertId();
+        } catch (Throwable) {
+            try {
+                $nomPdo->prepare(
+                    "INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,qty,prod_date,quality)
+                     VALUES (:p,:w,:c,:pal,:q,:pd,:ql)"
+                )->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':pal' => ($pallet !== '' ? $pallet : null),
+                    ':q' => $fact, ':pd' => $prodDate, ':ql' => $quality]);
+            } catch (Throwable) {
+                $nomPdo->prepare(
+                    "INSERT INTO product_stock (product_id,warehouse_id,cell,qty) VALUES (:p,:w,:c,:q)"
+                )->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':q' => $fact]);
+            }
+            $out['stock_id'] = (int)$nomPdo->lastInsertId();
+        }
+    }
+
+    // Остаток в карточке товара = сумма строк запаса.
+    try {
+        $sum = $nomPdo->prepare("SELECT COALESCE(SUM(qty),0) FROM product_stock WHERE product_id=:p");
+        $sum->execute([':p' => $pid]);
+        $total = round((float)$sum->fetchColumn(), 3);
+        $oldTotal = (float)($prod['qty'] ?? 0);
+        $nomPdo->prepare("UPDATE products SET qty=:q WHERE id=:id")->execute([':q' => $total, ':id' => $pid]);
+        if (abs($total - $oldTotal) > 0.0001) {
+            try {
+                $nomPdo->prepare(
+                    "INSERT INTO product_history (product_id,user_id,user_fio,field,field_label,old_value,new_value) VALUES (:p,:u,:f,'qty','Остаток',:o,:n)"
+                )->execute([':p' => $pid, ':u' => $userId, ':f' => $userFio, ':o' => (string)$oldTotal, ':n' => (string)$total]);
+            } catch (Throwable) {
+            }
+        }
+    } catch (Throwable) {
+    }
+
+    // Движение по остатку — только если количество паллеты изменилось.
+    $delta = round($fact - $oldStock, 3);
+    if (abs($delta) > 0.0001) {
+        try {
+            $bal = $nomPdo->prepare("SELECT COALESCE(SUM(qty),0) FROM product_stock WHERE product_id=:p");
+            $bal->execute([':p' => $pid]);
+            $balance = (float)$bal->fetchColumn();
+            $now = wms_now_expr($nomPdo);
+            $nomPdo->prepare(
+                "INSERT INTO product_movements (product_id,doc_date,doc_type,doc_no,cell,qty_change,balance)
+                 VALUES (:p,$now,'receipt',:d,:c,:q,:b)"
+            )->execute([':p' => $pid, ':d' => 'Поступление ' . $docNo, ':c' => $cell, ':q' => $delta, ':b' => $balance]);
+        } catch (Throwable) {
+        }
+        // Журнал склада (модуль 14): приход — паллета принята на склад.
+        // Пишем здесь же, где и product_movements, чтобы не задваивать движение.
+        // Количество = изменение остатка паллеты (как qty_change в product_movements).
+        try {
+            WmsJournal::log(wms_journal_pdo(), [
+                'op_type' => 'приход',
+                'doc_type' => 'Поступление',
+                'doc_no' => $docNo,
+                'sku' => $sku,
+                'product_name' => (string)($prod['name'] ?? ''),
+                'qty' => $delta,
+                'pallet' => $pallet,
+                'cell_to' => $cell,
+                'zone' => 'Приёмка',
+                'user_id' => $userId,
+                'user_fio' => $userFio,
+                'comment' => 'Приёмка поступления · принято всего: ' . $fact,
+                'quality' => $quality,
+            ]);
+        } catch (Throwable) {
+        }
+        $out['changed'] = true;
+    }
+    return $out;
+}
+
+/**
+ * Полный проброс прихода в номенклатуру: все паллеты документа.
  * @return array{synced: bool, already?: bool, doc_no?: string, items?: array, created?: array}
  */
 function wms_push_receipt_to_nomenclature(PDO $recPdo, PDO $nomPdo, int $receiptId, ?int $userId = null, string $userFio = 'ТСД'): array
 {
-    $h = $recPdo->prepare("SELECT id, doc_no, warehouse_id FROM receipts WHERE id=:id");
+    $h = $recPdo->prepare("SELECT id, doc_no, warehouse_id, gate FROM receipts WHERE id=:id");
     $h->execute([':id' => $receiptId]);
     $head = $h->fetch(PDO::FETCH_ASSOC);
     if (!$head) {
@@ -32,45 +395,38 @@ function wms_push_receipt_to_nomenclature(PDO $recPdo, PDO $nomPdo, int $receipt
         $g->execute([':r' => $receiptId]);
         $prev = $g->fetchColumn();
         if ($prev !== false && $prev !== null) {
-            return ['synced' => false, 'already' => true, 'doc_no' => (string)$head['doc_no']];
+            $decoded = json_decode((string)$prev, true);
+            if (!is_array($decoded) || count($decoded) > 0) {
+                return ['synced' => false, 'already' => true, 'doc_no' => (string)$head['doc_no']];
+            }
+            // Пустой payload = гард-пустышка (старый баг: гард писался и при
+            // отсутствии принятого факта). Удаляем — иначе документ «залипнет»
+            // и факт уже никогда не уедет в номенклатуру, даже после приёмки на ТСД.
+            try {
+                $recPdo->prepare("DELETE FROM receipt_stock_sync WHERE receipt_id=:r")->execute([':r' => $receiptId]);
+            } catch (Throwable) {
+            }
         }
     } catch (Throwable $e) {
     }
 
     $st = $recPdo->prepare(
-        "SELECT sku, COALESCE(SUM(qty),0) AS q FROM receipt_operations
+        "SELECT sku, COALESCE(NULLIF(TRIM(pallet), ''), '') AS pallet, COALESCE(SUM(qty),0) AS q
+           FROM receipt_operations
           WHERE receipt_id=:r AND accept_status='Принято' AND sku IS NOT NULL AND sku != ''
-          GROUP BY sku HAVING q > 0"
+          GROUP BY sku, COALESCE(NULLIF(TRIM(pallet), ''), '') HAVING COALESCE(SUM(qty),0) > 0"
     );
     $st->execute([':r' => $receiptId]);
     $facts = $st->fetchAll(PDO::FETCH_ASSOC);
     if (!$facts) {
-        // Нечего приходовать (все — брак / пусто): фиксируем sync чтобы не крутиться.
-        $recPdo->prepare("INSERT OR IGNORE INTO receipt_stock_sync (receipt_id, payload) VALUES (:r, :p)")
-            ->execute([':r' => $receiptId, ':p' => json_encode([], JSON_UNESCAPED_UNICODE)]);
-        return ['synced' => true, 'already' => false, 'doc_no' => (string)$head['doc_no'], 'items' => [], 'created' => []];
+        // Нечего приходовать: всё — брак, либо товар ещё не принят на ТСД.
+        // ВАЖНО: гард здесь НЕ пишем. Раньше он писался всегда, и документ
+        // «залипал»: все последующие вызовы видели гард и факт уже никогда
+        // не уходил в номенклатуру, даже когда оператор допринимал товар.
+        return ['synced' => false, 'already' => false, 'doc_no' => (string)$head['doc_no'],
+            'items' => [], 'created' => [], 'reason' => 'нет принятого товара'];
     }
 
-    $isMysql = $nomPdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql';
-    // Атрибут «Качество»: заводим колонку, если её ещё нет.
-    try {
-        $have = [];
-        if ($isMysql) {
-            foreach ($nomPdo->query("SHOW COLUMNS FROM `products`")->fetchAll(PDO::FETCH_ASSOC) as $c) {
-                $have[] = $c['Field'];
-            }
-        } else {
-            foreach ($nomPdo->query("PRAGMA table_info(products)")->fetchAll(PDO::FETCH_ASSOC) as $c) {
-                $have[] = $c['name'];
-            }
-        }
-        if (!in_array('quality', $have, true)) {
-            $nomPdo->exec($isMysql
-                ? "ALTER TABLE `products` ADD COLUMN quality VARCHAR(20) NULL"
-                : "ALTER TABLE products ADD COLUMN quality TEXT");
-        }
-    } catch (Throwable) {
-    }
     // Качество по позициям документа: был брак — «Брак», иначе «Годен».
     $badSkus = [];
     try {
@@ -81,164 +437,53 @@ function wms_push_receipt_to_nomenclature(PDO $recPdo, PDO $nomPdo, int $receipt
         }
     } catch (Throwable) {
     }
-    $now = wms_now_expr($nomPdo);
-    $whId = (int)($head['warehouse_id'] ?? 1) ?: 1;
-    $docNo = (string)$head['doc_no'];
-
-    // Привязка запаса к приходу: колонки receipt_id/receipt_no.
-    try {
-        $have = [];
-        if ($isMysql) {
-            foreach ($nomPdo->query("SHOW COLUMNS FROM `product_stock`")->fetchAll(PDO::FETCH_ASSOC) as $c) {
-                $have[] = $c['Field'];
-            }
-        } else {
-            foreach ($nomPdo->query("PRAGMA table_info(product_stock)")->fetchAll(PDO::FETCH_ASSOC) as $c) {
-                $have[] = $c['name'];
-            }
-        }
-        if (!in_array('receipt_id', $have, true)) {
-            $nomPdo->exec($isMysql
-                ? "ALTER TABLE `product_stock` ADD COLUMN receipt_id BIGINT UNSIGNED NULL"
-                : "ALTER TABLE product_stock ADD COLUMN receipt_id INTEGER");
-        }
-        if (!in_array('receipt_no', $have, true)) {
-            $nomPdo->exec($isMysql
-                ? "ALTER TABLE `product_stock` ADD COLUMN receipt_no VARCHAR(50) NULL"
-                : "ALTER TABLE product_stock ADD COLUMN receipt_no TEXT");
-        }
-    } catch (Throwable) {
-    }
 
     $items = [];
     $created = [];
-    $nomPdo->beginTransaction();
-    try {
-        foreach ($facts as $f) {
-            $sku = trim((string)$f['sku']);
-            $qty = (float)$f['q'];
-            if ($sku === '' || $qty <= 0) {
-                continue;
-            }
-            $p = $nomPdo->prepare("SELECT * FROM products WHERE sku=:s LIMIT 1");
-            $p->execute([':s' => $sku]);
-            $prod = $p->fetch(PDO::FETCH_ASSOC);
-            if (!$prod) {
-                // SKU из ТСД (в т.ч. «не заявлен») — создаем минимальную карточку, чтобы факт не потерялся.
-                // Внутренний код WMS: T-101..T-999, далее T-1001..T-1999, T-2001...
-                $code = $sku;
-                try {
-                    $code = wms_next_product_code($nomPdo);
-                } catch (Throwable $e) {
-                }
-                if ($isMysql) {
-                    $nomPdo->prepare(
-                        "INSERT INTO products (code,sku,name,unit,category,brand,owner,warehouse_id,length_mm,width_mm,height_mm,weight_g,qty,reserved_qty,is_active,is_archived,created_at,updated_at)
-                         VALUES (:code,:sku,:name,'шт','Мячи','Wilson','ООО «Эталон»',:wh,100,100,100,500,0,0,1,0,NOW(),NOW())"
-                    )->execute([':code' => $code, ':sku' => $sku, ':name' => 'Не заявлен: ' . $sku, ':wh' => $whId]);
-                } else {
-                    $nomPdo->prepare(
-                        "INSERT INTO products (code,sku,name,unit,category,brand,owner,warehouse_id,length_mm,width_mm,height_mm,weight_g,qty,reserved_qty,is_active,is_archived,created_at)
-                         VALUES (:code,:sku,:name,'шт','Мячи','Wilson','ООО «Эталон»',:wh,100,100,100,500,0,0,1,0,datetime('now'))"
-                    )->execute([':code' => $code, ':sku' => $sku, ':name' => 'Не заявлен: ' . $sku, ':wh' => $whId]);
-                }
-                $pid = (int)$nomPdo->lastInsertId();
-                $p->execute([':s' => $sku]);
-                $prod = $p->fetch(PDO::FETCH_ASSOC);
-                $created[] = $sku;
-            }
-            $pid = (int)$prod['id'];
-            $oldQty = (float)($prod['qty'] ?? 0);
-            $newQty = round($oldQty + $qty, 3);
-
-            $nomPdo->prepare("UPDATE products SET qty=:q WHERE id=:id")->execute([':q' => $newQty, ':id' => $pid]);
-
-            // Итог приемки: качество товара в атрибут номенклатуры.
-            $qNew = isset($badSkus[$sku]) ? 'Брак' : 'Годен';
-            $qOld = isset($prod['quality']) ? (string)$prod['quality'] : null;
-            if ($qOld !== $qNew) {
-                try {
-                    $nomPdo->prepare("UPDATE products SET quality=:q WHERE id=:id")->execute([':q' => $qNew, ':id' => $pid]);
-                } catch (Throwable) {
-                }
-                try {
-                    $nomPdo->prepare(
-                        "INSERT INTO product_history (product_id,user_id,user_fio,field,field_label,old_value,new_value) VALUES (:p,:u,:f,'quality','Качество',:o,:n)"
-                    )->execute([':p' => $pid, ':u' => $userId, ':f' => $userFio, ':o' => $qOld, ':n' => $qNew]);
-                } catch (Throwable $e) {
-                }
-            }
-
-            // Товарный запас: зона приемки (ячейка появится на размещении в 05).
-            // Строка привязана к приходу: один товар из разных приходов — разные строки.
-            $cell = 'ЗОНА-ПРИЕМКИ';
-            try {
-                $sRow = $nomPdo->prepare(
-                    "SELECT id, qty FROM product_stock WHERE product_id=:p AND warehouse_id=:w AND cell=:c AND COALESCE(receipt_id,0)=:r LIMIT 1"
-                );
-                $sRow->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':r' => $receiptId]);
-                $s = $sRow->fetch(PDO::FETCH_ASSOC);
-            } catch (Throwable) {
-                // Старая схема без привязки к приходу.
-                $sRow = $nomPdo->prepare(
-                    "SELECT id, qty FROM product_stock WHERE product_id=:p AND warehouse_id=:w AND cell=:c LIMIT 1"
-                );
-                $sRow->execute([':p' => $pid, ':w' => $whId, ':c' => $cell]);
-                $s = $sRow->fetch(PDO::FETCH_ASSOC);
-            }
-            if ($s) {
-                $nomPdo->prepare("UPDATE product_stock SET qty=qty+:q WHERE id=:id")
-                    ->execute([':q' => $qty, ':id' => $s['id']]);
-            } else {
-                try {
-                    $nomPdo->prepare(
-                        "INSERT INTO product_stock (product_id,warehouse_id,cell,qty,receipt_id,receipt_no) VALUES (:p,:w,:c,:q,:r,:d)"
-                    )->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':q' => $qty, ':r' => $receiptId, ':d' => $docNo]);
-                } catch (Throwable) {
-                    // Нет колонок прихода (старая схема) — пишем без привязки.
-                    $nomPdo->prepare(
-                        "INSERT INTO product_stock (product_id,warehouse_id,cell,qty) VALUES (:p,:w,:c,:q)"
-                    )->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':q' => $qty]);
-                }
-            }
-
-            if ($isMysql) {
-                $nomPdo->prepare(
-                    "INSERT INTO product_movements (product_id,doc_date,doc_type,doc_no,cell,qty_change,balance)
-                     VALUES (:p,NOW(),'receipt',:d,:c,:q,:b)"
-                )->execute([':p' => $pid, ':d' => 'Поступление ' . $docNo, ':c' => $cell, ':q' => $qty, ':b' => $newQty]);
-            } else {
-                $nomPdo->prepare(
-                    "INSERT INTO product_movements (product_id,doc_date,doc_type,doc_no,cell,qty_change,balance)
-                     VALUES (:p,datetime('now'),'receipt',:d,:c,:q,:b)"
-                )->execute([':p' => $pid, ':d' => 'Поступление ' . $docNo, ':c' => $cell, ':q' => $qty, ':b' => $newQty]);
-            }
-            try {
-                $nomPdo->prepare(
-                    "INSERT INTO product_history (product_id,user_id,user_fio,field,field_label,old_value,new_value) VALUES (:p,:u,:f,'qty','Остаток',:o,:n)"
-                )->execute([':p' => $pid, ':u' => $userId, ':f' => $userFio, ':o' => (string)$oldQty, ':n' => (string)$newQty]);
-            } catch (Throwable $e) {
-            }
-            $items[] = ['sku' => $sku, 'qty' => $qty, 'old' => $oldQty, 'new' => $newQty];
+    foreach ($facts as $f) {
+        $sku = trim((string)$f['sku']);
+        $pallet = trim((string)($f['pallet'] ?? ''));
+        if ($sku === '') {
+            continue;
         }
-        $nomPdo->commit();
-    } catch (Throwable $e) {
-        $nomPdo->rollBack();
-        throw $e;
+        $res = wms_sync_pallet_stock($recPdo, $nomPdo, $receiptId, $sku, $pallet, $userId, $userFio);
+        $items[] = ['sku' => $sku, 'pallet' => $pallet, 'qty' => $res['qty'], 'cell' => $res['cell']];
+        // Качество товара в атрибуте номенклатуры.
+        try {
+            $pp = $nomPdo->prepare("SELECT id, quality FROM products WHERE sku=:s LIMIT 1");
+            $pp->execute([':s' => $sku]);
+            $prod = $pp->fetch(PDO::FETCH_ASSOC);
+            if ($prod) {
+                $qNew = isset($badSkus[$sku]) ? 'Брак' : 'Годен';
+                $qOld = isset($prod['quality']) ? (string)$prod['quality'] : null;
+                if ($qOld !== $qNew) {
+                    $nomPdo->prepare("UPDATE products SET quality=:q WHERE id=:id")
+                        ->execute([':q' => $qNew, ':id' => (int)$prod['id']]);
+                    try {
+                        $nomPdo->prepare(
+                            "INSERT INTO product_history (product_id,user_id,user_fio,field,field_label,old_value,new_value) VALUES (:p,:u,:f,'quality','Качество',:o,:n)"
+                        )->execute([':p' => (int)$prod['id'], ':u' => $userId, ':f' => $userFio, ':o' => $qOld, ':n' => $qNew]);
+                    } catch (Throwable) {
+                    }
+                }
+            }
+        } catch (Throwable) {
+        }
     }
 
     // Guard — только после успешного коммита в номенклатуру.
     try {
-        $ins = $recPdo->prepare("INSERT OR IGNORE INTO receipt_stock_sync (receipt_id, payload) VALUES (:r, :p)");
-        $ins->execute([':r' => $receiptId, ':p' => json_encode($items, JSON_UNESCAPED_UNICODE)]);
-    } catch (Throwable $e) {
-        // MySQL-вариант guard.
-        try {
+        if (wms_is_mysql($recPdo)) {
             $recPdo->prepare("INSERT IGNORE INTO receipt_stock_sync (receipt_id, payload) VALUES (:r, :p)")
                 ->execute([':r' => $receiptId, ':p' => json_encode($items, JSON_UNESCAPED_UNICODE)]);
-        } catch (Throwable $e2) {
+        } elseif (wms_is_pgsql($recPdo)) {
+            $recPdo->prepare("INSERT INTO receipt_stock_sync (receipt_id, payload) VALUES (:r, :p) ON CONFLICT (receipt_id) DO NOTHING")
+                ->execute([':r' => $receiptId, ':p' => json_encode($items, JSON_UNESCAPED_UNICODE)]);
+        } else {
+            $recPdo->prepare("INSERT OR IGNORE INTO receipt_stock_sync (receipt_id, payload) VALUES (:r, :p)")
+                ->execute([':r' => $receiptId, ':p' => json_encode($items, JSON_UNESCAPED_UNICODE)]);
         }
+    } catch (Throwable $e) {
     }
-
-    return ['synced' => true, 'already' => false, 'doc_no' => $docNo, 'items' => $items, 'created' => $created];
+    return ['synced' => true, 'already' => false, 'doc_no' => (string)$head['doc_no'], 'items' => $items, 'created' => $created];
 }

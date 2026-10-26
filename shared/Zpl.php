@@ -51,6 +51,11 @@ function wms_zpl_sanitize(string $s): string
 
 /**
  * ZPL-этикетка: артикул / наименование / CODE-128.
+ *
+ * Раскладка считается снизу вверх: подпись -> штрихкод -> наименование -> артикул,
+ * поэтому штрихкод всегда стоит низко, а подпись гарантированно влезает в этикетку
+ * (всё содержимое умещается в ^LL с полями).
+ *
  * @param float $wMm ширина этикетки, мм
  * @param float $hMm высота этикетки, мм
  * @param int $copies число копий (^PQ)
@@ -79,25 +84,67 @@ function wms_zpl_product_barcode(
     $k = $dpi / 25.4; // точек на мм
     $w = (int)round($wMm * $k);
     $h = (int)round($hMm * $k);
-    $m = max(12, (int)round(3 * $k)); // поле ~3 мм
-    $inner = max(60, $w - 2 * $m);
+    $m = max(8, (int)round(2 * $k)); // поле ~2 мм со всех сторон
+    $inner = max(60, $w - 2 * $m); // рабочая ширина
 
-    // Кегли масштабируем от ширины этикетки.
-    $skuH = (int)min(52, max(22, $w / 13));
-    $nameH = (int)min(40, max(18, $w / 17));
-    $capH = (int)min(36, max(18, $w / 18));
+    // Базовые кегли масштабируем от ширины этикетки.
+    $skuH0 = (int)min(52, max(20, $w / 13));
+    $nameH0 = (int)min(40, max(16, $w / 17));
+    $capH0 = (int)min(36, max(16, $w / 18));
 
     $code = wms_code128_sanitize($barcode);
-    // Модуль штрихкода: влезаем во внутреннюю ширину.
+    // Модуль штрихкода: влезаем во внутреннюю ширину вместе с тихой зоной (~10 модулей).
     // CODE-128: 11 модулей на символ + Stop 13 + терминал 2.
     $totalMods = 11 * (strlen($code) + 2) + 13 + 2;
-    $by = max(1, min(4, (int)floor($inner / $totalMods)));
-    // Высота штрихов: остаток места под текстом, но не выше 45% высоты этикетки
-    // и не выше 250 точек (~31 мм при 203 dpi) — выше уже избыточно.
-    $barH = (int)min(250, $h * 0.45, max(45, ($h - 2 * $m - $skuH - 2 * $nameH - $capH - 30) * 0.6));
-    $barH = max(40, $barH);
+    $by = max(1, min(4, (int)floor($inner / ($totalMods + 20))));
 
-    $y = $m;
+    // Отступы: между текстовыми блоками и между штрихами и подписью.
+    $gapS = max(3, (int)round(1.0 * $k));
+    $gapB = max(5, (int)round(1.8 * $k));
+    // Потолок высоты штрихов: не выше 45% высоты этикетки и не выше 250 точек (~31 мм при 203 dpi).
+    $barMax = (int)min(250, $h * 0.45);
+    $barMin = (int)max(30, (int)round(5 * $k)); // минимально читаемая высота штрихов
+
+    // Подбираем раскладку: сперва 2 строки наименования и полные кегли,
+    // при нехватке места — одна строка и/или уменьшенные кегли.
+    $best = null;
+    foreach ([1.0, 0.85, 0.72, 0.6, 0.5] as $scale) {
+        foreach ([2, 1] as $nameLines) {
+            $skuH = max(12, (int)round($skuH0 * $scale));
+            $nameH = max(10, (int)round($nameH0 * $scale));
+            $capH = max(10, (int)round($capH0 * $scale));
+
+            $capTop = $h - $m - $capH;              // верх подписи (низ этикетки минус поле)
+            $nameTop = $m + $skuH + $gapS;           // верх наименования
+            $nameEnd = $nameTop + $nameH * $nameLines; // низ наименования
+            $barH = (int)min($barMax, max(0, $capTop - $gapB - $nameEnd - $gapS));
+
+            $cand = [
+                'skuH' => $skuH, 'nameH' => $nameH, 'capH' => $capH,
+                'capTop' => $capTop, 'nameTop' => $nameTop, 'nameEnd' => $nameEnd,
+                'barH' => $barH, 'nameLines' => $nameLines,
+            ];
+            if ($barH >= $barMin) {
+                $best = $cand;
+                break 2;
+            }
+            if ($best === null || $cand['barH'] > $best['barH']) {
+                $best = $cand;
+            }
+        }
+    }
+
+    $skuH = $best['skuH'];
+    $nameH = $best['nameH'];
+    $capH = $best['capH'];
+    $capTop = $best['capTop'];
+    $nameTop = $best['nameTop'];
+    $nameLines = $best['nameLines'];
+    $barH = max(20, $best['barH']);
+    // Низ штрихов — над подписью, верх — как можно ниже (ближе к подписи).
+    $barBottom = $capTop - $gapB;
+    $barTop = $barBottom - $barH;
+
     $out = [];
     $out[] = '^XA';
     $out[] = '^CI28'; // UTF-8 (кириллица в наименовании)
@@ -106,16 +153,16 @@ function wms_zpl_product_barcode(
     $out[] = '^LH0,0';
     $out[] = '^LT0';
     // 1) Артикул вверху, по центру.
-    $out[] = "^FO0,$y^A0N,$skuH,$skuH^FB$w,1,0,C,0^FD$sku^FS";
-    $y += $skuH + 8;
-    // 2) Наименование, до 2 строк, по центру.
-    $out[] = "^FO0,$y^A0N,$nameH,$nameH^FB$w,2,0,C,0^FD$name^FS";
-    $y += 2 * $nameH + 10;
-    // 3) Штрихкод CODE-128 внизу (расшифровка под штрихами — Y).
-    $out[] = "^FO0,$y^BY$by,3^BCN,$barH,Y,N,N^FD$code^FS";
-    $y += $barH + 10;
-    // Код дублируем текстом под штрихами.
-    $out[] = "^FO0,$y^A0N,$capH,$capH^FB$w,1,0,C,0^FD$code^FS";
+    $out[] = "^FO0,$m^A0N,$skuH,$skuH^FB$w,1,0,C,0^FD$sku^FS";
+    // 2) Наименование (1-2 строки), по центру.
+    $out[] = "^FO0,$nameTop^A0N,$nameH,$nameH^FB$w,$nameLines,0,C,0^FD$name^FS";
+    // 3) Штрихкод CODE-128 низом: печать расшифровки принтером отключена (f=N),
+    //    иначе она ложится поверх нашей подписи (а на части принтеров — поверх штрихов).
+    //    По ширине центрируем с тихой зоной >= 10 модулей с каждой стороны.
+    $barX = max(0, $m + (int)round(($inner - $totalMods * $by) / 2));
+    $out[] = "^FO$barX,$barTop^BY$by,3^BCN,$barH,N,N,N^FD$code^FS";
+    // 4) Подпись с кодом — под штрихами, у нижнего поля этикетки.
+    $out[] = "^FO0,$capTop^A0N,$capH,$capH^FB$w,1,0,C,0^FD$code^FS";
     $out[] = "^PQ$copies";
     $out[] = '^XZ';
     return implode("\n", $out) . "\n";
@@ -162,9 +209,14 @@ function wms_code128_svg(string $raw, float $widthMm, float $barMm): string
     if ($runStart >= 0) {
         $rects .= '<rect x="' . ($qz + $runStart) . '" y="0" width="' . $runLen . '" height="' . $H . '"/>';
     }
-    $w = htmlspecialchars(number_format($widthMm, 1) . 'mm', ENT_QUOTES, 'UTF-8');
+    // Ширина модуля подбирается под доступную ширину (как ^BY в ZPL):
+    // модуль не шире ~0.4 мм (это ~3 точки при 203 dpi), иначе полосы слишком толстые.
+    $modW = min($widthMm / $total, 0.4);
+    $modW = max(0.1, $modW);
+    $drawW = $total * $modW;
+    $w = htmlspecialchars(number_format($drawW, 2) . 'mm', ENT_QUOTES, 'UTF-8');
     $hh = htmlspecialchars(number_format($barMm, 1) . 'mm', ENT_QUOTES, 'UTF-8');
-    return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 $total $H\" width=\"$w\" height=\"$hh\" preserveAspectRatio=\"xMidYMid meet\" shape-rendering=\"crispEdges\" fill=\"#000\">$rects</svg>";
+    return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 $total $H\" width=\"$w\" height=\"$hh\" preserveAspectRatio=\"none\" shape-rendering=\"crispEdges\" fill=\"#000\">$rects</svg>";
 }
 
 /**
@@ -199,9 +251,24 @@ function wms_label_html(
     $fsSku = round($wMm * 0.095, 1);
     $fsName = round($wMm * 0.068, 1);
     $fsCap = round($wMm * 0.075, 1);
-    $barW = round($wMm * 0.92, 1);
-    $barH = round($hMm * 0.42, 1);
     $pad = round(min($wMm, $hMm) * 0.05, 1);
+    $barW = round($wMm - 2 * $pad, 1); // вся ширина под штрихкод (тихая зона внутри SVG)
+
+    // Высота штрихов — от остатка места: артикул и наименование сверху,
+    // штрихкод с подписью прижаты к низу этикетки (как в ZPL-тракте).
+    $gapName = 1.0;
+    $gapBars = 1.2;
+    $gapCap = 0.6;
+    $hSku = $fsSku * 1.15;
+    $hName = $fsName * 1.2 * 2; // наименование до 2 строк
+    $hCap = $fsCap * 1.2;
+    $free = $hMm - 2 * $pad - $hSku - $hName - $gapName - $gapBars - $gapCap - $hCap;
+    if ($free < 6.0) {
+        // Не хватает места под 2 строки наименования — оставляем одну.
+        $hName = $fsName * 1.2;
+        $free = $hMm - 2 * $pad - $hSku - $hName - $gapName - $gapBars - $gapCap - $hCap;
+    }
+    $barH = round(max(4.0, min(round($hMm * 0.42, 1), $free)), 1);
 
     $label = '<div class="label">'
         . '<div class="sku">' . $eSku . '</div>'
@@ -219,16 +286,16 @@ function wms_label_html(
         . '<style>@page{size:' . $w . 'mm ' . $h . 'mm;margin:0}'
         . 'html,body{margin:0;padding:0;background:#fff}'
         . '.label{width:' . $w . 'mm;height:' . $h . 'mm;page-break-after:always;break-after:page;'
-        . 'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+        . 'display:flex;flex-direction:column;align-items:center;justify-content:flex-start;'
         . 'box-sizing:border-box;padding:' . $pad . 'mm;overflow:hidden;'
         . 'font-family:Arial,Helvetica,sans-serif;color:#000;text-align:center}'
         . '.label:last-child{page-break-after:auto;break-after:auto}'
         . '.sku{font-weight:700;font-size:' . $fsSku . 'mm;line-height:1.15;white-space:nowrap;'
-        . 'max-width:100%;overflow:hidden;text-overflow:ellipsis}'
-        . '.nm{font-size:' . $fsName . 'mm;line-height:1.2;margin-top:1mm;'
-        . 'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:100%}'
-        . '.bars{margin-top:1.2mm;display:flex;justify-content:center;max-width:100%}'
-        . '.bars svg{max-width:100%}'
-        . '.cap{font-size:' . $fsCap . 'mm;margin-top:.6mm;letter-spacing:.4mm;white-space:nowrap}</style>'
+        . 'max-width:100%;overflow:hidden;text-overflow:ellipsis;flex:0 0 auto}'
+        . '.nm{font-size:' . $fsName . 'mm;line-height:1.2;margin-top:' . $gapName . 'mm;'
+        . 'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:100%;flex:0 0 auto}'
+        . '.bars{margin-top:auto;padding-top:' . $gapBars . 'mm;display:flex;justify-content:center;max-width:100%;flex:0 0 auto}'
+        . '.bars svg{max-width:100%;height:auto}'
+        . '.cap{font-size:' . $fsCap . 'mm;margin-top:' . $gapCap . 'mm;letter-spacing:.4mm;white-space:nowrap;flex:0 0 auto}</style>'
         . '</head><body>' . $labels . $auto . '</body></html>';
 }

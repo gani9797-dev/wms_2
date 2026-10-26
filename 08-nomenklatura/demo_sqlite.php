@@ -12,14 +12,16 @@ require_once __DIR__ . '/ProductRepository.php';
 require_once __DIR__ . '/ProductService.php';
 require_once __DIR__ . '/Notifications.php';
 
-$dbFile = __DIR__ . '/wms_nomenclature.sqlite';
-$pdo = new PDO('sqlite:' . $dbFile, null, null, [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-]);
+require_once __DIR__ . '/../shared/db.php';
 
+$dbFile = wms_nomenclature_db_file();
+$pdo = wms_nomenclature_pdo();
+$isSqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+
+// Только SQLite: в PostgreSQL схема создаётся из db/schema-pg.sql, сиды — миграцией.
+if ($isSqlite):
 $pdo->exec("CREATE TABLE IF NOT EXISTS warehouses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
-$pdo->exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, fio TEXT NOT NULL, role TEXT DEFAULT 'storekeeper')");
+// users — единый справочник сотрудников (shared/wms_users.sqlite), подключён в shared/db.php.
 $pdo->exec("CREATE TABLE IF NOT EXISTS products (
   id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, sku TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL, unit TEXT DEFAULT 'шт', category TEXT DEFAULT '', brand TEXT, owner TEXT,
@@ -102,7 +104,7 @@ try {
 // --- Сид из макета 8, если пусто ---
 if ((int)$pdo->query("SELECT COUNT(*) FROM products")->fetchColumn() === 0) {
     $pdo->exec("INSERT INTO warehouses (id,name) VALUES (1,'Основной склад'),(2,'Холодильный склад')");
-    $pdo->exec("INSERT INTO users (id,fio,role) VALUES (1,'Иванов И.И.','Администратор'),(1788,'1788 - Смирнов Николай','Кладовщик'),(512,'512 - Иванов Михаил','Кладовщик')");
+    // Сотрудники — в общей базе (shared/wms_users.sqlite), сиды там.
     $pdo->exec("INSERT INTO product_defaults (field_name,field_value) VALUES ('unit','шт'),('category','Мячи'),('warehouse_id','1'),('storage_strategy','FEFO'),('pick_strategy','FEFO'),('placement_strategy','FEFO')");
 
     // [sku, name, unit, qty, reserved, active, code] — строки из макета.
@@ -176,6 +178,7 @@ if ((int)$pdo->query("SELECT COUNT(*) FROM notification_subscriptions")->fetchCo
       (1,'task',1,0,1,'Просрочено',1),
       (1,'nomenclature',0,1,0,'Любое изменение',0)");
 }
+endif;
 
 $repo = new ProductRepository($pdo);
 $service = new ProductService($pdo);
@@ -202,7 +205,8 @@ try {
         $out = [];
         if ($sku !== '') {
             require_once __DIR__ . '/../shared/PickIssue.php';
-            require_once __DIR__ . '/../shared/db.php';
+require_once __DIR__ . '/../shared/db.php';
+require_once __DIR__ . '/../shared/Counterparties.php';
             try {
                 $tpdos = wms_tasks_pdos();
                 $tpdo = $tpdos[0] ?? null;
@@ -254,6 +258,19 @@ try {
         echo json_encode($repo->tasks((int)($_GET['id'] ?? 0)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'defaults') {
         echo json_encode($repo->defaults(), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    } elseif ($action === 'counterparties') {
+        // Список клиентов (контрагентов) для выпадающего списка в карточке товара.
+        $list = [];
+        foreach (WmsCounterparties::listAll($pdo, true) as $cp) {
+            $list[] = [
+                'id' => (int)($cp['id'] ?? 0),
+                'name' => (string)($cp['name'] ?? ''),
+                'reserve_strategy' => (string)($cp['reserve_strategy'] ?? WmsCounterparties::DEFAULT_STRATEGY),
+                'scan_serial_in' => (int)($cp['scan_serial_in'] ?? 0) ? 1 : 0,
+                'scan_serial_out' => (int)($cp['scan_serial_out'] ?? 0) ? 1 : 0,
+            ];
+        }
+        echo json_encode($list, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'defaults_save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $b = json_decode(file_get_contents('php://input'), true) ?? [];
         // Роль берём из запроса (демо): role=admin. В проде — из сессии/JWT.
@@ -350,7 +367,7 @@ try {
         }
         echo json_encode($service->printData($pId, $pKind, $pBc), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'notif_list') {
-        echo json_encode(Notifications::list($pdo, (string)($_GET['tab'] ?? 'all'), isset($_GET['search']) ? (string)$_GET['search'] : null, isset($_GET['type']) ? (string)$_GET['type'] : null, (int)($_GET['limit'] ?? 50)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        echo json_encode(Notifications::list($pdo, (string)($_GET['tab'] ?? 'all'), isset($_GET['search']) ? (string)$_GET['search'] : null, (string)($_GET['kind'] ?? $_GET['type'] ?? ''), (int)($_GET['limit'] ?? 50)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'notif_counts') {
         echo json_encode(Notifications::counts($pdo), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'notif_read' && $_SERVER['REQUEST_METHOD'] === 'POST') {

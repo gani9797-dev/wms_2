@@ -1,25 +1,13 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/../shared/tsd_auth.php';
 // ТСД «Информация»: справки по товару (SSCC/штрихкод), честному знаку, ячейке, отгрузке.
 // Только чтение. Авторизация — как в остальных точках ТСД.
 
-const INFO_TOKEN = 'tsd-12345';
 
 function info_ok(): bool
 {
-    $t = $_GET['token'] ?? $_POST['token'] ?? '';
-    if ($t === '') {
-        $h = $_SERVER['HTTP_X_TSD_TOKEN'] ?? '';
-        if ($h !== '') {
-            $t = $h;
-        } else {
-            $a = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-            if (str_starts_with($a, 'Bearer ')) {
-                $t = substr($a, 7);
-            }
-        }
-    }
-    if ($t !== '' && hash_equals(INFO_TOKEN, (string)$t)) {
+    if (wms_tsd_token_ok()) {
         return true;
     }
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -54,15 +42,12 @@ function idb(string $kind): ?PDO
             return wms_storage_pdo();
         }
         if ($kind === 'ship') {
-            $f = __DIR__ . '/../shipments/wms_demo.sqlite';
-            if (!is_file($f)) {
-                return null;
+            // Единая БД отгрузок — через shared/db.php (канон 03-otgruzki).
+            try {
+                return wms_shipments_pdo();
+            } catch (Throwable) {
             }
-            $pdo = new PDO('sqlite:' . $f, null, null, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
-            return $pdo;
+            return null;
         }
     } catch (Throwable) {
     }
@@ -76,6 +61,14 @@ if ($q === '' && $action !== '') {
 }
 
 // --- По товару: SSCC (паллета) и/или штрихкод/артикул ---
+// ЕДИНЫЙ ИСТОЧНИК ПРАВДЫ (связь с модулем 8.1 «Товарный запас»):
+//   живой факт приёмки  = receipt_operations (accept_status='Принято', GROUP BY sku, pallet)
+//                         — тот же запрос, что в StockSync и в place_scan;
+//   оприходованный остаток = product_stock в БД номенклатуры — ТА ЖЕ таблица,
+//                         которую читает 08.1-tovarny-zapas/demo_sqlite.php?action=list.
+// tsd_pallets.qty_total — лишь кэш на момент pallet_close (0 пока паллета открыта).
+// Таблица-дубль tsd_stock удалена: её данные (= агрегат receipt_operations на момент
+// fix) расходились с фактом и с 8.1, поэтому больше не пишется и не читается.
 if ($action === 'product') {
     $sections = [];
     // Паллета по SSCC.
@@ -84,18 +77,78 @@ if ($action === 'product') {
         if ($rcp) {
             $p = $rcp->prepare("SELECT sscc, status, qty_total, weight, receipt_id, created_at, closed_at FROM tsd_pallets WHERE sscc = :s LIMIT 5");
             $p->execute([':s' => $q]);
-            foreach ($p->fetchAll() as $r) {
-                $sections[] = ['title' => 'Паллета ' . $r['sscc'], 'rows' => [
-                    ['Статус', $r['status']], ['Кол-во, шт', $r['qty_total']], ['Вес, кг', $r['weight'] ?? '—'],
-                    ['Документ прихода', $r['receipt_id']], ['Открыта', $r['created_at'] ?? '—'], ['Закрыта', $r['closed_at'] ?? '—'],
+            $pallets = $p->fetchAll();
+            // Живой факт по этой паллете: сколько реально принято (не зависит от закрытия).
+            $liveBySku = [];
+            $liveTotal = 0.0;
+            try {
+                $lv = $rcp->prepare("SELECT sku, COALESCE(SUM(qty),0) AS q FROM receipt_operations WHERE pallet = :s AND accept_status = 'Принято' GROUP BY sku");
+                $lv->execute([':s' => $q]);
+                foreach ($lv->fetchAll() as $lr) {
+                    $sku = trim((string)($lr['sku'] ?? ''));
+                    if ($sku === '') {
+                        continue;
+                    }
+                    $qq = round((float)($lr['q'] ?? 0), 3);
+                    $liveBySku[$sku] = $qq;
+                    $liveTotal = round($liveTotal + $qq, 3);
+                }
+            } catch (Throwable) {
+            }
+            foreach ($pallets as $r) {
+                $cached = (float)($r['qty_total'] ?? 0);
+                $qtyShow = $liveTotal;
+                $rows = [
+                    ['Статус', $r['status']],
+                    ['Кол-во, шт', $qtyShow],
+                    ['Вес, кг', $r['weight'] ?? '—'],
+                    ['Документ прихода', $r['receipt_id']],
+                    ['Открыта', $r['created_at'] ?? '—'],
+                    ['Закрыта', $r['closed_at'] ?? '—'],
+                ];
+                if (abs($cached - $liveTotal) > 1e-9) {
+                    $rows[] = ['Учёт', ($r['status'] === 'Закрыта'
+                        ? 'итог закрытия: ' . $cached . ' (расходится с фактом — проверь закрытие)'
+                        : 'паллета открыта: итог подведётся при закрытии (кэш: ' . $cached . ')')];
+                }
+                if ($liveBySku) {
+                    $parts = [];
+                    foreach ($liveBySku as $sku => $qq) {
+                        $parts[] = $sku . ' — ' . $qq . ' шт';
+                    }
+                    $rows[] = ['Состав (факт приёмки)', implode('; ', $parts)];
+                }
+                $sections[] = ['title' => 'Паллета ' . $r['sscc'], 'rows' => $rows];
+            }
+            // Если паллеты в tsd_pallets нет, но живой факт есть — всё равно показать.
+            if (!$pallets && $liveBySku) {
+                $parts = [];
+                foreach ($liveBySku as $sku => $qq) {
+                    $parts[] = $sku . ' — ' . $qq . ' шт';
+                }
+                $sections[] = ['title' => 'Паллета ' . $q . ' (факт приёмки)', 'rows' => [
+                    ['Кол-во, шт', $liveTotal],
+                    ['Состав', implode('; ', $parts)],
+                    ['Учёт', 'карточки паллеты нет в tsd_pallets — принята сканом без вскрытия (sscc_accept)'],
                 ]];
             }
-            $st = $rcp->prepare("SELECT receipt_id, pallet, qty FROM tsd_stock WHERE pallet = :s OR sku = :s LIMIT 20");
-            $st->execute([':s' => $q]);
-            foreach ($st->fetchAll() as $r) {
-                $sections[] = ['title' => 'Остаток на паллете', 'rows' => [
-                    ['Документ', $r['receipt_id']], ['Паллета', $r['pallet'] ?? '—'], ['Кол-во', $r['qty']],
-                ]];
+            // Оприходованный остаток — ТА ЖЕ таблица product_stock, что в модуле 8.1.
+            try {
+                $nom0 = idb('nom');
+                if ($nom0) {
+                    $ps = $nom0->prepare("SELECT s.cell, s.pallet, s.qty, s.receipt_no, s.warehouse_id, p.sku, p.name FROM product_stock s LEFT JOIN products p ON p.id = s.product_id WHERE s.pallet = :s LIMIT 20");
+                    $ps->execute([':s' => $q]);
+                    foreach ($ps->fetchAll() as $pr) {
+                        $sections[] = ['title' => 'Запас 8.1: паллета ' . ($pr['pallet'] ?? $q), 'rows' => [
+                            ['Артикул', ($pr['sku'] ?? '—') . ' · ' . ($pr['name'] ?? '')],
+                            ['Ячейка', $pr['cell'] ?? '—'],
+                            ['Кол-во', $pr['qty']],
+                            ['Приход', $pr['receipt_no'] ?? '—'],
+                            ['Склад', $pr['warehouse_id'] ?? '—'],
+                        ]];
+                    }
+                }
+            } catch (Throwable) {
             }
         }
     } catch (Throwable) {

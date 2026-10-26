@@ -10,10 +10,12 @@ declare(strict_types=1);
 //   08: {code:1, sku:0, ...} (ключи data-col),
 //   остальные: {hidden:[2,5]} (индексы колонок thead).
 
+require_once __DIR__ . '/pg.php';
+
 function wms_columns_ensure(PDO $pdo): void
 {
     try {
-        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
+        if (function_exists('wms_is_mysql') ? wms_is_mysql($pdo) : $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
             $pdo->exec("CREATE TABLE IF NOT EXISTS user_columns (
               user_key VARCHAR(100) NOT NULL, form VARCHAR(50) NOT NULL,
               cols TEXT NOT NULL,
@@ -72,12 +74,19 @@ function wms_columns_save(PDO $pdo, string $form, $cols): void
         throw new RuntimeException('Некорректные данные настроек');
     }
     try {
-        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
+        $isMysql = function_exists('wms_is_mysql') ? wms_is_mysql($pdo) : $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql';
+        $isSqlite = function_exists('wms_is_sqlite') ? wms_is_sqlite($pdo) : $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+        if ($isMysql) {
             $pdo->prepare("INSERT INTO user_columns (user_key, form, cols) VALUES (:u,:f,:c)
                 ON DUPLICATE KEY UPDATE cols=:c")->execute([':u' => wms_columns_user(), ':f' => $form, ':c' => $json]);
-        } else {
+        } elseif ($isSqlite) {
             $pdo->prepare("INSERT INTO user_columns (user_key, form, cols) VALUES (:u,:f,:c)
                 ON CONFLICT(user_key, form) DO UPDATE SET cols=:c, updated_at=datetime('now')")
+                ->execute([':u' => wms_columns_user(), ':f' => $form, ':c' => $json]);
+        } else {
+            // PostgreSQL: тот же ON CONFLICT, но NOW() вместо datetime('now')
+            $pdo->prepare('INSERT INTO user_columns (user_key, form, cols) VALUES (:u,:f,:c)
+                ON CONFLICT(user_key, form) DO UPDATE SET cols=:c, updated_at=NOW()')
                 ->execute([':u' => wms_columns_user(), ':f' => $form, ':c' => $json]);
         }
     } catch (Throwable $e) {

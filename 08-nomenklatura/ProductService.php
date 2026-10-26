@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../shared/ProductCode.php';
+require_once __DIR__ . '/../shared/Counterparties.php';
 
 // Сервис карточек номенклатуры: создание / редактирование / копирование / блокировка / архив / печать / экспорт / импорт.
 // Каждое изменение значимого поля пишется в product_history (вкладка "История").
@@ -9,6 +10,9 @@ final class ProductService
 {
     public function __construct(private PDO $pdo) {}
 
+    // ВАЖНО: qty и reserved_qty НЕ редактируются вручную. Остаток — производная
+    // от product_stock (его ведёт shared/StockSync.php при закрытии поступления
+    // и при перемещениях). Ручная правка рассинхронизировала бы карточку с фактом.
     private const EDITABLE = [
         'code', 'sku', 'name', 'unit', 'category', 'brand', 'owner', 'warehouse_id',
         'description', 'image_path', 'length_mm', 'width_mm', 'height_mm', 'weight_g',
@@ -16,8 +20,13 @@ final class ProductService
         'storage_strategy', 'pick_strategy',
         'placement_strategy',
         'temp_from', 'temp_to', 'shelf_life_days', 'marking_start', 'chz_group',
-        'max_expiry_pct', 'is_batch', 'is_expiry', 'is_serial', 'is_chz', 'is_danger',
-        'allow_partial_pick', 'need_check', 'need_pack', 'auto_replenish', 'need_measure', 'quality', 'qty', 'reserved_qty',
+        'max_expiry_pct', 'is_batch', 'is_expiry', 'is_chz', 'is_danger',
+        // Флаги сканирования с/н и контроль даты производства.
+        // scan_serial_* — эффективное значение (наследуется от клиента),
+        // scan_serial_*_override — точечное решение по артикулу (NULL = наследовать).
+        'scan_serial_in', 'scan_serial_out', 'scan_serial_in_override', 'scan_serial_out_override',
+        'control_prod_date', 'contractor_id',
+        'allow_partial_pick', 'need_check', 'need_pack', 'auto_replenish', 'need_measure', 'quality',
         'is_active',
     ];
 
@@ -33,7 +42,13 @@ final class ProductService
         'temp_from' => 'Темп. от', 'temp_to' => 'Темп. до', 'shelf_life_days' => 'Срок годности',
         'marking_start' => 'Начало маркировки', 'chz_group' => 'Группа ЧЗ',
         'max_expiry_pct' => 'Макс % истечения', 'is_batch' => 'Партийный учет',
-        'is_expiry' => 'Учет сроков годности', 'is_serial' => 'Учет серийников',
+        'is_expiry' => 'Учет сроков годности',
+        'scan_serial_in' => 'Сканирование с/н на входе',
+        'scan_serial_out' => 'Сканирование с/н на выходе',
+        'scan_serial_in_override' => 'Сканирование с/н на входе (вручную)',
+        'scan_serial_out_override' => 'Сканирование с/н на выходе (вручную)',
+        'control_prod_date' => 'Контроль даты производства',
+        'contractor_id' => 'Клиент (контрагент)',
         'is_chz' => 'Честный знак', 'is_danger' => 'Опасный груз',
         'allow_partial_pick' => 'Частичный отбор', 'need_check' => 'Проверка после отбора',
         'need_pack' => 'Упаковка заказа', 'auto_replenish' => 'Автопополнение',
@@ -42,7 +57,12 @@ final class ProductService
         'qty' => 'Остаток', 'reserved_qty' => 'Зарезервировано',
     ];
 
-    public function create(array $b, int $userId, string $userFio = 'Иванов И.И.'): int
+    /**
+     * Создание карточки.
+     * $strictBarcodes — проверять ли формат EAN-13 у новых штрихкодов
+     * (при импорте выключаем: исторические ШК могут быть нестандартными).
+     */
+    public function create(array $b, int $userId, string $userFio = 'Иванов И.И.', bool $strictBarcodes = true): int
     {
         $b = $this->normalize($b);
         $sku = trim((string)($b['sku'] ?? ''));
@@ -60,6 +80,12 @@ final class ProductService
         if (empty($b['volume_m3']) && !empty($b['length_mm']) && !empty($b['width_mm']) && !empty($b['height_mm'])) {
             $b['volume_m3'] = ((float)$b['length_mm'] / 1000) * ((float)$b['width_mm'] / 1000) * ((float)$b['height_mm'] / 1000);
         }
+        // Контрагент должен существовать: иначе FK-проверка БД уронит вставку.
+        $contractorId = $this->contractorId($b);
+        $b['contractor_id'] = $contractorId;
+        $barcodes = $this->barcodeList($b['barcodes'] ?? $b['barcode_list'] ?? []);
+        // Штрихкоды проверяем ДО вставки карточки — иначе при дубле остался бы «сирота».
+        $this->assertBarcodes(0, $barcodes, $strictBarcodes);
         $cols = ['is_active' => 1, 'is_archived' => 0];
         foreach (self::EDITABLE as $c) {
             if (array_key_exists($c, $b)) $cols[$c] = $b[$c] === '' ? null : $b[$c];
@@ -78,8 +104,10 @@ final class ProductService
             throw $e;
         }
         $id = (int)$this->pdo->lastInsertId();
-        $this->saveBarcodes($id, $b['barcodes'] ?? $b['barcode_list'] ?? []);
+        $this->saveBarcodes($id, $barcodes);
         $this->hist($id, $userId, $userFio, 'create', 'Создание', null, $sku);
+        // Новый артикул наследует глобальные флаги клиента (сканирование с/н на входе/выходе).
+        WmsCounterparties::applyToNewProduct($this->pdo, $id, $contractorId);
         if (class_exists('Notifications')) {
             Notifications::push($this->pdo, 'nomenclature',
                 trim('Создана карточка товара ' . ($b['code'] ?? '') . " $sku " . ($b['name'] ?? '')),
@@ -97,6 +125,16 @@ final class ProductService
         if (!$old) throw new RuntimeException('Карточка не найдена');
         $realCols = array_flip($this->tableColumns());
         $set = []; $params = [':id' => $id]; $changed = [];
+        // Контрагент проверяем заранее: смена клиента меняет наследование флагов.
+        if (array_key_exists('contractor_id', $b)) {
+            $b['contractor_id'] = $this->contractorId($b);
+        }
+        // Штрихкоды проверяем до записи карточки (уникальность + EAN-13 для новых).
+        $barcodes = null;
+        if (array_key_exists('barcodes', $b) || array_key_exists('barcode_list', $b)) {
+            $barcodes = $this->barcodeList($b['barcodes'] ?? $b['barcode_list'] ?? []);
+            $this->assertBarcodes($id, $barcodes, true);
+        }
         foreach (self::EDITABLE as $c) {
             if (!isset($realCols[$c])) continue;
             if (array_key_exists($c, $b)) {
@@ -114,9 +152,11 @@ final class ProductService
         if ($set) {
             $this->pdo->prepare('UPDATE products SET ' . implode(', ', $set) . ' WHERE id = :id')->execute($params);
         }
-        if (array_key_exists('barcodes', $b) || array_key_exists('barcode_list', $b)) {
-            $this->saveBarcodes($id, $b['barcodes'] ?? $b['barcode_list'] ?? []);
+        if ($barcodes !== null) {
+            $this->saveBarcodes($id, $barcodes);
         }
+        // Эффективные флаги = override артикула, иначе глобальный флаг клиента.
+        WmsCounterparties::syncProduct($this->pdo, $id);
         if ($changed && class_exists('Notifications')) {
             $sku = (string)($b['sku'] ?? $old['sku'] ?? '');
             $nm = (string)($b['name'] ?? $old['name'] ?? '');
@@ -146,6 +186,15 @@ final class ProductService
         );
         $st->execute($old);
         $nid = (int)$this->pdo->lastInsertId();
+        // Копия остаётся за тем же клиентом — пересчитываем её эффективные флаги
+        // по глобальным флагам клиента (иначе она унаследует «чужие» значения).
+        WmsCounterparties::applyToNewProduct(
+            $this->pdo,
+            $nid,
+            isset($old['contractor_id']) && $old['contractor_id'] !== null && $old['contractor_id'] !== ''
+                ? (int)$old['contractor_id']
+                : null
+        );
         $this->hist($nid, $userId, $userFio, 'copy', 'Копирование', (string)$id, $old['sku']);
         return $nid;
     }
@@ -286,20 +335,135 @@ final class ProductService
                     'height_mm' => (int)($r['height_mm'] ?? 100),
                     'weight_g' => (int)($r['weight_g'] ?? 500),
                     'barcodes' => isset($r['barcode']) ? [(string)$r['barcode']] : [],
-                ], $userId);
+                    // Импорт: строгая проверка EAN-13 не применяется (исторические ШК),
+                    // но уникальность штрихкода проверяется всегда.
+                ], $userId, 'Иванов И.И.', false);
                 $ok++;
             } catch (Throwable $e) {
-                $errs[] = 'Строка ' . ($i + 1) . ': ' . $e->getMessage();
+                $msg = $e->getMessage();
+                if (stripos($msg, 'Штрихкод') === 0) {
+                    $msg = 'дубль штрихкода — ' . $msg;
+                }
+                $errs[] = 'Строка ' . ($i + 1) . ': ' . $msg;
             }
         }
         return ['created' => $ok, 'errors' => $errs];
     }
 
-    private function saveBarcodes(int $productId, $list): void
+    /**
+     * Привести список штрихкодов к строке: обрезать края и убрать внутренние пробелы
+     * («4 673192631679» = «4673192631679»).
+     * @return string[]
+     */
+    private function barcodeList(mixed $list): array
     {
-        if (is_string($list)) $list = preg_split('/[,\s;]+/', $list, -1, PREG_SPLIT_NO_EMPTY);
-        $list = array_values(array_unique(array_filter(array_map(fn($v) => trim((string)$v), (array)$list))));
+        if (is_string($list)) {
+            $list = preg_split('/[,\s;]+/', $list, -1, PREG_SPLIT_NO_EMPTY);
+        }
+        $out = [];
+        foreach ((array)$list as $v) {
+            $s = preg_replace('/\s+/', '', trim((string)$v));
+            if ($s !== '' && !in_array($s, $out, true)) {
+                $out[] = $s;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Проверка штрихкодов ДО записи:
+     *  - уникальность: EAN-13 не должен принадлежать ДРУГОМУ товару
+     *    (на разных товарах одинаковый штрихкод недопустим);
+     *  - формат EAN-13 (13 цифр + верная контрольная цифра) — только для НОВЫХ
+     *    штрихкодов: исторические ШК не ломаем, чтобы карточку можно было
+     *    пересохранить без правок.
+     * @throws RuntimeException
+     */
+    private function assertBarcodes(int $productId, array $list, bool $strict): void
+    {
+        foreach ($list as $bc) {
+            $owner = $this->barcodeOwner($bc);
+            if ($owner && (int)($owner['product_id'] ?? 0) !== $productId) {
+                $who = trim((string)($owner['sku'] ?? ''));
+                if ($who === '') {
+                    $who = trim((string)($owner['code'] ?? ''));
+                }
+                if ($who === '') {
+                    $who = '#' . (int)($owner['product_id'] ?? 0);
+                }
+                throw new RuntimeException("Штрихкод $bc уже используется товаром $who");
+            }
+            // Строгая проверка формата — только если штрихкод ещё не заведён.
+            if ($strict && !$owner) {
+                if (!preg_match('/^\d{13}$/', $bc)) {
+                    throw new RuntimeException('Штрихкод должен быть 13 цифр (EAN-13)');
+                }
+                if (!self::ean13Valid($bc)) {
+                    throw new RuntimeException('Некорректная контрольная цифра EAN-13');
+                }
+            }
+        }
+    }
+
+    /** Кто владеет штрихкодом: [product_id, sku, code] или null, если штрихкод свободен. */
+    private function barcodeOwner(string $barcode): ?array
+    {
+        try {
+            $st = $this->pdo->prepare(
+                'SELECT b.product_id, p.sku, p.code FROM product_barcodes b
+                 LEFT JOIN products p ON p.id = b.product_id WHERE b.barcode = :b LIMIT 1'
+            );
+            $st->execute([':b' => $barcode]);
+            $r = $st->fetch(PDO::FETCH_ASSOC);
+            return $r ?: null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /** Контрольная цифра EAN-13: нечётные позиции (1,3,5,7,9,11) ×1, чётные (2,4,6,8,10,12) ×3. */
+    public static function ean13Valid(string $code): bool
+    {
+        if (!preg_match('/^\d{13}$/', $code)) {
+            return false;
+        }
+        $sum = 0;
+        for ($i = 0; $i < 12; $i++) {
+            $sum += ((int)$code[$i]) * ($i % 2 === 0 ? 1 : 3);
+        }
+        return ((10 - ($sum % 10)) % 10) === (int)$code[12];
+    }
+
+    /** Контрагент-владелец артикула: null, если не задан; иначе проверяем, что он есть. */
+    private function contractorId(array $b): ?int
+    {
+        $raw = $b['contractor_id'] ?? null;
+        if ($raw === null || $raw === '' || (string)$raw === '0') {
+            return null;
+        }
+        $cid = (int)$raw;
+        if ($cid <= 0) {
+            return null;
+        }
+        if (!WmsCounterparties::find($this->pdo, $cid)) {
+            throw new RuntimeException('Контрагент не найден');
+        }
+        return $cid;
+    }
+
+    private function saveBarcodes(int $productId, $list, bool $strict = false): void
+    {
+        $list = $this->barcodeList($list);
         if (!$list) return;
+        $this->assertBarcodes($productId, $list, $strict);
+        $drv = (string)$this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if ($drv === 'pgsql') {
+            $st = $this->pdo->prepare("INSERT INTO product_barcodes (product_id, barcode) VALUES (:p, :b) ON CONFLICT (barcode) DO NOTHING");
+            foreach ($list as $bc) {
+                try { $st->execute([':p' => $productId, ':b' => $bc]); } catch (Throwable) {}
+            }
+            return;
+        }
         $st = $this->pdo->prepare("INSERT OR IGNORE INTO product_barcodes (product_id, barcode) VALUES (:p, :b)");
         // Для MySQL INSERT OR IGNORE невалиден — пробуем обычный INSERT IGNORE через fallback.
         foreach ($list as $bc) {
@@ -327,6 +491,11 @@ final class ProductService
                     $out[] = $c['name'];
                 }
                 return $this->colsCache = $out;
+            }
+            if ($drv === 'pgsql') {
+                $st = $this->pdo->prepare("SELECT column_name FROM information_schema.columns WHERE table_name='products'");
+                $st->execute();
+                return $this->colsCache = array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN));
             }
             $st = $this->pdo->query("SHOW COLUMNS FROM products");
             $out = [];
@@ -372,7 +541,37 @@ final class ProductService
                 $b[$k] = $v;
             }
         }
+        // Флаги сканирования с/н и контроль даты производства — строго 0/1.
+        foreach (['scan_serial_in', 'scan_serial_out', 'control_prod_date'] as $k) {
+            if (array_key_exists($k, $b)) {
+                $b[$k] = $this->flagInt($b[$k]);
+            }
+        }
+        // Override: NULL = наследовать от клиента, 0/1 = точечное решение по артикулу.
+        foreach (['scan_serial_in_override', 'scan_serial_out_override'] as $k) {
+            if (array_key_exists($k, $b)) {
+                $v = $b[$k];
+                $b[$k] = ($v === null || $v === '' || $v === 'null') ? null : $this->flagInt($v);
+            }
+        }
+        if (array_key_exists('contractor_id', $b)) {
+            $v = $b['contractor_id'];
+            $b['contractor_id'] = ($v === null || $v === '' || (string)$v === '0') ? null : (int)$v;
+        }
         return $b;
+    }
+
+    /** Приведение произвольного значения к 0/1 (галка приходит как 1/0, true/false, "on"). */
+    private function flagInt(mixed $v): int
+    {
+        if ($v === null || $v === '') {
+            return 0;
+        }
+        if ($v === true || $v === 1) {
+            return 1;
+        }
+        $s = strtolower(trim((string)$v));
+        return in_array($s, ['1', 'on', 'true', 'yes', 'да'], true) ? 1 : 0;
     }
 
     private function hist(int $pid, int $uid, string $fio, string $field, string $label, ?string $old, ?string $new): void

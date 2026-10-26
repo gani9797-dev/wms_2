@@ -10,15 +10,15 @@ declare(strict_types=1);
 require_once __DIR__ . '/../03-otgruzki/ShipmentService.php';
 require_once __DIR__ . '/../shared/db.php';
 
-$pdo = new PDO('sqlite:' . __DIR__ . '/../03-otgruzki/wms_demo.sqlite', null, null, [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-]);
+$pdo = wms_shipments_pdo();
+$isSqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
 
-// Дотянуть таблицы нарядов, если база старая.
-$pdo->exec("CREATE TABLE IF NOT EXISTS client_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, doc_no TEXT NOT NULL UNIQUE, contractor_id INTEGER, consignee TEXT, address TEXT, phone TEXT, status TEXT DEFAULT 'created', warehouse_id INTEGER, total REAL DEFAULT 0, comment TEXT, created_at TEXT DEFAULT (datetime('now')))");
-$pdo->exec("CREATE TABLE IF NOT EXISTS client_order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт', qty REAL NOT NULL, prod_date TEXT)");
-$pdo->exec("CREATE INDEX IF NOT EXISTS idx_coi_order ON client_order_items(order_id)");
+// Дотянуть таблицы нарядов, если база старая (только SQLite; в PostgreSQL схема из db/schema-pg.sql).
+if ($isSqlite) {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS client_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, doc_no TEXT NOT NULL UNIQUE, contractor_id INTEGER, consignee TEXT, address TEXT, phone TEXT, status TEXT DEFAULT 'created', warehouse_id INTEGER, total REAL DEFAULT 0, comment TEXT, created_at TEXT DEFAULT (datetime('now')))");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS client_order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт', qty REAL NOT NULL, prod_date TEXT)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_coi_order ON client_order_items(order_id)");
+}
 
 $service = new ShipmentService($pdo);
 $action = $_GET['action'] ?? 'list';
@@ -46,17 +46,34 @@ if ($action === 'list') {
     $cnt->execute($p);
     $total = (int)$cnt->fetchColumn();
     $off = ($page - 1) * $perPage;
+    // Агрегат номеров отгрузок: переносимый синтаксис (sqlite / pgsql / mysql).
+    $drv = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    $shipAgg = $drv === 'pgsql'
+        ? "(SELECT STRING_AGG(s.doc_no::text, ', ') FROM shipment_orders so JOIN shipments s ON s.id=so.shipment_id WHERE so.order_id=o.id)"
+        : ($drv === 'sqlite'
+            ? "(SELECT GROUP_CONCAT(s.doc_no, ', ') FROM shipment_orders so JOIN shipments s ON s.id=so.shipment_id WHERE so.order_id=o.id)"
+            : "(SELECT GROUP_CONCAT(s.doc_no SEPARATOR ', ') FROM shipment_orders so JOIN shipments s ON s.id=so.shipment_id WHERE so.order_id=o.id)");
+    // Сортировка по любому столбцу реестра (А→Я / Я→А).
+    $sortMap = [
+        'doc_no' => ['o.doc_no', 't'], 'created_at' => ['o.created_at', 'd'],
+        'consignee' => ['o.consignee', 't'], 'warehouse' => ['w.name', 't'],
+        'status' => ['o.status', 't'],
+        'lines' => ['(SELECT COUNT(*) FROM client_order_items i WHERE i.order_id=o.id)', 'n'],
+        'qty' => ['(SELECT COALESCE(SUM(i.qty),0) FROM client_order_items i WHERE i.order_id=o.id)', 'n'],
+        'shipments' => [$shipAgg, 't'],
+        'id' => ['o.id', 'n'],
+    ];
+    $orderBy = wms_order_by($pdo, (string)($_GET['sort'] ?? ''), (string)($_GET['dir'] ?? 'DESC'), $sortMap, 'o.id', 'n');
     $st = $pdo->prepare(
         "SELECT o.id, o.doc_no, o.consignee, c.name AS contractor, o.status,
                 o.warehouse_id, w.name AS warehouse, o.total, o.comment, o.created_at,
                 (SELECT COUNT(*) FROM client_order_items i WHERE i.order_id=o.id) AS lines,
                 (SELECT COALESCE(SUM(qty),0) FROM client_order_items i WHERE i.order_id=o.id) AS qty,
-                (SELECT GROUP_CONCAT(s.doc_no, ', ') FROM shipment_orders so
-                  JOIN shipments s ON s.id=so.shipment_id WHERE so.order_id=o.id) AS shipments
+                $shipAgg AS shipments
          FROM client_orders o
          LEFT JOIN contractors c ON c.id=o.contractor_id
          LEFT JOIN warehouses w ON w.id=o.warehouse_id
-         $where ORDER BY o.id DESC LIMIT :lim OFFSET :off"
+         $where ORDER BY $orderBy LIMIT :lim OFFSET :off"
     );
     foreach ($p as $k => $v) {
         $st->bindValue($k, $v);

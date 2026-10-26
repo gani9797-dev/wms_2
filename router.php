@@ -101,16 +101,10 @@ if ($uri === '/') {
 
 // --- ТСД: отдельная точка. UI доступен без сессии (данные защищает токен в api.php) ---
 if (str_starts_with($uri, '/tsd/')) {
+    require_once __DIR__ . '/shared/tsd_auth.php';
     if ($uri === '/tsd/api.php') {
-        $tok = $_GET['token'] ?? $_POST['token'] ?? ($_SERVER['HTTP_X_TSD_TOKEN'] ?? '');
-        if ($tok === '') {
-            $authH = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-            if (str_starts_with($authH, 'Bearer ')) {
-                $tok = substr($authH, 7);
-            }
-        }
-        // Токен должен совпадать с TSD_TOKEN в tsd/api.php; иначе — обычная сессия.
-        if ($tok === 'tsd-12345' || isAuthed()) {
+        // Токен берётся из окружения (TSD_TOKEN) — см. shared/tsd_auth.php.
+        if (wms_tsd_token_ok() || isAuthed()) {
             return false;
         }
         // Не пускаем дальше к общей проверке — отдадим 401 JSON прямо здесь.
@@ -127,11 +121,48 @@ if (str_starts_with($uri, '/tsd/')) {
             header('Content-Type: text/html; charset=utf-8');
             header('Cache-Control: no-store, no-cache, must-revalidate');
             header('Pragma: no-cache');
-            readfile($f);
+            // Токен отдаём странице из конфигурации, а не из исходника HTML:
+            // смена TSD_TOKEN в .env меняет его во всех ТСД-страницах сразу.
+            $html = (string)file_get_contents($f);
+            $inj = '<script>window.WMS_TSD_TOKEN=' . json_encode(wms_tsd_token(), JSON_UNESCAPED_UNICODE) . ';</script>';
+            if (preg_match('/<script\b/i', $html)) {
+                $html = preg_replace('/<script\b/i', $inj . '<script', $html, 1);
+            } else {
+                $html = str_ireplace('</body>', $inj . '</body>', $html);
+            }
+            echo $html;
             exit;
         }
     }
     return false;
+}
+
+// --- Служебные файлы не отдаём (ни вошедшим, ни невошедшим) ---
+// Базы, схемы, конфигурация, служебные каталоги и макеты — внутри веб-корня,
+// но наружу их отдавать нельзя.
+$low = strtolower($uri);
+$blockedExt = [
+    '.sqlite', '.sqlite-journal', '.sqlite-wal', '.sqlite-shm', '.db',
+    '.sql', '.log', '.exe', '.bat', '.cmd', '.lnk', '.ps1', '.py',
+    '.env', '.yml', '.yaml', '.ini', '.conf', '.drawio', '.xlsx', '.xls',
+    '.docx', '.doc', '.zip', '.bak', '.tar', '.gz',
+];
+$isService = $uri === '/router.php'
+    || str_contains($low, '/.git/') || str_contains($low, '/.vs/')
+    || str_starts_with($low, '/.git') || str_starts_with($low, '/.vs');
+if (!$isService) {
+    foreach ($blockedExt as $ext) {
+        if (str_ends_with($low, $ext)) {
+            $isService = true;
+            break;
+        }
+    }
+}
+if ($isService) {
+    http_response_code(404);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Not found';
+    exit;
 }
 
 // --- Не вошёл: API -> 401 JSON, остальное -> на форму входа ---
@@ -145,18 +176,6 @@ if (!isAuthed()) {
     }
     header('Location: /login');
     http_response_code(302);
-    exit;
-}
-
-// --- Вошёл, но служебные файлы не отдаём ---
-$low = strtolower($uri);
-if ($uri === '/router.php'
-    || str_ends_with($low, '.sqlite') || str_ends_with($low, '.sqlite-journal')
-    || str_ends_with($low, '.db') || str_ends_with($low, '.log')
-    || str_ends_with($low, '.exe') || str_ends_with($low, '.bat')
-    || str_ends_with($low, '.cmd') || str_ends_with($low, '.lnk')) {
-    http_response_code(404);
-    echo 'Not found';
     exit;
 }
 

@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/../shared/tsd_auth.php';
 // ТСД-модуль приемки (поступления). Отдельная легкая точка для сканеров.
 // Связка с проектом: пишет В ТУ ЖЕ БД, что и /02-postupleniya/demo_sqlite.php
 // (единый файл 02-postupleniya/wms_receipts.sqlite через shared/db.php):
@@ -13,24 +14,11 @@ declare(strict_types=1);
 //   или заголовок X-Tsd-Token: tsd-12345
 // Смена токена: заменить константу ниже (на проде — вынести в env/БД + PIN на пользователя).
 
-const TSD_TOKEN = 'tsd-12345';
 const TSD_WORK_STATUSES = ['arrived', 'unloading', 'on_stock', 'ready_accept', 'accepting', 'ready_place', 'placing'];
 
 function tsd_token_ok(): bool
 {
-    $t = $_GET['token'] ?? $_POST['token'] ?? '';
-    if ($t === '') {
-        $h = $_SERVER['HTTP_X_TSD_TOKEN'] ?? '';
-        if ($h !== '') {
-            $t = $h;
-        } else {
-            $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-            if (str_starts_with($auth, 'Bearer ')) {
-                $t = substr($auth, 7);
-            }
-        }
-    }
-    if ($t !== '' && hash_equals(TSD_TOKEN, (string)$t)) {
+    if (wms_tsd_token_ok()) {
         return true;
     }
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -57,7 +45,11 @@ function tsd_db(): PDO
 function tsd_progress(PDO $pdo, int $rid): array
 {
     $plan = (float)$pdo->query("SELECT COALESCE(SUM(qty),0) FROM receipt_items WHERE receipt_id=" . $rid)->fetchColumn();
-    $fact = (float)$pdo->query("SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=" . $rid)->fetchColumn();
+    // Только ПРИНЯТОЕ: «Брак» и «Отменено» — не факт приёмки.
+    // Раньше суммировались все операции, и прогресс в tsd/api.php расходился
+    // с прогрессом в tsd/prihod.php (refresh_head фильтрует по Принято).
+    $fact = (float)$pdo->query("SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=" . $rid
+        . " AND accept_status='Принято'")->fetchColumn();
     $pct = $plan > 0 ? (int)min(100, round($fact / $plan * 100)) : ($fact > 0 ? 100 : 0);
     return ['plan' => $plan, 'fact' => $fact, 'pct' => $pct, 'dev' => round($fact - $plan, 3)];
 }
@@ -77,7 +69,8 @@ if ($action === 'tasks') {
         "SELECT r.id, r.doc_no, r.external_no, r.status, r.vehicle, r.gate, r.warehouse_id,
                 w.name AS warehouse, sup.name AS supplier,
                 (SELECT COALESCE(SUM(qty),0) FROM receipt_items WHERE receipt_id=r.id) AS plan_qty,
-                (SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=r.id) AS fact_qty
+                (SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=r.id
+                   AND accept_status='Принято') AS fact_qty
          FROM receipts r
          LEFT JOIN warehouses w ON w.id=r.warehouse_id
          LEFT JOIN contractors sup ON sup.id=r.supplier_id
@@ -105,7 +98,8 @@ if ($action === 'task') {
     }
     $items = $pdo->prepare(
         "SELECT i.id, i.line_no, i.code, i.sku, i.name, i.qty AS plan_qty,
-                COALESCE((SELECT SUM(o.qty) FROM receipt_operations o WHERE o.receipt_id=i.receipt_id AND o.sku=i.sku),0) AS fact_qty
+                COALESCE((SELECT SUM(o.qty) FROM receipt_operations o WHERE o.receipt_id=i.receipt_id
+                   AND o.sku=i.sku AND o.accept_status='Принято'),0) AS fact_qty
          FROM receipt_items i WHERE i.receipt_id=:id ORDER BY i.line_no, i.id"
     );
     $items->execute([':id' => $id]);
@@ -152,7 +146,7 @@ if ($action === 'scan' && $method === 'POST') {
     if ($qty <= 0 || $qty > 100000) {
         tsd_json(['error' => 'неверное qty'], 422);
     }
-    $rh = $pdo->prepare("SELECT id, status FROM receipts WHERE id=:id");
+    $rh = $pdo->prepare("SELECT id, status, doc_no FROM receipts WHERE id=:id");
     $rh->execute([':id' => $rid]);
     $head = $rh->fetch();
     if (!$head) {
@@ -163,6 +157,8 @@ if ($action === 'scan' && $method === 'POST') {
     }
 
     // Поиск позиции плана: сначала точное по sku/code, потом LIKE.
+    // При нескольких партиях одного артикула строка выбирается по партии
+    // (иначе line_no операции указывал бы на чужую партию).
     $it = $pdo->prepare("SELECT * FROM receipt_items WHERE receipt_id=:r AND (sku=:c OR code=:c) LIMIT 1");
     $it->execute([':r' => $rid, ':c' => $code]);
     $item = $it->fetch();
@@ -221,27 +217,77 @@ if ($action === 'scan' && $method === 'POST') {
         }
     }
 
+    // Партия поставщика: операция должна попасть в границы своей партии,
+    // иначе факт по партиям (sku_fact с фильтром по партии) не увидит её
+    // и приёмка в ТСД-Приходе разойдётся с этим сканом.
+    $batch = null;
+    if (array_key_exists('batch', $b) || array_key_exists('supplier_batch', $b)) {
+        $bv = $b['batch'] ?? $b['supplier_batch'] ?? null;
+        $batch = ($bv === null) ? null : trim((string)$bv);
+    }
+    $knownBatches = [];
+    try {
+        require_once __DIR__ . '/../shared/ReceiptClose.php';
+        $knownBatches = array_column(sku_batches($pdo, $rid, $sku), 'batch');
+    } catch (Throwable) {
+    }
+    if (count($knownBatches) > 1 && ($batch === null || !in_array($batch, $knownBatches, true))) {
+        tsd_json(['error' => 'Выбери партию поставщика', 'need_batch' => true, 'batches' => $knownBatches], 422);
+    }
+    if ($batch === null) {
+        $batch = count($knownBatches) === 1 ? (string)$knownBatches[0] : '';
+    }
+    // Строка позиции уточняется по партии: у одного артикула могут быть
+    // несколько строк с разными партиями.
+    if ($itemId && count($knownBatches) > 1) {
+        try {
+            $bi = $pdo->prepare(
+                "SELECT id, line_no FROM receipt_items WHERE receipt_id=:r AND sku=:s
+                 AND COALESCE(supplier_batch,'') = :b ORDER BY id LIMIT 1"
+            );
+            $bi->execute([':r' => $rid, ':s' => $sku, ':b' => (string)$batch]);
+            if ($biRow = $bi->fetch(PDO::FETCH_ASSOC)) {
+                $itemId = (int)$biRow['id'];
+                $item['line_no'] = (int)($biRow['line_no'] ?? 0);
+            }
+        } catch (Throwable) {
+        }
+    }
+
     $pdo->beginTransaction();
     try {
         if ($regCnt > 0 && $marking !== '') {
             $pdo->prepare("UPDATE receipt_marks SET status='accepted', accepted_at=datetime('now') WHERE receipt_id=:r AND marking_code=:m")
                 ->execute([':r' => $rid, ':m' => $marking]);
         }
-        $pdo->prepare(
-            "INSERT INTO receipt_operations (receipt_id,line_no,sku,accept_status,accept_date,receiver_id,pallet,sku_qty,qty)
-             VALUES (:r,0,:sku,'Принято',datetime('now'),:rec,:pal,1,:q)"
-        )->execute([':r' => $rid, ':sku' => $sku, ':rec' => $receiverId, ':pal' => ($pallet !== '' ? $pallet : null), ':q' => $qty]);
+        try {
+            $pdo->prepare(
+                "INSERT INTO receipt_operations (receipt_id,line_no,sku,supplier_batch,accept_status,accept_date,receiver_id,pallet,sku_qty,qty)
+                 VALUES (:r,:ln,:sku,:b,'Принято',datetime('now'),:rec,:pal,1,:q)"
+            )->execute([':r' => $rid, ':ln' => ($itemId ? (int)($item['line_no'] ?? 0) : 0),
+                ':sku' => $sku, ':b' => (string)$batch, ':rec' => $receiverId,
+                ':pal' => ($pallet !== '' ? $pallet : null), ':q' => $qty]);
+        } catch (Throwable) {
+            // Старая БД без колонки supplier_batch.
+            $pdo->prepare(
+                "INSERT INTO receipt_operations (receipt_id,line_no,sku,accept_status,accept_date,receiver_id,pallet,sku_qty,qty)
+                 VALUES (:r,:ln,:sku,'Принято',datetime('now'),:rec,:pal,1,:q)"
+            )->execute([':r' => $rid, ':ln' => ($itemId ? (int)($item['line_no'] ?? 0) : 0),
+                ':sku' => $sku, ':rec' => $receiverId,
+                ':pal' => ($pallet !== '' ? $pallet : null), ':q' => $qty]);
+        }
 
         if ($serial !== '' || $marking !== '') {
             $pdo->prepare(
-                "INSERT INTO receipt_flags (receipt_id,item_id,flag_type,serial_no,marking_code,sku,flag_date)
-                 VALUES (:r,:i,:t,:s,:m,:sku,datetime('now'))"
+                "INSERT INTO receipt_flags (receipt_id,item_id,flag_type,serial_no,marking_code,sku,pallet,qty,flag_date)
+                 VALUES (:r,:i,:t,:s,:m,:sku,:pal,1,datetime('now'))"
             )->execute([
                 ':r' => $rid, ':i' => $itemId,
                 ':t' => $marking !== '' ? 'marking' : 'serial',
                 ':s' => $serial !== '' ? $serial : null,
                 ':m' => $marking !== '' ? $marking : null,
                 ':sku' => $sku,
+                ':pal' => ($pallet !== '' ? $pallet : null),
             ]);
         }
 
@@ -268,11 +314,30 @@ if ($action === 'scan' && $method === 'POST') {
         $pdo->rollBack();
         tsd_json(['error' => $e->getMessage()], 500);
     }
+    // Журнал серийных номеров (модуль 14): приёмка с/н.
+    // Пишется один раз — в момент скана; паллета та, на которую с/н приняли.
+    if ($serial !== '') {
+        try {
+            require_once __DIR__ . '/../shared/Journal.php';
+            WmsJournal::logSerial(wms_journal_pdo(), [
+                'serial_no' => $serial,
+                'sku' => $sku,
+                'product_name' => (string)($item['name'] ?? ''),
+                'op_type' => 'Приход',
+                'receipt_doc_no' => (string)($head['doc_no'] ?? ''),
+                'pallet' => $pallet,
+                'qty' => 1,
+                'user_id' => $receiverId,
+            ]);
+        } catch (Throwable) {
+        }
+    }
     $pr = tsd_progress($pdo, $rid);
     tsd_json(['ok' => true, 'sku' => $sku, 'excess' => $excess, 'progress' => $pr, 'warn' => $excess ? 'Сверх плана — будет расхождение' : null]);
 }
 
-// --- Завершить приемку: accepting -> ready_place ---
+// --- Завершить приемку: accepting -> closed / closed_short ---
+// Акты расхождений формируются ТОЛЬКО при закрытии документа (shared/ReceiptClose.php).
 if ($action === 'finish' && $method === 'POST') {
     $b = json_decode(file_get_contents('php://input'), true) ?? [];
     $rid = (int)($b['receipt_id'] ?? $_GET['id'] ?? 0);
@@ -287,21 +352,6 @@ if ($action === 'finish' && $method === 'POST') {
         tsd_json(['error' => 'Завершить можно только из приемки (сейчас: ' . $head['status'] . ')'], 409);
     }
     $pr = tsd_progress($pdo, $rid);
-    $pdo->beginTransaction();
-    try {
-        $pdo->prepare(
-            "UPDATE receipts SET accepted_qty=:f, accepted_pct=:p, deviation_qty=:d, has_diff=:hd,
-                    accept_date=COALESCE(accept_date,datetime('now')), status='ready_place' WHERE id=:id"
-        )->execute([':f' => $pr['fact'], ':p' => $pr['pct'], ':d' => $pr['dev'], ':hd' => $pr['dev'] != 0 ? 1 : 0, ':id' => $rid]);
-        $pdo->prepare(
-            "INSERT INTO receipt_history (receipt_id,user_id,action,field,old_value,new_value,old_status,new_status)
-             VALUES (:r,:u,'status','Статус','Приемка','Готова к размещению',:os,'ready_place')"
-        )->execute([':r' => $rid, ':u' => $receiverId, ':os' => $head['status']]);
-        $pdo->commit();
-    } catch (Throwable $e) {
-        $pdo->rollBack();
-        tsd_json(['error' => $e->getMessage()], 500);
-    }
     // Проброс факта в Номенклатуру (products.qty / stock / movements). Идемпотентно.
     $stock = null;
     try {
@@ -310,7 +360,20 @@ if ($action === 'finish' && $method === 'POST') {
     } catch (Throwable $e) {
         $stock = ['synced' => false, 'error' => $e->getMessage()];
     }
-    tsd_json(['ok' => true, 'progress' => tsd_progress($pdo, $rid), 'status' => 'ready_place', 'stock' => $stock]);
+    // Закрытие документа: акты + статус «Закрыто»/«Закрыто с отклонением» + комментарий.
+    $closed = null;
+    try {
+        require_once __DIR__ . '/../shared/ReceiptClose.php';
+        $closed = wms_close_receipt($pdo, $rid, $receiverId, 'ТСД');
+    } catch (Throwable $e) {
+        tsd_json(['error' => $e->getMessage()], 500);
+    }
+    $pdo->prepare(
+        "UPDATE receipts SET accepted_qty=:f, accepted_pct=:p, deviation_qty=:d, has_diff=:hd WHERE id=:id"
+    )->execute([':f' => $pr['fact'], ':p' => $pr['pct'], ':d' => $pr['dev'], ':hd' => $pr['dev'] != 0 ? 1 : 0, ':id' => $rid]);
+    tsd_json(['ok' => true, 'progress' => tsd_progress($pdo, $rid), 'status' => $closed['status'],
+        'status_label' => $closed['status_label'], 'deviation' => $closed['deviation'],
+        'acts' => $closed['acts'], 'stock' => $stock]);
 }
 
 tsd_json(['error' => 'unknown action: ?action=tasks|task|receivers|scan|finish'], 404);

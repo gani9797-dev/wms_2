@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS shipments (
   is_danger TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Опасный груз',
   serial_scan TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Сканирование серийных номеров',
   marking_scan TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Сканирование маркировки ЧЗ',
+  is_crossdock TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Кроссдок: сортировка паллетами',
   is_posted TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Проведен',
   comment TEXT NULL,
   created_by BIGINT UNSIGNED NULL,
@@ -174,6 +175,7 @@ CREATE TABLE IF NOT EXISTS shipment_items (
   check_label VARCHAR(50) NULL COMMENT 'Этикетка проверки: EXP317889621-1',
   warehouse_id BIGINT UNSIGNED NULL,
   comment TEXT NULL,
+  prod_date DATE NULL COMMENT 'Дата производства из CSV',
   CONSTRAINT fk_items_shipment FOREIGN KEY (shipment_id)
     REFERENCES shipments (id) ON DELETE CASCADE,
   KEY idx_shipment (shipment_id),
@@ -213,6 +215,46 @@ CREATE TABLE IF NOT EXISTS shipment_flags (
     REFERENCES shipments (id) ON DELETE CASCADE,
   KEY idx_flag_shipment (shipment_id),
   KEY idx_flag_serial (serial_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Лог операций сортировки отгрузки (ТСД). Хранит только идентификаторы:
+-- паллета (SSCC), сотрудник, товар + дата создания SSCC, серийник, честный знак.
+CREATE TABLE IF NOT EXISTS shipment_sort_log (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  shipment_id BIGINT UNSIGNED NOT NULL,
+  pallet_id VARCHAR(50) NULL COMMENT 'SSCC/номер паллеты',
+  pallet_created_at DATETIME NULL COMMENT 'Дата создания SSCC',
+  user_id BIGINT UNSIGNED NULL COMMENT 'id сотрудника',
+  item_id BIGINT UNSIGNED NULL COMMENT 'id товара (shipment_items.id)',
+  serial_no VARCHAR(100) NULL COMMENT 'Серийный номер',
+  marking_code TEXT NULL COMMENT 'Честный знак (марка)',
+  qty DECIMAL(12,3) NOT NULL DEFAULT 1,
+  operation VARCHAR(30) NOT NULL DEFAULT 'sort' COMMENT 'sort|crossdock|mark|serial',
+  reason VARCHAR(100) NULL COMMENT 'Причина: марка не принята / не введена в оборот',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_ssl_shipment FOREIGN KEY (shipment_id)
+    REFERENCES shipments (id) ON DELETE CASCADE,
+  KEY idx_ssl_shipment (shipment_id),
+  KEY idx_ssl_pallet (pallet_id),
+  KEY idx_ssl_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Реестр марок честного знака по отгрузке (загрузка файлом на документ).
+-- Статусы: expected (загружена), accepted (принята), circulated (введена в оборот).
+CREATE TABLE IF NOT EXISTS shipment_marks (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  shipment_id BIGINT UNSIGNED NOT NULL,
+  sku VARCHAR(50) NOT NULL COMMENT 'Артикул',
+  marking_code TEXT NOT NULL COMMENT 'Маркировка КИ',
+  prod_date DATE NULL COMMENT 'Дата производства марки',
+  status VARCHAR(20) NOT NULL DEFAULT 'expected',
+  accepted_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_sm_shipment FOREIGN KEY (shipment_id)
+    REFERENCES shipments (id) ON DELETE CASCADE,
+  UNIQUE KEY uq_shipment_mark (shipment_id, marking_code(191)),
+  KEY idx_sm_shipment (shipment_id),
+  KEY idx_sm_sku (sku)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Вложенные документы (вкладка Документы (4))

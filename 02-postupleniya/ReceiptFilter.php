@@ -79,7 +79,11 @@ final class ReceiptFilter
         $f->qtyTo        = $get('qty_to') !== null ? (int)$get('qty_to') : null;
         $f->page         = max(1, (int)($q['page'] ?? 1));
         $f->perPage      = min(200, max(5, (int)($q['per_page'] ?? 20)));
-        $allowed         = ['doc_date', 'doc_no', 'total_with_vat', 'id'];
+        $allowed         = ['doc_date', 'doc_no', 'total_with_vat', 'id',
+            'external_no', 'arrival_date', 'accept_date', 'place_date', 'supplier',
+            'vehicle', 'gate', 'unload_type', 'warehouse', 'status', 'total',
+            'sku_count', 'qty_total', 'accepted_qty', 'accepted_pct', 'placed_pct',
+            'deviation', 'flags'];
         if (isset($q['sort']) && in_array($q['sort'], $allowed, true)) {
             $f->sort = $q['sort'];
         }

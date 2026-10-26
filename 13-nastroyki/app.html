@@ -73,12 +73,12 @@ tr:hover td{background:#fafaff}
 <a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a>
 <a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a>
 <div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div>
-<div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">🤝 9 Контрагенты</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div>
+<div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">🤝 9 Контрагенты и грузополучатели</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div>
 <div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👥 10 Сотрудники</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div>
 <a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a>
 <a class="mi" href="../12-uvedomleniya/app.html">🔔 12 Уведомления</a>
 <div class="grp open" data-grp="13"><div class="par"><a class="mi on" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div>
-</nav></aside>
+<a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a></nav></aside>
 <main>
 <div class="top"><h1 id="ttl">Настройки</h1><div class="user"><span class="ava">ПС</span><span><b>Половинкин Сергей</b><br><small style="color:var(--mut)">Директор</small></span><span style="color:var(--mut)">▼</span></div></div>
 
@@ -109,8 +109,46 @@ tr:hover td{background:#fafaff}
 <div class="bar"><button class="btn" data-go="hub">← Все настройки</button></div>
 <div class="tabs" id="stTabs"><span class="on" data-st="zones">Зоны склада</span><span data-st="cells">Тип ячеек</span><span data-st="pallets">Тип паллет</span><span data-st="lpn">Категория LPN</span><span data-st="rules">Правила</span></div>
 <div class="card"><div class="bar" style="margin-top:0"><button class="btn pri" id="stAdd">+ Создать</button></div>
-<table><thead><tr><th>Код</th><th>Наименование</th><th>Доп.</th><th>Статус</th><th></th></tr></thead><tbody id="stBody"></tbody></table>
+<table><thead id="stHead"><tr><th>Код</th><th>Наименование</th><th>Назначение</th><th>Влияние</th><th>Клиент</th><th>Ячейки</th><th>Статус</th><th></th></tr></thead><tbody id="stBody"></tbody></table>
 <div id="rulesBox" style="display:none;margin-top:10px;color:#666;font-size:13px">Правила: <span class="chip">Размещение</span><span class="chip">Перемещение</span><span class="chip">Пополнение</span><span class="chip">Сбор</span><span class="chip">Инвентаризация</span></div></div>
+</section>
+
+<!-- ЯЧЕЙКИ ХРАНЕНИЯ -->
+<section id="v-cells" class="view">
+<div class="bar"><button class="btn" data-go="hub">← Все настройки</button></div>
+<div class="tabs" id="cellTabs">
+<span class="on" data-cell-tab="zones">🗂️ Зоны</span>
+<span data-cell-tab="locks">🔒 Типы блокировок</span>
+<span data-cell-tab="types">📦 Типы ячеек</span>
+</div>
+
+<div class="cell-sub" id="cellSubZones">
+<div class="bar" style="margin-top:0"><button class="btn pri" id="cellZoneAdd">+ Зона</button></div>
+<table><thead><tr><th>Код</th><th>Наименование</th><th>Назначение</th><th>Влияние</th><th>Клиент</th><th>Ячейки</th><th>Статус</th><th></th></tr></thead><tbody id="cellZoneBody"></tbody></table>
+</div>
+
+<div class="cell-sub" id="cellSubLocks" style="display:none">
+<div class="bar" style="margin-top:0"><button class="btn pri" id="cellLockAdd">+ Тип блокировки</button></div>
+<table><thead><tr><th>Код</th><th>Наименование</th><th>Описание / причина</th><th>Статус</th><th></th></tr></thead><tbody id="cellLockBody"></tbody></table>
+</div>
+
+<div class="cell-sub" id="cellSubTypes" style="display:none">
+<div class="bar" style="margin-top:0"><button class="btn pri" id="cellTypeAdd">+ Тип ячейки</button></div>
+<table><thead><tr><th>Код</th><th>Наименование</th><th>Тара / размер</th><th>Статус</th><th></th></tr></thead><tbody id="cellTypeBody"></tbody></table>
+</div>
+</section>
+
+<!-- КОНТРАГЕНТЫ -->
+<section id="v-clients" class="view">
+<div class="bar"><button class="btn" data-go="hub">← Все настройки</button>
+<select id="clType" style="padding:10px 12px;border:1px solid #CBD5E0;border-radius:10px;font-size:14px;background:#fff"><option value="">Все типы</option><option value="client">Клиент</option><option value="consignee">Грузополучатель</option><option value="supplier">Поставщик</option></select>
+<button class="btn pri" id="clAdd">+ Контрагент</button></div>
+<div class="card">
+<h2 style="margin:0 0 4px">Контрагенты</h2>
+<p class="hint">Новые контрагенты из прихода создаются автоматически с типом «Клиент», из отгрузки — с типом «Грузополучатель»; если значение встречается и в приходе, и в отгрузке — тип «Клиент». Флаги сканирования с/н по умолчанию — «Нет». Настройки задаются в карточке контрагента (модуль 9 «Контрагенты и грузополучатели»).</p>
+<div id="clSummary" class="chips" style="margin-top:10px"></div>
+<table style="margin-top:8px"><thead><tr><th>Наименование</th><th>Тип</th><th>Принцип резервирования</th><th>С/н на входе</th><th>С/н на выходе</th><th>Зоны размещения</th><th></th></tr></thead><tbody id="clRows"></tbody></table>
+</div>
 </section>
 
 <!-- ВОРОТА -->
@@ -121,6 +159,41 @@ tr:hover td{background:#fafaff}
 <div class="tabs"><span class="on" id="gvList">Список</span><span id="gvSchem">Схема</span></div>
 <div class="card" id="gatesListCard"><table><thead><tr><th>Ворота №</th><th>Доки</th><th>Интервал слотов</th><th>Ед. изм. интервала</th><th>Статус доступности</th></tr></thead><tbody id="gateBody"></tbody></table></div>
 <div id="gatesSchem" style="display:none"></div>
+</section>
+
+<!-- РОБОТЫ РАЗМЕЩЕНИЯ -->
+<section id="v-robots" class="view">
+<div class="bar"><button class="btn" data-go="hub">← Все настройки</button></div>
+<div class="card">
+<h2 style="margin:0 0 8px">Настройки робота размещения</h2>
+<p class="hint" style="margin-bottom:12px">Секционная блокировка типа паллеты: первая паллета в пустой секции закрепляет за секцией тип тары (евро или фин). Секция открывается снова, когда становится полностью пустой. Лимиты секции: евро — 4 паллеты, фин — 3 паллеты (3-я ячейка яруса блокируется с причиной «Фин секция»).</p>
+<div class="grid2">
+<div class="fld"><label>Секционная блокировка типа паллеты</label>
+<label class="chk"><input type="checkbox" id="rb_section_lock" style="width:auto"> Включить робота секционной блокировки</label>
+<div class="hint" style="margin-top:4px">Когда включено: пустая секция принимает любой тип паллеты. Первая поставленная паллета закрепляет за секцией тип тары (евро/фин). Свободные ячейки секции перенастраиваются под этот тип. Секция становится полностью пустой — открывается снова под любой тип.</div>
+</div>
+<div class="fld"><label>Макс паллет евро в секции</label><input id="rb_euro_cap" type="number" min="1" value="4"></div>
+<div class="fld"><label>Макс паллет фин в секции</label><input id="rb_fin_cap" type="number" min="1" value="3"></div>
+<div class="fld"><label>Блокировать 3-ю ячейку яруса под фин</label>
+<label class="chk"><input type="checkbox" id="rb_fin_block_3rd" style="width:auto" checked> Причина блокировки: «Фин секция»</label>
+<div class="hint" style="margin-top:4px">При 3 финах на ярусе (балка 3,6 м) следующая свободная ячейка блокируется с причиной «(Фин секция)».</div>
+</div>
+</div>
+<div style="display:flex;gap:10px;margin-top:14px"><button class="btn pri" id="rb_save">Сохранить настройки робота</button><button class="btn" id="rb_reset">Сброс к значениям по умолчанию</button></div>
+</div>
+<div class="card" style="margin-top:14px">
+<h2 style="margin:0 0 8px">Робот импорта in/out</h2>
+<p class="hint" style="margin-bottom:12px">Папка <b>in</b> — приходы в модуль 02, папка <b>out</b> — заказы в модуль 03.1. Поддерживаются CSV, TXT, XLSX, XLSM. Один файл = один документ. Дубликаты блокируются. После обработки файл и txt-отчёт попадают в success/ или error/.</p>
+<div class="grid2">
+<div class="fld"><label>Робот включён</label><select id="ir_enabled"><option value="1">Да</option><option value="0">Нет</option></select></div>
+<div class="fld"><label>Интервал, минут</label><input id="ir_interval" type="number" min="1" value="10"></div>
+<div class="fld"><label>Склад по умолчанию (ID)</label><input id="ir_wh" type="number" min="1" value="1"></div>
+<div class="fld"><label>Форматы (через запятую)</label><input id="ir_formats" value="csv,txt,xlsx,xlsm"></div>
+</div>
+<div class="fld"><label>Основной код / сценарий робота</label><textarea id="ir_code" rows="5" style="font-family:monospace"></textarea></div>
+<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap"><button class="btn pri" id="ir_save">Сохранить робота</button><button class="btn" id="ir_run">Запустить сейчас</button><span id="ir_status" class="hint" style="align-self:center"></span></div>
+<div class="fld" style="margin-top:14px"><label>Журнал робота</label><div style="max-height:320px;overflow:auto"><table><thead><tr><th>Дата</th><th>Папка</th><th>Файл</th><th>Статус</th><th>Документ</th><th>Сообщение</th></tr></thead><tbody id="ir_log"></tbody></table></div></div>
+</div>
 </section>
 
 <!-- ПРОЧИЙ РАЗДЕЛ -->
@@ -153,8 +226,30 @@ tr:hover td{background:#fafaff}
 <div style="display:flex;gap:8px;margin-top:12px"><button class="btn pri" id="gateSave">Сохранить</button><button class="btn" id="gateCancel">Отменить</button></div>
 </div></div>
 
+<!-- Модалка зоны ячейки -->
+<div class="modal" id="zoneModal"><div class="mbox"><h2 id="zoneMTitle">Новая зона</h2>
+<input type="hidden" id="f_zoneId">
+<div class="grid2"><div class="fld"><label>Код зоны *</label><input id="f_zoneCode" placeholder="client-a"></div>
+<div class="fld"><label>Наименование *</label><input id="f_zoneName" placeholder="Зона клиента А"></div></div>
+<div class="fld"><label>Для чего эта зона</label><input id="f_zonePurpose" placeholder="Например: хранение товара клиента А"></div>
+<div class="grid2"><div class="fld"><label>Влияет на размещение</label><select id="f_zonePlace"><option value="0">Нет</option><option value="1">Да — приоритет при размещении</option></select></div>
+<div class="fld"><label>Влияет на резервирование</label><select id="f_zoneReserve"><option value="0">Нет</option><option value="1">Да — приоритет при резервировании</option></select></div></div>
+<div class="grid2"><div class="fld"><label>Клиент (зона приравнена к клиенту)</label><select id="f_zoneClient"><option value="">Не привязана</option></select></div>
+<div class="fld"><label>Тип зоны</label><select id="f_zoneVirtual"><option value="0">С ячейками</option><option value="1">Пустая (только для отчётов)</option></select></div></div>
+<div class="fld"><label>Статус</label><select id="f_zoneActive"><option value="1">Активная</option><option value="0">Не активная</option></select></div>
+<div style="display:flex;gap:8px;margin-top:12px"><button class="btn pri" id="zoneSave">Сохранить</button><button class="btn" id="zoneCancel">Отменить</button></div>
+<div class="fld" style="margin-top:12px;color:#8A92A6;font-size:12px">Зона с признаком «Влияет на размещение» даёт приоритет ячейкам этой зоны при размещении через ТСД. «Влияет на резервирование» — приоритет остаткам из этих ячеек при резервировании под отгрузку. «Пустая» зона может не иметь ячеек и используется в отчётах.</div>
+</div></div>
+
+<!-- Модалка-заглушка «Раздел в разработке» -->
+<div class="modal" id="devModal"><div class="mbox"><h2 id="devTitle">Раздел в разработке</h2>
+<p id="devText" style="color:#4A5568">Раздел в разработке.</p>
+<div style="display:flex;gap:8px;margin-top:12px"><button class="btn pri" id="devOk">Понятно</button></div>
+</div></div>
+
 <div class="ctx" id="ctx"></div>
 <div id="toast"></div>
+<script src="../shared/sort.js"></script>
 <script>
 var USER='Половинкин Сергей';
 function toast(m){var t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(function(){t.style.display='none'},2200)}
@@ -168,6 +263,8 @@ var SECTIONS=[
 {n:'Справочники',d:'other:refs',e:'📚',s:'Перейти в модуль'},
 {n:'Номенклатура',d:'other:nom',e:'📁',s:'Товары и карточки',link:'../08-nomenklatura/app.html'},
 {n:'Склад и хранение',d:'storage',e:'🗄️',s:'Зоны, ячейки, паллеты, LPN'},
+{n:'Ячейки',d:'cells',e:'🗄️',s:'Настройки ячеек хранения'},
+{n:'Контрагенты',d:'clients',e:'🤝',s:'Настройки клиентов (резервирование, с/н, зоны)'},
 {n:'Поступления',d:'other:post',e:'📥',s:'Перейти в модуль',link:'../02-postupleniya/app.html'},
 {n:'Реестр прибытия ТС',d:'other:reestr',e:'🚛',s:'Перейти в модуль',link:'../01-reestr-pribytiya-ts/app.html'},
 {n:'Ворота и бронирование',d:'gates',e:'🚪',s:'Ворота, доки, слоты, табло'},
@@ -186,7 +283,7 @@ var SECTIONS=[
 {n:'Автоматизация',d:'other:auto',e:'⚡',s:'Накладные, счета',link:'../13.1-avtoformirovanie-nakladnyh/app.html'},
 {n:'Отчеты',d:'other:rep',e:'📊',s:'Перейти в модуль',link:'../11-otchety/app.html'},
 {n:'Журнал изменений',d:'other:log',e:'🕘',s:'История настроек'},
-{n:'Системные параметры',d:'other:sys',e:'🛠️',s:'Константы системы'}];
+{n:'Системные параметры',d:'other:sys',e:'🛠️',s:'Константы системы'},{n:'Роботы размещения',d:'robots',e:'🤖',s:'Секционная блокировка типа паллеты, лимиты секции'}];
 var OTH_TXT={refs:'Раздел-заглушка: общие справочники ведутся в своих модулях.',nom:'Карточки товаров, штрихкоды, упаковка — в модуле 8.',post:'Правила приёмки и размещение — в модуле 2.',reestr:'Слоты прибытия ТС настраиваются здесь в разделе «Ворота», оперативный реестр — в модуле 1.',zak:'Логика заказов — в модуле 3.1.',otg:'Логика отгрузок — в модуле 3.',zad:'Типы заданий и автопостановка — в модуле 7.',inv:'Параметры инвентаризации — в модуле 6.',per:'Графики, отделы, должности — в модуле 10.',kpi:'Формулы и ставки — в 13.4.',bil:'Тарифы и счета — в 9.1 / 13.2.',doc:'Шаблоны нумерации документов.',ntf:'Каналы и шаблоны — в модуле 12.',tsd:'Шаблоны ШК и префиксы — в модуле ТСД.',int:'Ключи API и вебхуки.',usr:'Пользователи, роли, права.',auto:'Автоправила накладных/счетов — 13.1, 13.2.',rep:'Источники отчётов — в модуле 11.',log:'Полная история — вкладка «История изменений» в «Организации и складах».',sys:'Часовой пояс по умолчанию, единицы измерения, округления.'};
 function renderHub(f){var h=document.getElementById('hub');h.innerHTML='';SECTIONS.filter(function(s){return !f||s.n.toLowerCase().indexOf(f.toLowerCase())>=0}).forEach(function(s){var d=document.createElement('div');d.className='tile'+(s.d==='org'?' hot':'');d.innerHTML=s.e+'<br>'+s.n+'<small>'+s.s+'</small>';d.onclick=function(){go(s.d)};h.appendChild(d)})}
 function go(d){document.querySelectorAll('.view').forEach(function(v){v.classList.remove('on')});
@@ -194,7 +291,10 @@ var t=document.getElementById('ttl');
 if(d==='hub'){document.getElementById('v-hub').classList.add('on');t.textContent='Настройки'}
 else if(d==='org'){document.getElementById('v-org').classList.add('on');t.textContent='Организация и склады';renderOrg();renderWh()}
 else if(d==='storage'){document.getElementById('v-storage').classList.add('on');t.textContent='Склад и хранение';renderSt()}
+else if(d==='cells'){document.getElementById('v-cells').classList.add('on');t.textContent='Ячейки';renderCells()}
+else if(d==='clients'){document.getElementById('v-clients').classList.add('on');t.textContent='Контрагенты';renderClients()}
 else if(d==='gates'){document.getElementById('v-gates').classList.add('on');t.textContent='Ворота и бронирование';renderGates()}
+else if(d==='robots'){document.getElementById('v-robots').classList.add('on');t.textContent='Роботы размещения';renderRobots()}
 else if(d.indexOf('other:')===0){document.getElementById('v-other').classList.add('on');var k=d.split(':')[1];var s=SECTIONS.filter(function(x){return x.d===d})[0];document.getElementById('othTitle').textContent=s?s.n:k;document.getElementById('othText').textContent=OTH_TXT[k]||'';var a=document.getElementById('othLink');if(s&&s.link){a.style.display='';a.href=s.link}else{a.style.display='none'}t.textContent=s?s.n:'Настройки'}}
 document.querySelectorAll('[data-go]').forEach(function(b){b.onclick=function(){go(b.getAttribute('data-go'))}});
 document.getElementById('hq').oninput=function(e){renderHub(e.target.value)};
@@ -254,12 +354,88 @@ else{var o=whs[whIdx];if(o.name!==rec.name)hlog('Склад: Наименова�
 ss('wms13_wh',whs);document.getElementById('whModal').classList.remove('open');renderWh();toast('Сохранено')};
 
 /* ---------- Склад и хранение ---------- */
-var ST_DEF={zones:[{code:'A',name:'Зона приёмки',extra:'BD6',on:1},{code:'B',name:'Зона хранения',extra:'BD6',on:1},{code:'C',name:'Зона брака',extra:'BD2',on:1}],cells:[{code:'PAL',name:'Паллетная',extra:'1200×800',on:1},{code:'SHELF',name:'Стеллажная',extra:'—',on:1}],pallets:[{code:'EUR',name:'EUR-паллет 1200×800',extra:'до 1500 кг',on:1},{code:'FIN',name:'FIN-паллет 1200×1000',extra:'до 1200 кг',on:1}],lpn:[{code:'BOX',name:'Короб',extra:'—',on:1},{code:'PALLET',name:'Паллет',extra:'—',on:1}],rules:[{code:'R1',name:'Размещение: ближняя свободная',extra:'placement',on:1},{code:'R2',name:'Пополнение по min/max',extra:'replenish',on:1}]};
+var ST_DEF={zones:[{code:'A',name:'Зона приёмки',extra:'BD6',on:1},{code:'B',name:'Зона хранения',extra:'BD6',on:1},{code:'C',name:'Зона брака',extra:'BD2',on:1}],locks:[{code:'mechanical',name:'Механическая',extra:'Замок / печать',on:1},{code:'seal',name:'Пломба',extra:'Контрольная пломба',on:1},{code:'quarantine',name:'Карантин',extra:'Товар под карантином',on:1},{code:'damage',name:'Повреждение',extra:'Ячейка повреждена',on:1},{code:'inventory',name:'Инвентаризация',extra:'Блокировка на время инвент.',on:1}],cells:[{code:'PAL',name:'Паллетная',extra:'1200×800',on:1},{code:'SHELF',name:'Стеллажная',extra:'—',on:1}],pallets:[{code:'EUR',name:'EUR-паллет 1200×800',extra:'до 1500 кг',on:1},{code:'FIN',name:'FIN-паллет 1200×1000',extra:'до 1200 кг',on:1}],lpn:[{code:'BOX',name:'Короб',extra:'—',on:1},{code:'PALLET',name:'Паллет',extra:'—',on:1}],rules:[{code:'R1',name:'Размещение: ближняя свободная',extra:'placement',on:1},{code:'R2',name:'Пополнение по min/max',extra:'replenish',on:1}]};
+var ROB_DEF={section_lock:1,euro_cap:4,fin_cap:3,fin_block_3rd:1};
 var st=ls('wms13_st',ST_DEF), stKey='zones';
+/* ---------- Зоны ячеек: справочник в БД (storage_zones) ---------- */
+var ZONE_API='demo_sqlite.php', zoneRows=[], zoneClients=[];
+function zoneClientName(id){var c=(zoneClients||[]).find(function(x){return +x.id===+id});return c?c.name:''}
+function zoneLoad(){
+  Promise.all([
+    fetch(ZONE_API+'?action=zones').then(function(r){return r.json()}).catch(function(){return {rows:[]}}),
+    fetch(ZONE_API+'?action=contractors').then(function(r){return r.json()}).catch(function(){return {rows:[]}})
+  ]).then(function(rs){
+    zoneRows=(rs[0]&&rs[0].rows)||[];
+    zoneClients=(rs[1]&&rs[1].rows)||[];
+    var sel=document.getElementById('f_zoneClient');
+    if(sel)sel.innerHTML='<option value="">Не привязана</option>'+zoneClients.map(function(c){return '<option value="'+c.id+'">'+esc(c.name)+'</option>'}).join('');
+    renderSt();renderCells();
+  });
+}
+function zoneFlags(z){
+  var out=[];
+  if(+z.affects_placement===1)out.push('<span class="st-ok">Размещение</span>');
+  if(+z.affects_reservation===1)out.push('<span class="st-ok">Резерв</span>');
+  return out.join(' ')||'—';
+}
+function zoneTr(z,index){
+  var tr=document.createElement('tr');
+  var client=zoneClientName(z.contractor_id)||'—';
+  var empty=+z.is_virtual===1?'<span class="st-off">Пустая</span>':('Ячеек: '+(z.cells_count||0));
+  tr.innerHTML='<td><b>'+esc(z.code)+'</b></td><td>'+esc(z.name)+'</td><td>'+esc(z.purpose||'—')+'</td>'
+    +'<td>'+zoneFlags(z)+'</td><td>'+esc(client)+'</td><td>'+empty+'</td>'
+    +'<td>'+(+z.is_active===1?'<span class="st-ok">Активная</span>':'<span class="st-off">Не активная</span>')+'</td>';
+  var td=document.createElement('td');
+  var ed=document.createElement('span');ed.className='x';ed.textContent='✎';ed.title='Редактировать';ed.onclick=function(){zoneOpen(z.id)};
+  var del=document.createElement('span');del.className='x';del.textContent='✕';del.title='Удалить';del.onclick=function(){zoneDelete(z)};
+  td.appendChild(ed);td.appendChild(del);tr.appendChild(td);tr.onclick=function(e){if(e.target===ed||e.target===del)return;zoneOpen(z.id)};
+  return tr;
+}
+function zoneOpen(id){
+  var z=id?(zoneRows||[]).find(function(x){return +x.id===+id}):null;
+  document.getElementById('zoneMTitle').textContent=z?'Зона '+z.code:'Новая зона';
+  document.getElementById('f_zoneId').value=z?z.id:'';
+  document.getElementById('f_zoneCode').value=z?z.code:'';
+  document.getElementById('f_zoneName').value=z?z.name:'';
+  document.getElementById('f_zonePurpose').value=z?(z.purpose||''):'';
+  document.getElementById('f_zonePlace').value=z?(+z.affects_placement===1?'1':'0'):'0';
+  document.getElementById('f_zoneReserve').value=z?(+z.affects_reservation===1?'1':'0'):'0';
+  document.getElementById('f_zoneClient').value=z&&z.contractor_id?String(z.contractor_id):'';
+  document.getElementById('f_zoneVirtual').value=z?(+z.is_virtual===1?'1':'0'):'0';
+  document.getElementById('f_zoneActive').value=z?(+z.is_active===1?'1':'0'):'1';
+  document.getElementById('zoneModal').classList.add('open');
+}
+function zoneSave(){
+  var id=parseInt(document.getElementById('f_zoneId').value,10)||0;
+  var body={id:id,code:document.getElementById('f_zoneCode').value.trim(),name:document.getElementById('f_zoneName').value.trim(),
+    purpose:document.getElementById('f_zonePurpose').value.trim(),
+    affects_placement:+document.getElementById('f_zonePlace').value?1:0,
+    affects_reservation:+document.getElementById('f_zoneReserve').value?1:0,
+    contractor_id:+document.getElementById('f_zoneClient').value||null,
+    is_virtual:+document.getElementById('f_zoneVirtual').value?1:0,
+    is_active:+document.getElementById('f_zoneActive').value?1:0};
+  if(!body.code||!body.name){toast('Заполните код и наименование зоны');return}
+  fetch(ZONE_API+'?action=zone_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
+    .then(function(x){if(!x.ok){toast('Ошибка: '+(x.j.error||''));return}
+      document.getElementById('zoneModal').classList.remove('open');toast('Зона сохранена');zoneLoad();
+    }).catch(function(){toast('Нет связи с сервером')});
+}
+function zoneDelete(z){
+  if(!confirm('Удалить зону '+z.code+'? Если в ней есть ячейки — удаление будет запрещено.'))return;
+  fetch(ZONE_API+'?action=zone_delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:z.id,code:z.code})})
+    .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
+    .then(function(x){toast(x.ok?'Зона удалена':'Ошибка: '+(x.j.error||''));if(x.ok)zoneLoad()})
+    .catch(function(){toast('Нет связи с сервером')});
+}
+document.getElementById('zoneCancel').onclick=function(){document.getElementById('zoneModal').classList.remove('open')};
+document.getElementById('zoneSave').onclick=zoneSave;
 document.querySelectorAll('#stTabs span').forEach(function(s){s.onclick=function(){document.querySelectorAll('#stTabs span').forEach(function(x){x.classList.remove('on')});s.classList.add('on');stKey=s.getAttribute('data-st');renderSt()}});
-function renderSt(){var b=document.getElementById('stBody');b.innerHTML='';(st[stKey]||[]).forEach(function(r,i){var tr=document.createElement('tr');tr.innerHTML='<td><b>'+r.code+'</b></td><td>'+r.name+'</td><td>'+(r.extra||'')+'</td><td>'+(r.on?'<span class="st-ok">Активный</span>':'<span class="st-off">Не активный</span>')+'</td>';var td=document.createElement('td');var del=document.createElement('span');del.className='x';del.textContent='✕';del.title='Удалить';del.onclick=function(){st[stKey].splice(i,1);ss('wms13_st',st);renderSt()};td.appendChild(del);tr.appendChild(td);b.appendChild(tr)});
+function renderSt(){var b=document.getElementById('stBody');var h=document.getElementById('stHead');b.innerHTML='';
+if(stKey==='zones'){if(h)h.innerHTML='<tr><th>Код</th><th>Наименование</th><th>Назначение</th><th>Влияние</th><th>Клиент</th><th>Ячейки</th><th>Статус</th><th></th></tr>';zoneRows.forEach(function(z){b.appendChild(zoneTr(z))});if(!zoneRows.length)b.innerHTML='<tr><td colspan="8" style="color:#999">Зон пока нет</td></tr>'}
+else{if(h)h.innerHTML='<tr><th>Код</th><th>Наименование</th><th>Доп.</th><th>Статус</th><th></th></tr>';(st[stKey]||[]).forEach(function(r,i){var tr=document.createElement('tr');tr.innerHTML='<td><b>'+r.code+'</b></td><td>'+r.name+'</td><td>'+(r.extra||'')+'</td><td>'+(r.on?'<span class="st-ok">Активный</span>':'<span class="st-off">Не активный</span>')+'</td>';var td=document.createElement('td');var del=document.createElement('span');del.className='x';del.textContent='✕';del.title='Удалить';del.onclick=function(){st[stKey].splice(i,1);ss('wms13_st',st);renderSt()};td.appendChild(del);tr.appendChild(td);b.appendChild(tr)})}
 document.getElementById('rulesBox').style.display=stKey==='rules'?'block':'none'}
-document.getElementById('stAdd').onclick=function(){var c=prompt('Код:');if(!c)return;var n=prompt('Наименование:');if(!n)return;st[stKey].push({code:c,name:n,extra:'',on:1});ss('wms13_st',st);renderSt()};
+document.getElementById('stAdd').onclick=function(){if(stKey==='zones'){zoneOpen(0);return}var c=prompt('Код:');if(!c)return;var n=prompt('Наименование:');if(!n)return;st[stKey].push({code:c,name:n,extra:'',on:1});ss('wms13_st',st);renderSt()};
 
 /* ---------- Ворота ---------- */
 var gates=ls('wms13_gates',[
@@ -291,10 +467,119 @@ if(gIdx<0){if(gates.some(function(g){return g.wh===gWh&&g.no===no})){toast('Та
 else{gates[gIdx]=rec;hlog('Ворота: Изменены',gWh+' №'+no,gWh+' №'+no+' ('+rec.interval+' '+rec.unit+')','Ворота')}
 ss('wms13_gates',gates);document.getElementById('gateModal').classList.remove('open');renderGates();toast('Сохранено')};
 
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function devModal(title){document.getElementById('devTitle').textContent=title||'Раздел в разработке';
+document.getElementById('devText').textContent='Раздел в разработке.';
+document.getElementById('devModal').classList.add('open')}
+document.getElementById('devOk').onclick=function(){document.getElementById('devModal').classList.remove('open')};
+/* ---------- Ячейки хранения ---------- */
+var CELL_LABELS={zones:{title:'Зоны',add:'Код зоны:',name:'Наименование зоны:',extra:'Склад:',cols:['Код','Наименование','Склад','Статус']},locks:{title:'Типы блокировок',add:'Код:',name:'Наименование:',extra:'Описание / причина:',cols:['Код','Наименование','Описание / причина','Статус']},types:{title:'Типы ячеек',add:'Код:',name:'Наименование:',extra:'Тара / размер:',cols:['Код','Наименование','Тара / размер','Статус']}};
+var cellKey='zones';
+document.querySelectorAll('#cellTabs span').forEach(function(s){s.onclick=function(){document.querySelectorAll('#cellTabs span').forEach(function(x){x.classList.remove('on')});s.classList.add('on');cellKey=s.getAttribute('data-cell-tab');renderCells()}});
+function renderCells(){document.querySelectorAll('.cell-sub').forEach(function(el){el.style.display='none'});var elId='cellSub'+(cellKey==='zones'?'Zones':cellKey==='locks'?'Locks':'Types');document.getElementById(elId).style.display='';var bodyId='cell'+cellKey.charAt(0).toUpperCase()+cellKey.slice(1)+'Body';var tb=document.getElementById(bodyId);tb.innerHTML='';
+if(cellKey==='zones'){zoneRows.forEach(function(z){tb.appendChild(zoneTr(z))});if(!zoneRows.length)tb.innerHTML='<tr><td colspan="8" style="color:#999">Зон пока нет</td></tr>';return}
+(st[cellKey]||[]).forEach(function(r,i){var tr=document.createElement('tr');tr.innerHTML='<td><b>'+esc(r.code)+'</b></td><td>'+esc(r.name)+'</td><td>'+esc(r.extra||'—')+'</td><td>'+(r.on?'<span class="st-ok">Активный</span>':'<span class="st-off">Не активный</span>')+'</td>';var td=document.createElement('td');var del=document.createElement('span');del.className='x';del.textContent='✕';del.title='Удалить';del.onclick=function(){st[cellKey].splice(i,1);ss('wms13_st',st);renderCells()};td.appendChild(del);tr.appendChild(td);tb.appendChild(tr)});
+}
+document.getElementById('cellZoneAdd').onclick=function(){zoneOpen(0)};
+document.getElementById('cellLockAdd').onclick=function(){cellAdd('locks')};
+document.getElementById('cellTypeAdd').onclick=function(){cellAdd('types')};
+function cellAdd(key){var lab=CELL_LABELS[key];var c=prompt(lab.add);if(!c||c.trim()==='')return;var n=prompt(lab.name);if(!n||n.trim()==='')return;var e=prompt(lab.extra);if(st[key].some(function(r){return r.code===c.trim()})){toast('Код уже существует');return}st[key].push({code:c.trim(),name:n.trim(),extra:e?e.trim():'',on:1});ss('wms13_st',st);renderCells();toast('Создано: '+n.trim())}
+
+/* ---------- Контрагенты ---------- */
+var CP_API='../09-kontragenty-i-gruzopoluchateli/demo_sqlite.php';
+var CP_LINK='../09-kontragenty-i-gruzopoluchateli/app.html';
+function renderClients(){
+var b=document.getElementById('clRows');
+var typeEl=document.getElementById('clType');
+var ctype=typeEl?typeEl.value:'';
+b.innerHTML='<tr><td colspan="7" style="color:var(--mut)">Загрузка...</td></tr>';
+fetch(CP_API+'?action=list&per_page=200'+(ctype?'&ctype='+encodeURIComponent(ctype):'')).then(function(r){return r.json()}).then(function(j){
+var rows=(j&&j.rows)||[],inN=0,outN=0,act=0;
+rows.forEach(function(o){if(+o.scan_serial_in===1)inN++;if(+o.scan_serial_out===1)outN++;if(+o.is_active===1)act++});
+document.getElementById('clSummary').innerHTML='<span class="chip">Контрагентов: '+rows.length+'</span>'
++'<span class="chip">Активных: '+act+'</span>'
++'<span class="chip">С/н на входе: '+inN+'</span>'
++'<span class="chip">С/н на выходе: '+outN+'</span>';
+b.innerHTML=rows.map(function(o){var z=(o.placement_zones||[]).map(function(x){return '<span class="chip">'+esc(x)+'</span>'}).join(' ');
+return '<tr><td><b>'+esc(o.name||'')+'</b></td><td>'+esc(o.ctype_label||o.ctype||'')+'</td>'
++'<td>'+esc(o.reserve_strategy||'FIFO')+'</td>'
++'<td>'+(+o.scan_serial_in===1?'<span class="st-ok">Да</span>':'<span class="st-off">Нет</span>')+'</td>'
++'<td>'+(+o.scan_serial_out===1?'<span class="st-ok">Да</span>':'<span class="st-off">Нет</span>')+'</td>'
++'<td>'+(z||'—')+'</td>'
++'<td><a class="btn" href="'+CP_LINK+'" target="_blank" rel="noopener">Настроить</a></td></tr>'}).join('')
+||'<tr><td colspan="7" style="color:var(--mut)">Контрагенты не заданы</td></tr>';
+}).catch(function(){b.innerHTML='<tr><td colspan="7" style="color:#C53030">Не удалось загрузить контрагентов</td></tr>'})}
+document.getElementById('clAdd').onclick=function(){window.open(CP_LINK,'_blank')};
+var clTypeEl=document.getElementById('clType');
+if(clTypeEl)clTypeEl.onchange=renderClients;
+
+/* ---------- Роботы размещения ---------- */
+var robots=ls('wms13_robots',ROB_DEF);
+var irCfg=null;
+function renderRobots(){
+document.getElementById('rb_section_lock').checked=!!robots.section_lock;
+document.getElementById('rb_euro_cap').value=robots.euro_cap;
+document.getElementById('rb_fin_cap').value=robots.fin_cap;
+document.getElementById('rb_fin_block_3rd').checked=!!robots.fin_block_3rd;
+robotLoad();
+}
+function robotStatusText(r){
+ if(!r)return '';
+ var parts=[];
+ if(r.processed&&r.processed.length)parts.push('Загружено: '+r.processed.length);
+ if(r.errors&&r.errors.length)parts.push('Ошибок: '+r.errors.length);
+ if(r.skipped&&r.skipped.length)parts.push(r.skipped.join('; '));
+ return parts.join(' · ')||'Проверено, новых файлов нет';
+}
+function robotRenderLog(rows){
+ var b=document.getElementById('ir_log');if(!b)return;
+ b.innerHTML=(rows||[]).map(function(x){
+  var st=x.status==='success'?'<span class="st-ok">Успех</span>':'<span class="st-off">Ошибка</span>';
+  return '<tr><td>'+esc(x.created_at||'')+'</td><td>'+esc(x.folder||'')+'</td><td>'+esc(x.filename||'')+'</td><td>'+st+'</td><td>'+esc(x.doc_no||'—')+'</td><td>'+esc(x.message||'')+'</td></tr>';
+ }).join('')||'<tr><td colspan="6" style="color:#999">Записей пока нет</td></tr>';
+}
+function robotLoad(){
+ fetch(ZONE_API+'?action=robot_get').then(function(r){return r.json()}).then(function(j){
+  irCfg=j.settings||{};
+  document.getElementById('ir_enabled').value=(+irCfg.enabled?'1':'0');
+  document.getElementById('ir_interval').value=irCfg.interval_min||10;
+  document.getElementById('ir_wh').value=irCfg.warehouse_id||1;
+  document.getElementById('ir_formats').value=(irCfg.formats||[]).join(',');
+  document.getElementById('ir_code').value=irCfg.code||'';
+  if(irCfg.last_run)document.getElementById('ir_status').textContent='Последний запуск: '+new Date(irCfg.last_run*1000).toLocaleString('ru-RU');
+  if(j.last_tick)document.getElementById('ir_status').textContent=robotStatusText(j.last_tick);
+  robotRenderLog(j.log||[]);
+ }).catch(function(){});
+}
+document.getElementById('ir_save').onclick=function(){
+ var body={enabled:+document.getElementById('ir_enabled').value?1:0,
+  interval_min:+document.getElementById('ir_interval').value||10,
+  warehouse_id:+document.getElementById('ir_wh').value||1,
+  formats:document.getElementById('ir_formats').value,
+  code:document.getElementById('ir_code').value};
+ fetch(ZONE_API+'?action=robot_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+  .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
+  .then(function(x){toast(x.ok?'Робот сохранён':'Ошибка: '+(x.j.error||''));if(x.ok)robotLoad()})
+  .catch(function(){toast('Нет связи с сервером')});
+};
+document.getElementById('ir_run').onclick=function(){
+ var btn=this;btn.disabled=true;document.getElementById('ir_status').textContent='Робот работает...';
+ fetch(ZONE_API+'?action=robot_run',{method:'POST'}).then(function(r){return r.json()}).then(function(j){
+  document.getElementById('ir_status').textContent=robotStatusText(j);
+  robotRenderLog(j.log||[]);toast(robotStatusText(j));btn.disabled=false;
+ }).catch(function(){document.getElementById('ir_status').textContent='Ошибка связи';btn.disabled=false});
+};
+document.getElementById('rb_save').onclick=function(){
+robots={section_lock:$('rb_section_lock').checked?1:0,euro_cap:+$('rb_euro_cap').value||4,fin_cap:+$('rb_fin_cap').value||3,fin_block_3rd:$('rb_fin_block_3rd').checked?1:0};
+ss('wms13_robots',robots);toast('Настройки робота сохранены')};
+document.getElementById('rb_reset').onclick=function(){
+robots=JSON.parse(JSON.stringify(ROB_DEF));ss('wms13_robots',robots);renderRobots();toast('Сброс к значениям по умолчанию')};
+
 /* ctx */
 function showCtx(x,y,items){var c=document.getElementById('ctx');c.innerHTML='';items.forEach(function(it){var d=document.createElement('div');d.textContent=it[0];d.onclick=function(){c.style.display='none';it[1]()};c.appendChild(d)});c.style.left=x+'px';c.style.top=y+'px';c.style.display='block'}
 document.addEventListener('click',function(e){if(!e.target.closest||!e.target.closest('#ctx'))document.getElementById('ctx').style.display='none'});
 renderHub('');
+zoneLoad();
 </script>
 <script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>
 </html>

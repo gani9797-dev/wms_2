@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS receipts (
   accepted_qty DECIMAL(14,3) NOT NULL DEFAULT 0 COMMENT 'Принято (шт)',
   placed_qty DECIMAL(14,3) NOT NULL DEFAULT 0 COMMENT 'Размещено (шт)',
   deviation_qty DECIMAL(14,3) NOT NULL DEFAULT 0 COMMENT 'Отклонение (шт)',
+  excess_qty DECIMAL(14,3) NOT NULL DEFAULT 0 COMMENT 'Излишек при закрытии (шт)',
+  shortage_qty DECIMAL(14,3) NOT NULL DEFAULT 0 COMMENT 'Недостача при закрытии (шт)',
   priority VARCHAR(20) NOT NULL DEFAULT 'normal' COMMENT 'low/normal/high',
   volume DECIMAL(12,3) NOT NULL DEFAULT 0 COMMENT 'Объем, м3',
   quarantine TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Карантин',
@@ -124,6 +126,8 @@ CREATE TABLE IF NOT EXISTS receipt_items (
   quality VARCHAR(20) NULL COMMENT 'Качество из CSV: Годен/Брак',
   prod_group VARCHAR(100) NULL COMMENT 'Группа товара из CSV (для логики ЧЗ, не выводится)',
   prod_date DATE NULL COMMENT 'Дата производства из CSV',
+  supplier_batch VARCHAR(100) NULL COMMENT 'Партия поставщика из заявки/Excel',
+  deviation VARCHAR(20) NULL COMMENT 'Решение оператора по позиции: shortage|excess (акт — при закрытии)',
   CONSTRAINT fk_ri_receipt FOREIGN KEY (receipt_id)
     REFERENCES receipts (id) ON DELETE CASCADE,
   KEY idx_ri_receipt (receipt_id),
@@ -137,6 +141,7 @@ CREATE TABLE IF NOT EXISTS receipt_operations (
   receipt_id BIGINT UNSIGNED NOT NULL,
   line_no INT NOT NULL DEFAULT 0 COMMENT '№',
   sku VARCHAR(50) NULL COMMENT 'Артикул',
+  supplier_batch VARCHAR(100) NULL COMMENT 'Партия поставщика (выбрана на ТСД при приемке)',
   accept_status VARCHAR(30) NULL COMMENT 'Статус приемки: Принято',
   accept_date DATETIME NULL,
   receiver_id BIGINT UNSIGNED NULL COMMENT 'Приемщик',
@@ -217,4 +222,50 @@ CREATE TABLE IF NOT EXISTS receipt_history (
   KEY idx_rh_date (created_at),
   CONSTRAINT fk_rh_receipt FOREIGN KEY (receipt_id)
     REFERENCES receipts (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Гард идемпотентного проброса прихода в Номенклатуру (shared/StockSync.php).
+-- Без этой таблицы повторное закрытие документа прибавляло бы остаток дважды.
+CREATE TABLE IF NOT EXISTS receipt_stock_sync (
+  receipt_id BIGINT UNSIGNED NOT NULL,
+  synced_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  payload TEXT NOT NULL,
+  PRIMARY KEY (receipt_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Акты расхождений (shared/ReceiptClose.php): недостача / излишек / брак / не заявлен.
+CREATE TABLE IF NOT EXISTS tsd_act_rasx (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  receipt_id BIGINT UNSIGNED NOT NULL,
+  sku VARCHAR(50) NOT NULL,
+  supplier_batch VARCHAR(100) NOT NULL DEFAULT '' COMMENT 'Партия поставщика: акт относится к конкретной партии позиции',
+  type VARCHAR(30) NOT NULL COMMENT 'недостача|излишек|брак|не_заявлен',
+  qty_diff DECIMAL(14,3) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_ar_receipt (receipt_id),
+  KEY idx_ar_sku (sku)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Паллеты ТСД «Приход» (sscc) и кросс-док.
+CREATE TABLE IF NOT EXISTS tsd_pallets (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  receipt_id BIGINT UNSIGNED NOT NULL,
+  sscc VARCHAR(64) NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'Заполняется',
+  qty_total DECIMAL(14,3) NOT NULL DEFAULT 0,
+  weight DECIMAL(14,3) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  closed_at DATETIME NULL,
+  UNIQUE KEY uq_pallet_receipt_sscc (receipt_id, sscc),
+  KEY idx_tp_receipt (receipt_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS tsd_crossdock (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  receipt_id BIGINT UNSIGNED NOT NULL,
+  gate_id VARCHAR(50) NULL,
+  sscc VARCHAR(64) NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'создана',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_tcd_receipt (receipt_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -52,14 +52,16 @@ try {
         $pt = (string)($_GET['pallet_type'] ?? $_GET['pallet'] ?? 'euro');
         $h = isset($_GET['height_mm']) && $_GET['height_mm'] !== '' ? (int)$_GET['height_mm'] : null;
         $w = isset($_GET['warehouse_id']) && $_GET['warehouse_id'] !== '' ? (int)$_GET['warehouse_id'] : null;
-        $s = CellPlacement::suggest($pdo, $pt, $h, $w);
+        $cid = isset($_GET['contractor_id']) && $_GET['contractor_id'] !== '' ? (int)$_GET['contractor_id'] : null;
+        $s = CellPlacement::suggest($pdo, $pt, $h, $w, null, $cid);
         if (!$s) {
             http_response_code(404);
-            echo json_encode(['error' => 'Подходящая ячейка не найдена (высота/тара/секция)'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['error' => 'Подходящая ячейка не найдена (высота/тара/секция/зоны клиента)'], JSON_UNESCAPED_UNICODE);
         } else {
             echo json_encode(['ok' => true, 'pallet_type' => CellPlacement::normalizePalletType($pt),
                 'height_mm' => $h, 'cell' => $s['cell'], 'section' => $s['section'],
-                'hint' => 'Приоритет: добивка непустых секций до полной'], JSON_UNESCAPED_UNICODE);
+                'placement' => $s['placement'],
+                'hint' => 'Приоритет: неполные секции, затем близость к клиенту'], JSON_UNESCAPED_UNICODE);
         }
     } elseif ($action === 'place' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $pt = (string)($body['pallet_type'] ?? $body['pallet'] ?? 'euro');

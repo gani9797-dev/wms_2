@@ -25,7 +25,7 @@ main{flex:1;padding:18px 22px;min-width:0}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:10px;color:#2C313C;border-bottom:1px solid #F0F0F0;white-space:nowrap}
 td{padding:10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
-tr.sel{background:#F8F6FC}tr:hover td{background:#fafaff;cursor:pointer}
+tr.sel{background:#F8F6FC}tr:hover td{background:#fafaff}a.num{cursor:pointer}
 a.num{color:var(--vio);font-weight:700;text-decoration:none}
 .st{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap}
 .st-free{background:#E8F5E9;color:#2E7D32;border:1px solid #A5D6A7}
@@ -97,7 +97,7 @@ body.navhide main{max-width:none}
 <style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
 <body>
 <button id="navshowbtn" title="Показать меню">▶</button>
-<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp open" data-grp="5"><div class="par"><a class="mi on" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔔 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp open" data-grp="5"><div class="par"><a class="mi on" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔔 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
 <main>
 <div class="top"><h1>Ячейки хранения</h1><div class="user"><button id="bellbtn" title="Уведомления">🔔<span id="bellbadge">0</span></button><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span></div></div>
 <div class="bar">
@@ -110,8 +110,8 @@ body.navhide main{max-width:none}
 </div>
 <div class="chips" id="chips"></div>
 <div class="card" style="overflow:auto">
-<table><thead><tr><th><input type="checkbox" id="chall"></th><th>Адрес</th><th>Зона</th><th>Тип ячейки</th><th>Балка</th><th>Высота</th><th>Тара</th><th>Категория</th><th>Статус</th><th>Заполненность</th><th>В ячейке, шт</th><th>Резерв</th><th>Остаток, шт</th><th>Паллет</th><th>Темп. режим</th><th>Блокировка</th><th>⋮ <span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
-<tbody id="rows"><tr><td colspan="17">Загрузка...</td></tr></tbody></table>
+<table data-sort-mode="server"><thead><tr><th><input type="checkbox" id="chall"></th><th data-sort="code">Адрес</th><th data-sort="zone">Зона</th><th>Зоны отбора</th><th data-sort="cell_type">Тип ячейки</th><th data-sort="beam">Балка</th><th data-sort="height">Высота</th><th data-sort="pallet_types">Тара</th><th data-sort="category">Категория</th><th data-sort="status">Статус</th><th data-sort="fill">Заполненность</th><th data-sort="qty">В ячейке, шт</th><th data-sort="reserved">Резерв</th><th data-sort="stock">Остаток, шт</th><th data-sort="pallets">Паллет</th><th data-sort="temp">Темп. режим</th><th data-sort="lock">Блокировка</th><th title="Робот настраивает тару по секции. Если в секции снята галка — секция пропускается">Робот. Настройка тар</th><th>⋮ <span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
+<tbody id="rows"><tr><td colspan="19">Загрузка...</td></tr></tbody></table>
 <div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
 <select id="pp"><option>5</option><option>9</option><option selected>14</option><option>20</option></select></div>
 <div class="pg" id="pg"></div></div>
@@ -121,6 +121,7 @@ body.navhide main{max-width:none}
 <div class="fpanel" id="fp">
 <h2 style="margin:0">Фильтры <span class="badge" id="fbadge2" style="position:static;display:inline-flex">0</span></h2>
 <label>Зона</label><select id="fzone"><option value="">Все зоны</option><option value="storage">Хранение</option><option value="shipment">Отгрузка</option><option value="receiving">Приёмка</option></select>
+<label>Зона отбора</label><select id="fpickzone"><option value="">Все зоны отбора</option><option value="manual">Ручной отбор</option><option value="driver">Отбор водителем</option></select>
 <label>Тип ячейки</label><select id="ftype"><option value="">Все типы</option><option value="pallet">Паллетная</option><option value="box">Коробочная</option></select>
 <label>Статус</label>
 <div id="sts">
@@ -135,6 +136,8 @@ body.navhide main{max-width:none}
 <label>Разрешено</label><input id="fal" type="text" placeholder="Все">
 <label>Блокировка</label><select id="flk"><option value="all">Все</option><option value="yes">Да</option><option value="no">Нет</option></select>
 <label>Есть товар</label><select id="fhg"><option value="all">Все</option><option value="yes">Да</option><option value="no">Нет</option></select>
+<label>Разные товары в ячейке</label><select id="fmg"><option value="all">Все</option><option value="yes">Разрешены</option><option value="no">Запрещены</option></select>
+<label>Типы паллет в ячейке</label><select id="fmp"><option value="all">Все</option><option value="yes">Несколько типов</option><option value="no">Один тип</option></select>
 <label>Паллет</label><div class="frow"><input id="fpf" type="number" placeholder="От"><input id="fpt" type="number" placeholder="До"></div>
 <label>Остаток, шт</label><div class="frow"><input id="fqf" type="number" placeholder="От"><input id="fqt" type="number" placeholder="До"></div>
 <label>Склад</label><select id="fwh"><option value="">Все склады</option><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select>
@@ -166,7 +169,10 @@ body.navhide main{max-width:none}
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Ширина балки, м * (одна на всё создание)</label><select id="nbm"><option value="3.2">3,2 — 3 евро / 2 фин</option><option value="3.6">3,6 — 4 евро / 3 фин</option></select></div>
 <div style="flex:1"><label>Высота ячейки, мм</label><input id="nhh" type="number" min="1" placeholder="напр. 1500"></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Типы тары (какие паллеты можно ставить)</label><select id="npt2"><option value="euro,fin">Евро + Фин</option><option value="euro">Только Евро</option><option value="fin">Только Фин</option></select></div>
-<div style="flex:1"><label style="font-weight:400;font-size:11px;color:var(--mut)">Правило секции (Ряд+Секция): 3,2 — хоть один евро ⇒ вся секция под евро; 3,6 — жестко под евро, 3-й фин блокирует ячейку «временно занята». Подбор на ТСД добивает непустые секции.</label></div></div>
+<div style="flex:1"><label style="font-weight:400;font-size:11px;color:var(--mut)">Правило секции (Ряд+Секция): 3,2 — хоть один евро ⇒ вся секция под евро; 3,6 — 3 фин на ярусе, следующая ячейка блокируется с причиной «(Фин секция)». Подбор на ТСД добивает непустые секции.</label></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label style="font-weight:400;font-size:12px"><input type="checkbox" id="namp" checked style="width:auto"> Разрешено несколько типов паллет</label><br>
+<label style="font-weight:400;font-size:12px"><input type="checkbox" id="namg" checked style="width:auto"> Разрешено хранить разные товары в одной ячейке</label></div>
+<div style="flex:1"><label>Закреплённый тип тары (когда галка снята)</label><select id="napt"><option value="euro">Евро</option><option value="fin">Фин</option></select></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Секция, от *</label><input id="nsf" type="text" inputmode="numeric" maxlength="3" placeholder="01"></div>
 <div style="flex:1"><label>Секция, до *</label><input id="nst" type="text" inputmode="numeric" maxlength="3" placeholder="03"></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Уровень, от *</label><input id="nlf" type="text" inputmode="numeric" maxlength="3" placeholder="01"></div>
@@ -188,6 +194,9 @@ body.navhide main{max-width:none}
 <div style="flex:1"><label>Склад</label><select id="ew"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Зона</label><select id="ez"><option value="storage">Хранение</option><option value="shipment">Отгрузка</option><option value="receiving">Приёмка</option></select></div>
 <div style="flex:1"><label>Тип</label><select id="et"><option value="pallet">Паллетная</option><option value="box">Коробочная</option></select></div></div>
+<label>Зоны отбора (можно несколько)</label>
+<div><label style="display:inline"><input type="checkbox" id="epzManual" style="width:auto"> Ручной отбор (роль Кладовщик)</label>
+<label style="display:inline"><input type="checkbox" id="epzDriver" style="width:auto"> Отбор водителем (роль Водитель)</label></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Категория</label><input id="ecat" type="text"></div>
 <div style="flex:1"><label>Вместимость, шт (0 — безразмерная)</label><input id="ecap" type="number" min="0"></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Темп. от</label><input id="etf" type="number"></div>
@@ -198,6 +207,16 @@ body.navhide main{max-width:none}
 <div style="flex:1"><label>Высота ячейки, мм</label><input id="ehh" type="number" min="1"></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Типы тары</label><select id="ept"><option value="euro,fin">Евро + Фин</option><option value="euro">Только Евро</option><option value="fin">Только Фин</option></select></div>
 <div style="flex:1"><label>Стоит паллета (факт)</label><select id="eptf"><option value="">—</option><option value="euro">Евро</option><option value="fin">Фин</option></select></div></div>
+<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:8px">
+<div style="font-size:12px;color:#4A4A4A;font-weight:700;margin-bottom:6px">Настройки ячейки (робот. настройка тар)</div>
+<label style="display:inline;font-weight:400;font-size:13px"><input type="checkbox" id="eamp" style="width:auto"> Разрешено несколько типов паллет</label><br>
+<label style="display:inline;font-weight:400;font-size:13px"><input type="checkbox" id="eamg" style="width:auto"> Разрешено хранить разные товары в одной ячейке</label>
+<div style="display:flex;gap:10px;align-items:center;margin-top:8px"><div style="flex:1"><label>Закреплённый тип тары</label><select id="eapt"><option value="euro">Евро</option><option value="fin">Фин</option></select></div>
+<div style="flex:1;font-size:11px;color:var(--mut)" id="eaptHint">Галка снята — в ячейке допустим только один тип паллет (евро/фин).</div></div>
+<div style="font-size:11px;color:var(--mut);margin-top:6px">Если снять любую из галок, робот по автоматической настройке тар пропускает всю секцию (Ряд + Секция) до восстановления галки.</div>
+<label style="display:block;margin-top:10px;border-top:1px solid var(--line);padding-top:8px;font-weight:700;font-size:13px"><input type="checkbox" id="eqLock" style="width:auto"> Только новый товар (брак в ячейку нельзя размещать)</label>
+<div style="font-size:11px;color:var(--mut);margin-top:4px">Если включено: при размещении и перемещении паллета с качеством «Брак» в эту ячейку не попадёт.</div>
+</div>
 <label>Комментарий</label><input id="ecm" type="text">
 <div style="display:flex;gap:10px;margin-top:10px"><button class="btn" onclick="em.classList.remove('open')">Отмена</button><button class="btn pri" id="eok">Сохранить</button></div>
 </div></div>
@@ -219,7 +238,7 @@ body.navhide main{max-width:none}
 
 <div id="notifpanel">
 <div style="display:flex;justify-content:space-between;align-items:center"><h2>Уведомления</h2><div><a href="#" id="notifset" style="font-size:16px;text-decoration:none" title="Настройка уведомлений">⚙️</a></div></div>
-<div class="ntabs"><span id="nt_all" class="on">Все <b id="nc_all">0</b></span><span id="nt_unread">Непрочитанные <b id="nc_unread">0</b></span><span id="nt_imp">Важные <b id="nc_imp">0</b></span></div>
+<div class="ntabs"><span id="nt_all" class="on">Все <b id="nc_all">0</b></span><span id="nt_unread">Непрочитанные <b id="nc_unread">0</b></span><span id="nt_imp">Важные <b id="nc_imp">0</b></span><span id="nt_robot">Робот <b id="nc_robot">0</b></span></div>
 <div><a href="#" id="notifreadall" style="font-size:13px">Отметить все как прочитанные</a></div>
 <div id="notiflist" style="margin-top:6px"></div>
 <div style="margin-top:8px"><a href="../12-uvedomleniya/app.html" style="font-size:13px">Показать все уведомления</a></div>
@@ -245,6 +264,7 @@ body.navhide main{max-width:none}
 <div id="toast"></div>
 <input type="file" id="impfile" accept=".csv" style="display:none">
 
+<script src="../shared/sort.js"></script>
 <script>
 const API='demo_sqlite.php';
 let page=1,perPage=14,lastRows=[],ctxId=null,curId=null,curTab='main',curData=null;
@@ -254,35 +274,67 @@ const dFmt=s=>(s||'').slice(0,16).replace('T',' ');
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2400)}
 function fillBar(p){return `<div class="prog"><i style="width:${p}%"></i></div>`}
+// Статус секции для робота (настройка тары): зелёная галка — секция настроена,
+// красный крест — робот пропускает секцию (снята галка в одной из ячеек секции).
+function robotTareCell(o){const at=s=>esc(s||'').replace(/"/g,'&quot;');
+const t=o.robot_tare==='skip'
+  ?'<span style="color:#E53E3E;font-weight:700" title="'+at(o.robot_tare_comment||'Секция пропускается роботом')+'">✖</span>'
+  :'<span style="color:#38A169;font-weight:700" title="'+at(o.robot_tare_comment||'Секция настроена')+'">✔</span>';return t}
 function params(){const p=new URLSearchParams({action:'list',page,per_page:perPage});
 const v=(id,k)=>{if($(id)&&$(id).value)p.set(k,$(id).value)};
 if($('q').value)p.set('search',$('q').value);
 v('fzone','zone');v('ftype','cell_type');v('fcat','category');v('ftf','temp_from');v('ftt','temp_to');
 v('fff','fill_from');v('fft','fill_to');v('fal','allowed');v('fwh','warehouse_id');
 v('fpf','pallet_from');v('fpt','pallet_to');v('fqf','qty_from');v('fqt','qty_to');
+v('fpickzone','pick_zone');
+v('fmg','mixed_goods');v('fmp','multi_pallet_types');
 if($('flk').value!=='all')p.set('locked',$('flk').value);
 if($('fhg').value!=='all')p.set('has_goods',$('fhg').value);
 document.querySelectorAll('#sts input:checked').forEach(c=>p.append('status[]',c.value));
+Sort.params(p);
 return p}
 function chips(){const c=[];if($('fwh').value==='1')c.push('Основной склад');else if($('fwh').value==='2')c.push('Холодильный склад');
+if($('fzone')&&$('fzone').value)c.push('Зона: '+($('fzone').selectedOptions[0]?$('fzone').selectedOptions[0].textContent:$('fzone').value));
 if($('q').value)c.push('Поиск: '+$('q').value);
+if($('fpickzone').value)c.push('Зона отбора: '+($('fpickzone').value==='manual'?'Ручной отбор':'Отбор водителем'));
+if($('fmg').value!=='all')c.push('Разные товары: '+($('fmg').value==='yes'?'разрешены':'запрещены'));
+if($('fmp').value!=='all')c.push('Типы паллет: '+($('fmp').value==='yes'?'несколько типов':'один тип'));
 $('chips').innerHTML=c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')+(c.length?` <a href="#" id="chclr" style="font-size:12px">Сбросить все</a>`:'');
 const a=$('chclr');if(a)a.onclick=e=>{e.preventDefault();clrF()}}
 async function load(){const r=await fetch(API+'?'+params());const j=await r.json();lastRows=j.rows||[];
 $('info').textContent=`Показано ${j.from}–${j.to} из ${j.total}`;
 const n=j.active_filters||0;$('fbadge').style.display=n?'flex':'none';$('fbadge').textContent=n;$('fbadge2').textContent=n;$('factive').textContent=n;chips();
 $('rows').innerHTML=lastRows.map(o=>`<tr data-id="${o.id}"><td><input type="checkbox" data-id="${o.id}"></td>
-<td><a class="num" href="#" data-id="${o.id}">${esc(o.code)}</a></td><td>${esc(o.zone_label)}</td><td>${esc(o.type_label)}</td><td>${esc(o.beam_label||'3,2 м')}</td><td>${esc(o.height_label||'—')}</td><td>${esc(o.pallet_types_label||'Евро + Фин')}</td><td>${esc(o.category||'—')}</td>
+<td><a class="num" href="#" data-id="${o.id}">${esc(o.code)}</a></td><td>${esc(o.zone_label)}</td><td>${esc(o.pick_zones_label||'—')}</td><td>${esc(o.type_label)}</td><td>${esc(o.beam_label||'3,2 м')}</td><td>${esc(o.height_label||'—')}</td><td>${esc(o.pallet_types_label||'Евро + Фин')}</td><td>${esc(o.category||'—')}</td>
 <td><span class="st st-${o.status}">${esc(o.status_label)}</span></td>
 <td>${o.is_unlimited ? '<span title="Безразмерная ячейка (вместимость 0)" style="font-weight:700">∞</span> <small style="color:var(--mut)">без лимита</small>' : `${fillBar(o.fill_pct)}<small style="color:var(--mut)">${o.fill_pct}%</small>`}</td>
 <td>${o.qty}</td><td>${o.reserved_qty}</td><td>${o.qty}</td><td>${o.pallet_count}</td>
-<td>${esc(o.temp_label)}</td><td>${esc(o.lock_label)}</td><td>⋮</td></tr>`).join('')||'<tr><td colspan=17>Ничего не найдено</td></tr>';
+<td>${esc(o.temp_label)}</td><td>${esc(o.lock_label)}</td><td>${robotTareCell(o)}</td><td>⋮</td></tr>`).join('')||'<tr><td colspan=19>Ничего не найдено</td></tr>';
 const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
 for(let i=1;i<=Math.min(pages,5);i++)h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`;
 $('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()});
-document.querySelectorAll('#rows tr').forEach(tr=>{if(!tr.dataset.id)return;tr.onclick=e=>{if(e.target.tagName!=='INPUT')open(+tr.dataset.id)};
+document.querySelectorAll('#rows tr').forEach(tr=>{if(!tr.dataset.id)return;tr.onclick=e=>{if(e.target.tagName==='INPUT'||(e.target.closest&&e.target.closest('a.num')))return;document.querySelectorAll('#rows tr.sel').forEach(x=>x.classList.remove('sel'));tr.classList.add('sel')};
 tr.oncontextmenu=e=>{e.preventDefault();ctxId=+tr.dataset.id;const c=$('ctx');c.style.display='block';c.style.left=e.clientX+'px';c.style.top=e.clientY+'px'}})}
 function selIds(){return [...document.querySelectorAll('#rows input[type=checkbox][data-id]:checked')].map(c=>+c.dataset.id)}
+// Значение зоны в select: если такой код нет в списке — добавляем (зона из БД).
+function setZoneVal(sel,zone){const el=$(sel);if(!el)return;const v=zone||'storage';
+  if(![...el.options].some(o=>o.value===v)){const o=document.createElement('option');o.value=v;o.textContent=v;el.appendChild(o)}
+  el.value=v}
+// Зоны склада: подтягиваем из справочника storage_zones, чтобы фильтр и формы
+// ячейки знали про все зоны (в т.ч. «Карантин»), а не только про базовые.
+async function loadZones(){
+  let rows=[];
+  try{const j=await (await fetch(API+'?action=zones')).json();rows=(j&&j.rows)||[]}catch(e){rows=[]}
+  const all=[['storage','Хранение'],['shipment','Отгрузка'],['receiving','Приёмка'],['quarantine','Карантин']];
+  (rows||[]).forEach(z=>{if(z&&z.code&&!all.some(x=>x[0]===z.code))all.push([z.code,z.name||z.code])});
+  const fill=(id,emptyLabel)=>{
+    const el=$(id);if(!el)return;const cur=el.value;
+    el.innerHTML=(emptyLabel?`<option value="">${emptyLabel}</option>`:'')+all.map(z=>`<option value="${String(z[0]).replace(/"/g,'&quot;')}">${esc(z[1]||z[0])}</option>`).join('');
+    if(cur&&[...el.options].some(o=>o.value===cur))el.value=cur;
+    else if(!emptyLabel&&all.length)el.value=(all.some(z=>z[0]==='storage')?'storage':all[0][0]);
+  };
+  fill('fzone','Все зоны');fill('nz',null);fill('ez',null);
+}
 async function open(id,tab){curId=id;if(tab)curTab=tab;
 const r=await fetch(`${API}?action=show&id=${id}`);const s=await r.json();
 if(s.error){toast(s.error);return}
@@ -293,6 +345,7 @@ if(curTab==='main'){
 $('db').innerHTML=`<div style="margin-bottom:8px"><span class="st st-${s.status}">${esc(s.status_label)}</span></div>
 <div class="grid2"><div class="box"><h3>Основная информация</h3>
 <div class="kv"><i>Адрес</i><b>${esc(s.code)}</b></div><div class="kv"><i>Зона</i><span>${esc(s.zone_label)}</span></div>
+<div class="kv"><i>Зоны отбора</i><span>${esc(s.pick_zones_label||'—')}</span></div>
 <div class="kv"><i>Тип ячейки</i><span>${esc(s.type_label)}</span></div>
 <div class="kv"><i>Категория</i><span>${esc(s.category||'—')}</span></div>
 <div class="kv"><i>Комментарий</i><span>${esc(s.comment||'—')}</span></div></div>
@@ -329,33 +382,65 @@ h=`<div class="grid2"><div class="box"><h3>Вместимость</h3>
 <div class="box"><h3>Условия</h3>
 <div class="kv"><i>Темп. режим</i><span>${esc(s.temp_label)}</span></div>
 <div class="kv"><i>Опасный груз</i><span>${s.hazmat_allowed==1?'Разрешен':'Нет'}</span></div>
-<div class="kv"><i>Срок годности, дни</i><span>—</span></div></div></div>`}
+<div class="kv"><i>Несколько типов паллет</i><span>${s.allow_multi_pallet_types==1?'Разрешено':'Запрещено'}</span></div>
+<div class="kv"><i>Закреплённый тип тары</i><span>${s.allow_multi_pallet_types==1?'Евро + Фин':esc(s.pallet_type_label||'Евро')}</span></div>
+<div class="kv"><i>Разные товары в ячейке</i><span>${s.allow_mixed_goods==1?'Разрешено':'Запрещено'}</span></div>
+<div class="kv"><i>Срок годности, дни</i><span>—</span></div></div></div>
+<div class="box"><h3>Настройки ячейки (робот. настройка тар)</h3>
+<label style="display:inline;font-size:13px;font-weight:400"><input type="checkbox" id="drAmp" style="width:auto"> Разрешено несколько типов паллет</label><br>
+<label style="display:inline;font-size:13px;font-weight:400"><input type="checkbox" id="drAmg" style="width:auto"> Разрешено хранить разные товары в одной ячейке</label>
+<div style="display:flex;gap:10px;align-items:flex-end;margin-top:10px"><div style="flex:1"><label>Закреплённый тип тары</label><select id="drApt"><option value="euro">Евро</option><option value="fin">Фин</option></select></div>
+<div style="flex:1"><button class="btn pri" id="drSave">Сохранить настройки</button></div></div>
+<div class="hint" id="drTareHint" style="margin-top:8px"></div>
+<div class="kv" style="border-top:1px solid var(--line);margin-top:8px"><i>Робот. Настройка тар</i><span>${robotTareCell(s)} ${esc(s.robot_tare_comment||'')}</span></div>
+</div>`}
 else if(curTab==='limits'){const s=curData;
 h=`<div class="box"><h3>Ограничения</h3>
 <div class="kv"><i>Разрешено</i><span>${esc(s.allowed_goods||'Все')}</span></div>
 <div class="kv"><i>Категория</i><span>${esc(s.category||'—')}</span></div>
+<div class="kv"><i>Разные товары в одной ячейке</i><span>${s.allow_mixed_goods==1?'Разрешено':'Запрещено'}</span></div>
+<div class="kv"><i>Несколько типов паллет</i><span>${s.allow_multi_pallet_types==1?'Разрешено':'Запрещено (один тип тары)'}</span></div>
 <div class="kv"><i>Блокировка</i><span>${esc(s.lock_label)}${s.lock_reason?' ('+esc(s.lock_reason)+')':''}</span></div>
 <div class="kv"><i>Опасный груз</i><span>${s.hazmat_allowed==1?'Разрешен':'Запрещен'}</span></div></div>`}
 else if(curTab==='content'){const r=await (await fetch(`${API}?action=content&id=${id}`)).json();
 if(!r.length){h=`<h3>Содержание ячейки (0)</h3><p style="color:var(--mut)">Ячейка пуста</p>`}else{
-h=`<h3>Содержание ячейки (${r.length})</h3><table class="mini"><tr><th>Код</th><th>Артикул ▲</th><th>Наименование</th><th>Ед. изм.</th><th>В ячейке, шт</th><th>Резерв</th><th>Остаток</th><th>Активные задания</th><th>Паллет</th><th>Штрихкод</th></tr>`+r.map(t=>`<tr><td>${esc(t.product_code||'')}</td><td style="color:#783feb">${esc(t.sku)}</td><td>${esc(t.name)}</td><td>${esc(t.unit)}</td><td style="color:#2E7D32">${t.qty}</td><td>${t.reserved_qty}</td><td>${t.qty}</td><td>${t.tasks_count||'Нет'}</td><td>${esc(t.pallet||'')}</td><td>${esc(t.barcode||'')}</td></tr>`).join('')+'</table>'}}
+h=`<h3>Содержание ячейки (${r.length})</h3><table class="mini"><tr><th>Код</th><th>Артикул</th><th>Наименование</th><th>Ед. изм.</th><th>В ячейке, шт</th><th>Резерв</th><th>Остаток</th><th>Активные задания</th><th>Паллет</th><th>Штрихкод</th></tr>`+r.map(t=>`<tr><td>${esc(t.product_code||'')}</td><td style="color:#783feb">${esc(t.sku)}</td><td>${esc(t.name)}</td><td>${esc(t.unit)}</td><td style="color:#2E7D32">${t.qty}</td><td>${t.reserved_qty}</td><td>${t.qty}</td><td>${t.tasks_count||'Нет'}</td><td>${esc(t.pallet||'')}</td><td>${esc(t.barcode||'')}</td></tr>`).join('')+'</table>'}}
 else if(curTab==='hist'){const r=await (await fetch(`${API}?action=history&id=${id}`)).json();
-h=`<h3>История (${r.length})</h3><table class="mini"><tr><th>Дата ▲</th><th>Что изменилось</th><th>Было</th><th>Стало</th><th>Пользователь</th></tr>`+r.map(x=>`<tr><td>${x.created_at||''}</td><td>${esc(x.field_label||x.field||x.action)}</td><td>${esc(x.old_value||'')}</td><td>${esc(x.new_value||'')}</td><td>${esc(x.user_fio||'')}</td></tr>`).join('')+'</table>'}
+h=`<h3>История (${r.length})</h3><table class="mini"><tr><th>Дата</th><th>Что изменилось</th><th>Было</th><th>Стало</th><th>Пользователь</th></tr>`+r.map(x=>`<tr><td>${x.created_at||''}</td><td>${esc(x.field_label||x.field||x.action)}</td><td>${esc(x.old_value||'')}</td><td>${esc(x.new_value||'')}</td><td>${esc(x.user_fio||'')}</td></tr>`).join('')+'</table>'}
 else if(curTab==='moves'){const r=await (await fetch(`${API}?action=movements&id=${id}`)).json();
 h=`<h3>Движения (${r.length})</h3><table class="mini"><tr><th>Дата</th><th>Документ</th><th>Артикул</th><th>Изм.</th><th>Остаток</th><th>Откуда → Куда</th></tr>`+r.map(x=>`<tr><td>${x.doc_date||''}</td><td>${esc(x.doc_no||'')}</td><td>${esc(x.sku||'')}</td><td>${x.qty_change}</td><td>${x.balance}</td><td>${esc(x.cell_from||'')} → ${esc(x.cell_to||'')}</td></tr>`).join('')+'</table>'}
-$('db').innerHTML=h}
+$('db').innerHTML=h;
+// Настройки ячейки (вкладка «Параметры»): галки сохраняются сразу.
+if(curTab==='params'&&curData){
+ $('drAmp').checked=(curData.allow_multi_pallet_types==1);
+ $('drAmg').checked=(curData.allow_mixed_goods==1);
+ $('drApt').value=(curData.pallet_type||(((curData.allowed_pallet_types||'euro')==='fin')?'fin':'euro'));
+ syncDrTare();
+ $('drAmp').onchange=syncDrTare;$('drApt').onchange=syncDrTare;
+ $('drSave').onclick=saveDrTare}}
+function syncDrTare(){const multi=$('drAmp')&&$('drAmp').checked;
+if($('drApt'))$('drApt').disabled=multi;
+if($('drTareHint'))$('drTareHint').textContent=multi?'Разрешены оба типа тары: Евро + Фин.':'Галка снята — в ячейке допустим только один тип паллет (евро/фин).'}
+async function saveDrTare(){if(!curId)return;
+const body={allow_multi_pallet_types:$('drAmp').checked?1:0,allow_mixed_goods:$('drAmg').checked?1:0,
+allowed_pallet_types:$('drAmp').checked?'euro,fin':$('drApt').value};
+const r=await fetch(API+'?action=update&id='+curId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const j=await r.json();toast(r.ok?'Настройки сохранены':'Ошибка: '+(j.error||''));
+if(r.ok){open(curId,'params');load()}}
 document.querySelectorAll('#tabs [data-t]').forEach(el=>el.onclick=()=>{curTab=el.dataset.t;open(curId)});
 $('fbtn').onclick=()=>$('fp').classList.add('open');
 $('fclose').onclick=()=>$('fp').classList.remove('open');
 $('fok').onclick=()=>{page=1;$('fp').classList.remove('open');load()};
-function clrF(){['q','fcat','ftf','ftt','fff','fft','fal','fpf','fpt','fqf','fqt'].forEach(i=>{if($(i))$(i).value=''});['fzone','ftype','fwh'].forEach(i=>{if($(i))$(i).value=''});['flk','fhg'].forEach(i=>{if($(i))$(i).value='all'});document.querySelectorAll('#sts input').forEach(c=>c.checked=false);page=1;load()}
+function clrF(){['q','fcat','ftf','ftt','fff','fft','fal','fpf','fpt','fqf','fqt'].forEach(i=>{if($(i))$(i).value=''});['fzone','ftype','fwh','fpickzone'].forEach(i=>{if($(i))$(i).value=''});['flk','fhg','fmg','fmp'].forEach(i=>{if($(i))$(i).value='all'});document.querySelectorAll('#sts input').forEach(c=>c.checked=false);page=1;load()}
 $('fclr').onclick=clrF;const fr=$('freset');if(fr)fr.onclick=e=>{e.preventDefault();clrF()};
 $('q').onchange=()=>{page=1;load()};$('pp').onchange=e=>{perPage=+e.target.value;page=1;load()};
 $('chall').onchange=e=>{document.querySelectorAll('#rows input[type=checkbox][data-id]').forEach(c=>c.checked=e.target.checked)};
 const bulkIds=['nlt','nrf','nrt','nsf','nst','nlf','nlt2','npf','npt'];
+function letterOnly(v){let out='';for(const ch of String(v||'')){if(/^[A-Za-z]$/.test(ch)||(ch>='А'&&ch<='я')||ch==='Ё'||ch==='ё')out+=ch}return out.slice(0,1).toUpperCase()}
+function oneLetter(L){if(L.length!==1)return false;const c=L.toUpperCase();return /^[A-Z]$/.test(c)||(c>='А'&&c<='Я')||c==='Ё'}
 function bulkVals(){return {letter:$('nlt').value.trim().toUpperCase(),rf:$('nrf').value.trim(),rt:$('nrt').value.trim(),sf:$('nsf').value.trim(),st:$('nst').value.trim(),lf:$('nlf').value.trim(),lt:$('nlt2').value.trim(),pf:$('npf').value.trim(),pt:$('npt').value.trim()}}
 function bulkCheck(v){const ok3=s=>/^\d{1,3}$/.test(s);
-const L=v.letter;if(L!==''&&!/^[A-ZА-ЯЁ]$/iu.test(L))return 'Буква: одна буква A-Z / А-Я или пусто';
+const L=v.letter;if(L!==''&&!oneLetter(L))return 'Буква: одна буква A-Z / А-Я или пусто';
 for(const [f,t,nm] of [[v.rf,v.rt,'Ряд'],[v.sf,v.st,'Секция'],[v.lf,v.lt,'Уровень'],[v.pf,v.pt,'Ячейка']]){
 if(!f||!t)return `Код ${nm.toLowerCase()}: укажите «от» и «до»`;
 if(!ok3(f)||!ok3(t))return `Код ${nm.toLowerCase()}: только 1–3 цифры`;
@@ -370,25 +455,46 @@ const cnt=(a,b)=>b-a+1;const total=cnt(+v.rf,+v.rt)*cnt(+v.sf,+v.st)*cnt(+v.lf,+
 const ex=[];for(let r=+v.rf;r<=+v.rt&&ex.length<5;r++)for(let s=+v.sf;s<=+v.st&&ex.length<5;s++)for(let l=+v.lf;l<=+v.lt&&ex.length<5;l++)for(let p=+v.pf;p<=+v.pt&&ex.length<5;p++)ex.push(v.letter+pad(r,w.r)+'-'+pad(s,w.s)+'-'+pad(l,w.l)+'-'+pad(p,w.p));
 box.innerHTML=`Будет создано: <b>${total}</b>${total>5000?' — <b style="color:#C62828">больше лимита 5000, сузьте диапазоны</b>':''}<br>Примеры: ${ex.map(esc).join(', ')}${total>ex.length?' …':''}`;
 return {v,total}}
-bulkIds.forEach(id=>{$(id).addEventListener('input',()=>{if(id==='nlt')$('nlt').value=$('nlt').value.replace(/[^A-Za-zА-Яа-яЁё]/g,'').slice(0,1).toUpperCase();else $(id).value=$(id).value.replace(/\D/g,'').slice(0,3);bulkPreview()})});
-$('mk').onclick=()=>{$('mm').classList.add('open');bulkPreview()};
+bulkIds.forEach(id=>{$(id).addEventListener('input',()=>{if(id==='nlt')$('nlt').value=letterOnly($('nlt').value);else $(id).value=$(id).value.replace(/\D/g,'').slice(0,3);bulkPreview()})});
+$('mk').onclick=()=>{$('mm').classList.add('open');bulkPreview();syncNewTare()};
+// Галка «Несколько типов паллет» в карточке создания: включена — оба типа тары.
+function syncNewTare(){const multi=$('namp')&&$('namp').checked;
+if($('napt'))$('napt').disabled=multi;
+if($('npt2')){$('npt2').disabled=true;$('npt2').value=multi?'euro,fin':$('napt').value}}
+if($('namp'))$('namp').onchange=syncNewTare;
+if($('napt'))$('napt').onchange=syncNewTare;
 $('mok').onclick=async()=>{const pv=bulkPreview();if(!pv){return}
 if(pv.total>5000){toast('Слишком много: '+pv.total+' (лимит 5000)');return}
 if($('ncap').value!==''&&+$('ncap').value<0){toast('Ошибка: вместимость не может быть отрицательной (0 — безразмерная)');return}
-const body={letter:pv.v.letter,row_from:pv.v.rf,row_to:pv.v.rt,sec_from:pv.v.sf,sec_to:pv.v.st,level_from:pv.v.lf,level_to:pv.v.lt,place_from:pv.v.pf,place_to:pv.v.pt,warehouse_id:+$('nw').value,zone:$('nz').value,cell_type:$('nt').value,category:$('ncat').value||null,capacity:$('ncap').value==='' ?0:+$('ncap').value,temp_from:$('ntf').value==='' ?null:+$('ntf').value,temp_to:$('ntt').value==='' ?null:+$('ntt').value,comment:$('ncm').value||null,beam_width:parseFloat(($('nbm')||{value:'3.2'}).value)||3.2,cell_height_mm:$('nhh').value==='' ?null:+$('nhh').value,allowed_pallet_types:($('npt2')||{value:'euro,fin'}).value||'euro,fin'};
+const body={letter:pv.v.letter,row_from:pv.v.rf,row_to:pv.v.rt,sec_from:pv.v.sf,sec_to:pv.v.st,level_from:pv.v.lf,level_to:pv.v.lt,place_from:pv.v.pf,place_to:pv.v.pt,warehouse_id:+$('nw').value,zone:$('nz').value,cell_type:$('nt').value,category:$('ncat').value||null,capacity:$('ncap').value==='' ?0:+$('ncap').value,temp_from:$('ntf').value==='' ?null:+$('ntf').value,temp_to:$('ntt').value==='' ?null:+$('ntt').value,comment:$('ncm').value||null,beam_width:parseFloat(($('nbm')||{value:'3.2'}).value)||3.2,cell_height_mm:$('nhh').value==='' ?null:+$('nhh').value,allowed_pallet_types:($('namp')&&$('namp').checked)?'euro,fin':(($('napt')&&$('napt').value)||'euro'),allow_multi_pallet_types:($('namp')&&$('namp').checked)?1:0,allow_mixed_goods:($('namg')&&$('namg').checked)?1:0};
 const r=await fetch(API+'?action=bulk_create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const j=await r.json();
 if(r.ok){$('mm').classList.remove('open');toast(`Создано: ${j.created} из ${j.total}`+(j.skipped?` (пропущено дубликатов: ${j.skipped})`:''))}
 else toast('Ошибка: '+(j.error||''));load()};
 function openEdit(){if(!curData)return;const s=curData;
-$('ec').value=s.code||'';$('ew').value=s.warehouse_id||1;$('ez').value=s.zone||'storage';$('et').value=s.cell_type||'pallet';
+$('ec').value=s.code||'';$('ew').value=s.warehouse_id||1;setZoneVal('ez',s.zone||'storage');$('et').value=s.cell_type||'pallet';
 $('ecat').value=s.category||'';$('ecap').value=s.capacity??0;$('etf').value=s.temp_from??'';$('ett').value=s.temp_to??'';
 $('eal').value=s.allowed_goods||'Все';$('emp').value=s.max_pallets??'';$('ecm').value=s.comment||'';
-$('ebm').value=String(s.beam_width??'3.2');$('ehh').value=s.cell_height_mm??'';$('ept').value=s.allowed_pallet_types||'euro,fin';$('eptf').value=s.pallet_type||'';
+$('ebm').value=String(s.beam_width??'3.2');$('ehh').value=s.cell_height_mm??'';$('eptf').value=s.pallet_type||'';
+$('eamp').checked=(s.allow_multi_pallet_types==1);$('eamg').checked=(s.allow_mixed_goods==1);$('eqLock').checked=(s.quality_lock==1);
+const apt=(s.pallet_type||(((s.allowed_pallet_types||'euro')==='fin')?'fin':'euro'));$('eapt').value=apt;
+$('ept').value=$('eamp').checked?'euro,fin':(s.allowed_pallet_types||'euro,fin');
+const pz=s.pick_zones||[];$('epzManual').checked=pz.indexOf('manual')>=0;$('epzDriver').checked=pz.indexOf('driver')>=0;
+syncTareFields();
 $('em').classList.add('open')}
+// Галка «Несколько типов паллет» определяет список типов тары:
+//   включена — оба типа (евро + фин), закреплённый тип не выбирается;
+//   снята   — в ячейке только один тип (евро/фин) — выбирается в выпадающем списке.
+function syncTareFields(){const multi=$('eamp')&&$('eamp').checked;
+if($('eapt'))$('eapt').disabled=multi;
+if($('ept'))$('ept').disabled=true;
+if(multi){if($('ept'))$('ept').value='euro,fin';if($('eaptHint'))$('eaptHint').textContent='Разрешены оба типа тары: Евро + Фин'}
+else{if($('ept'))$('ept').value=$('eapt').value;if($('eaptHint'))$('eaptHint').textContent='Галка снята — в ячейке допустим только один тип паллет (евро/фин).'}}
+if($('eamp'))$('eamp').onchange=syncTareFields;
+if($('eapt'))$('eapt').onchange=syncTareFields;
 $('dedit').onclick=openEdit;
 $('eok').onclick=async()=>{if(!curId)return;const cap=$('ecap').value==='' ?0:+$('ecap').value;if(cap<0){toast('Ошибка: вместимость не может быть отрицательной (0 — безразмерная)');return}
-const body={code:$('ec').value.trim(),warehouse_id:+$('ew').value,zone:$('ez').value,cell_type:$('et').value,category:$('ecat').value||null,capacity:cap,temp_from:$('etf').value==='' ?null:+$('etf').value,temp_to:$('ett').value==='' ?null:+$('ett').value,allowed_goods:$('eal').value||'Все',max_pallets:$('emp').value==='' ?null:+$('emp').value,comment:$('ecm').value||null,beam_width:parseFloat($('ebm').value)||3.2,cell_height_mm:$('ehh').value==='' ?null:+$('ehh').value,allowed_pallet_types:$('ept').value||'euro,fin',pallet_type:$('eptf').value||null};
+const body={code:$('ec').value.trim(),warehouse_id:+$('ew').value,zone:$('ez').value,cell_type:$('et').value,category:$('ecat').value||null,capacity:cap,temp_from:$('etf').value==='' ?null:+$('etf').value,temp_to:$('ett').value==='' ?null:+$('ett').value,allowed_goods:$('eal').value||'Все',max_pallets:$('emp').value==='' ?null:+$('emp').value,comment:$('ecm').value||null,beam_width:parseFloat($('ebm').value)||3.2,cell_height_mm:$('ehh').value==='' ?null:+$('ehh').value,allowed_pallet_types:$('eamp').checked?'euro,fin':$('eapt').value,pallet_type:$('eptf').value||null,allow_multi_pallet_types:$('eamp').checked?1:0,allow_mixed_goods:$('eamg').checked?1:0,quality_lock:$('eqLock').checked?1:0,pick_zones:[($('epzManual').checked?'manual':''),($('epzDriver').checked?'driver':'')].filter(Boolean)};
 const r=await fetch(API+'?action=update&id='+curId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const j=await r.json();$('em').classList.remove('open');toast(r.ok?'Сохранено':'Ошибка: '+(j.error||''));if(r.ok)open(curId);load()};
 // Печать PDF: сервер формирует документ, браузер сразу открывает.
@@ -428,7 +534,7 @@ const j=await r.json();toast(r.ok?(locked?'Разблокирована':'Заб
 $('vok').onclick=async()=>{if(!curId)return;const body={to_cell:$('vto').value.trim(),sku:$('vsku').value.trim(),qty:+$('vqty').value||0};
 const r=await fetch(API+'?action=move&id='+curId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const j=await r.json();$('mv').classList.remove('open');toast(r.ok?('Перемещено ('+j.doc_no+')'):'Ошибка: '+(j.error||''));if(r.ok)open(curId);load()};
-const MSVALS={status:[['free','Свободна'],['busy','Занята'],['reserved','Зарезервирована'],['blocked','Заблокирована']],zone:[['storage','Хранение'],['shipment','Отгрузка'],['receiving','Приёмка']],cell_type:[['pallet','Паллетная'],['box','Коробочная']],category:[['КГТ','КГТ'],['Спорт инвентарь','Спорт инвентарь'],['Косметика','Косметика'],['Бытовая химия','Бытовая химия']],allowed_goods:[['Все','Все']],is_locked:[['0','Нет'],['1','Да']]};
+const MSVALS={status:[['free','Свободна'],['busy','Занята'],['reserved','Зарезервирована'],['blocked','Заблокирована']],zone:[['storage','Хранение'],['shipment','Отгрузка'],['receiving','Приёмка'],['quarantine','Карантин']],cell_type:[['pallet','Паллетная'],['box','Коробочная']],category:[['КГТ','КГТ'],['Спорт инвентарь','Спорт инвентарь'],['Косметика','Косметика'],['Бытовая химия','Бытовая химия']],allowed_goods:[['Все','Все']],is_locked:[['0','Нет'],['1','Да']]};
 $('mspar').onchange=()=>{const k=$('mspar').value;$('msval').innerHTML=(MSVALS[k]||[['','—']]).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')};
 $('massbtn').onclick=()=>{const ids=selIds();if(!ids.length){toast('Отметь ячейки чек-боксами');return}$('mscnt').textContent='Выбрано элементов: '+ids.length;$('ms').classList.add('open')};
 $('msok').onclick=async()=>{const ids=selIds();const patch={};patch[$('mspar').value]=$('msval').value;
@@ -493,15 +599,15 @@ document.addEventListener('keydown',e=>{
 // --- уведомления: колокол в шапке (общее хранилище — API 08, как в модуле 12) ---
 const NAPI='../08-nomenklatura/demo_sqlite.php';
 let ntab='all';
-const KIND_META={receipt:{t:'Поступления',i:'📥',bg:'#E0EEFF'},shipment:{t:'Отгрузки',i:'📦',bg:'#DCE6D1'},task:{t:'Задания',i:'📝',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'}};
+const KIND_META={receipt:{t:'Поступления',i:'📥',bg:'#E0EEFF'},shipment:{t:'Отгрузки',i:'📦',bg:'#DCE6D1'},task:{t:'Задания',i:'📝',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'},robot:{t:'Робот',i:'🤖',bg:'#E8F5E9'}};
 const KIND_CONDS={receipt:['Все статусы','Принято','Принято с отклонениями','Отменено'],shipment:['Все статусы','Расхождение, Отменено','Доставлена'],task:['Все статусы','Просрочено','Назначено','Выполнено'],nomenclature:['Все статусы','Любое изменение']};
 function nTime(s){s=String(s||'');return s.length>=16?s.slice(11,16)+' · '+s.slice(8,10)+'.'+s.slice(5,7):s}
 async function notifCounts(){try{const r=await (await fetch(NAPI+'?action=notif_counts')).json();$('bellbadge').textContent=r.unread||0;$('bellbadge').style.display=r.unread?'flex':'none';$('nc_all').textContent=r.all||0;$('nc_unread').textContent=r.unread||0;$('nc_imp').textContent=r.important||0}catch(e){}}
-async function notifLoad(){try{const r=await (await fetch(`${NAPI}?action=notif_list&tab=${ntab}&limit=20`)).json();const rows=r.rows||[];const c=r.counts||{};$('nc_all').textContent=c.all||0;$('nc_unread').textContent=c.unread||0;$('nc_imp').textContent=c.important||0;$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
+async function notifLoad(){try{const r=await (await fetch(`${NAPI}?action=notif_list&tab=${ntab==='robot'?'all':ntab}&kind=${ntab==='robot'?'robot':''}&limit=20`)).json();const rows=r.rows||[];const c=r.counts||{};$('nc_all').textContent=c.all||0;$('nc_unread').textContent=c.unread||0;$('nc_imp').textContent=c.important||0;$('nc_robot').textContent=c.robot||0;$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
 $('notiflist').innerHTML=rows.map(x=>{const m=KIND_META[x.kind]||{t:x.kind,i:'🔔',bg:'#F4F0FB'};return `<div class="ntf ${+x.is_read?'read':''}" data-nid="${x.id}"><div class="ic" style="background:${m.bg}">${m.i}</div><div class="tx"><div class="sub">${m.t}</div><b>${x.title||''}</b><div class="body">${x.body||''}</div></div><div class="tm">${nTime(x.created_at)}</div>${+x.is_read?'':'<div class="dot"></div>'}</div>`}).join('')||'<p class="hint">Нет уведомлений</p>';
 document.querySelectorAll('#notiflist .ntf').forEach(el=>el.onclick=async()=>{const id=+el.dataset.nid;await fetch(NAPI+'?action=notif_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});notifLoad()})}catch(e){}}
-function setNtab(t){ntab=t;[['nt_all','all'],['nt_unread','unread'],['nt_imp','important']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));notifLoad()}
-$('nt_all').onclick=()=>setNtab('all');$('nt_unread').onclick=()=>setNtab('unread');$('nt_imp').onclick=()=>setNtab('important');
+function setNtab(t){ntab=t;[['nt_all','all'],['nt_unread','unread'],['nt_imp','important'],['nt_robot','robot']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));notifLoad()}
+$('nt_all').onclick=()=>setNtab('all');$('nt_unread').onclick=()=>setNtab('unread');$('nt_imp').onclick=()=>setNtab('important');$('nt_robot').onclick=()=>setNtab('robot');
 $('bellbtn').onclick=e=>{e.stopPropagation();const p=$('notifpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px';notifLoad()}};
 $('notifreadall').onclick=async e=>{e.preventDefault();await fetch(NAPI+'?action=notif_read_all',{method:'POST'});notifLoad();toast('Все отмечены как прочитанные')};
 $('notifset').onclick=e=>{e.preventDefault();$('notifpanel').style.display='none';$('notifmodal').classList.add('open');subLoad()};
@@ -530,7 +636,7 @@ ths.forEach((th,i)=>{const h=hideCols.includes(i);th.style.display=h?'none':'';[
 async function colLoad(){try{const r=await (await fetch(API+'?action=columns_get&form='+COLFORM)).json();const c=(r&&r.cols&&Array.isArray(r.cols.hidden))?r.cols.hidden:[];hideCols=c.map(Number).filter(n=>n>=0)}catch(e){hideCols=[]}colApply()}
 async function colSave(){try{await fetch(API+'?action=columns_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:COLFORM,cols:{hidden:hideCols}})})}catch(e){}}
 function colPanel(){const tbl=colTable();if(!tbl)return;const ths=[...tbl.querySelectorAll('thead th')];
-$('collist').innerHTML=ths.map((th,i)=>{const t=((th.textContent||'').trim()||('Столбец '+(i+1)));return `<label style="display:block;padding:6px 4px;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="${i}" ${hideCols.includes(i)?'':'checked'}> ${t}</label>`}).join('');
+$('collist').innerHTML=ths.map((th,i)=>{const t=(Sort.thLabel(th)||('Столбец '+(i+1)));return `<label style="display:block;padding:6px 4px;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="${i}" ${hideCols.includes(i)?'':'checked'}> ${t}</label>`}).join('');
 document.querySelectorAll('#collist input[data-ci]').forEach(c=>c.onchange=()=>{const i=+c.dataset.ci;hideCols=c.checked?hideCols.filter(n=>n!==i):[...new Set([...hideCols,i])];colApply();colSave()});
 const p=$('colpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px'}}
 $('colset').onclick=e=>{e.stopPropagation();colPanel()};
@@ -538,11 +644,13 @@ $('colclose').onclick=()=>$('colpanel').style.display='none';
 $('colreset').onclick=async()=>{hideCols=[];colApply();await colSave();colPanel()};
 if(document.querySelector('#rows'))new MutationObserver(()=>colApply()).observe(document.querySelector('#rows'),{childList:true});
 colLoad();
+// Сортировка реестра ячеек по любому столбцу (А→Я / Я→А) — серверная, с пагинацией.
+Sort.init({mode:'server', key:'code', dir:'ASC', onChange:()=>{page=1;load()}});
 // переход из смежных модулей (08.1): ?cell=A-01-01&warehouse_id=1 — ищем и открываем карточку ячейки
-(function(){const u=new URLSearchParams(location.search);const c=u.get('cell');if(!c){load();return}
+(function(){const u=new URLSearchParams(location.search);const c=u.get('cell');if(!c){loadZones().then(()=>load());return}
 const w=u.get('warehouse_id')||u.get('wh')||'';
 if($('q'))$('q').value=c;if(w&&$('fwh'))$('fwh').value=w;page=1;
-load().then(()=>{const norm=s=>String(s||'').trim().toUpperCase();
+loadZones().then(()=>load()).then(()=>{const norm=s=>String(s||'').trim().toUpperCase();
 const hit=lastRows.find(o=>norm(o.code)===norm(c)&&(!w||String(o.warehouse_id)===String(w)))||lastRows.find(o=>norm(o.code)===norm(c));
 if(hit)open(hit.id)})})();
 </script>

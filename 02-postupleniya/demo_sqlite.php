@@ -11,14 +11,18 @@ require_once __DIR__ . '/ReceiptRepository.php';
 require_once __DIR__ . '/ReceiptService.php';
 require_once __DIR__ . '/../shared/db.php';
 require_once __DIR__ . '/../shared/CsvUpload.php';
+require_once __DIR__ . '/../shared/Counterparties.php';
 
 $dbFile = wms_receipts_db_file();
 $pdo = wms_receipts_pdo();
+$isSqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
 
 // --- Схема SQLite (упрощенная, для демо; прод — schema.sql на MySQL) ---
+// Только SQLite: в PostgreSQL схема создаётся из db/schema-pg.sql, сиды — миграцией.
+if ($isSqlite):
 $pdo->exec("CREATE TABLE IF NOT EXISTS warehouses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
 $pdo->exec("CREATE TABLE IF NOT EXISTS contractors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
-$pdo->exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, fio TEXT NOT NULL, role TEXT DEFAULT 'storekeeper', position TEXT)");
+// users — единый справочник сотрудников (shared/wms_users.sqlite), подключён в shared/db.php.
 $pdo->exec("CREATE TABLE IF NOT EXISTS receipts (
   id INTEGER PRIMARY KEY AUTOINCREMENT, doc_no TEXT NOT NULL UNIQUE, external_no TEXT,
   doc_date TEXT NOT NULL, plan_delivery_date TEXT, fact_delivery_date TEXT,
@@ -44,8 +48,8 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS receipt_items (
   qty REAL NOT NULL, boxes INTEGER DEFAULT 0, price REAL DEFAULT 0, vat_rate INTEGER DEFAULT 20,
   vat_sum_unit REAL DEFAULT 0, price_wvat REAL DEFAULT 0, sum_novat REAL DEFAULT 0,
   vat_sum REAL DEFAULT 0, sum_vat REAL DEFAULT 0, quality TEXT, prod_group TEXT, prod_date TEXT)");
-// Миграция для файлов, созданных до CSV-загрузки: качество, группа и дата производства в позициях.
-foreach (['quality' => 'quality TEXT', 'prod_group' => 'prod_group TEXT', 'prod_date' => 'prod_date TEXT'] as $col => $ddl) {
+// Миграция для файлов, созданных до CSV-загрузки: качество, группа, дата производства и партия в позициях/операциях.
+foreach (['quality' => 'quality TEXT', 'prod_group' => 'prod_group TEXT', 'prod_date' => 'prod_date TEXT', 'supplier_batch' => 'supplier_batch TEXT'] as $col => $ddl) {
     try {
         $has = false;
         foreach ($pdo->query("PRAGMA table_info(receipt_items)")->fetchAll(PDO::FETCH_ASSOC) as $c) {
@@ -56,9 +60,16 @@ foreach (['quality' => 'quality TEXT', 'prod_group' => 'prod_group TEXT', 'prod_
 }
 $pdo->exec("CREATE TABLE IF NOT EXISTS receipt_operations (
   id INTEGER PRIMARY KEY AUTOINCREMENT, receipt_id INTEGER NOT NULL, line_no INTEGER DEFAULT 0,
-  sku TEXT, accept_status TEXT, accept_date TEXT, receiver_id INTEGER, pallet TEXT,
+  sku TEXT, supplier_batch TEXT, accept_status TEXT, accept_date TEXT, receiver_id INTEGER, pallet TEXT,
   sku_qty INTEGER DEFAULT 0, qty REAL DEFAULT 0, place_status TEXT, place_date TEXT,
   storekeeper_id INTEGER, cell TEXT)");
+try {
+    $has = false;
+    foreach ($pdo->query("PRAGMA table_info(receipt_operations)")->fetchAll(PDO::FETCH_ASSOC) as $c) {
+        if (($c['name'] ?? '') === 'supplier_batch') { $has = true; break; }
+    }
+    if (!$has) $pdo->exec("ALTER TABLE receipt_operations ADD COLUMN supplier_batch TEXT");
+} catch (Throwable) {}
 $pdo->exec("CREATE TABLE IF NOT EXISTS receipt_documents (
   id INTEGER PRIMARY KEY AUTOINCREMENT, receipt_id INTEGER NOT NULL, name TEXT NOT NULL,
   format TEXT DEFAULT 'pdf', pages INTEGER DEFAULT 1, file_path TEXT, created_at TEXT DEFAULT (datetime('now')))");
@@ -80,7 +91,7 @@ $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_receipt_mark ON receipt_marks(r
 if ((int)$pdo->query("SELECT COUNT(*) FROM receipts")->fetchColumn() === 0) {
     $pdo->exec("INSERT INTO warehouses (id,name) VALUES (1,'Основной склад'),(2,'Холодильный склад')");
     $pdo->exec("INSERT INTO contractors (id,name) VALUES (1,'ООО «СпортОпт»'),(2,'ООО «Мяч-Сервис»'),(3,'ООО «Восток»'),(4,'ИП Смирнов В.В.'),(5,'ИП Смирнов М.А.'),(6,'ООО «ТоргСнаб»'),(7,'ООО «ФиТрейд»'),(8,'ИП Козлов К.К.')");
-    $pdo->exec("INSERT INTO users (id,fio,role,position) VALUES (1,'Иванов И.И.','Администратор','Администратор'),(2,'Петров А.С.','Кладовщик','Приемщик'),(3,'10977 П Иванов Иван','Кладовщик','Приемщик'),(4,'1287 Ш Феничев Олег','Кладовщик','Кладовщик'),(5,'1788 - Смирнов Николай','Менеджер','Менеджер'),(6,'Мишин Максим','Кладовщик','Кладовщик')");
+    // Сотрудники — в общей базе (shared/wms_users.sqlite), сиды там.
 
     // Реестр из макета (7 строк): doc_no, external, doc_date, plan, arrival, accept, sup, ctr, contract, wh, status, rtype, atype, utype, veh, gate, places_plan/fact, total, vat, total_wvat, paid, items, sku, qty, acc%, place%
     $rows = [
@@ -166,6 +177,7 @@ if ((int)$pdo->query("SELECT COUNT(*) FROM receipts")->fetchColumn() === 0) {
         $hi->execute([':r'=>$h[0],':u'=>$h[1],':fio'=>$h[2],':pos'=>$h[3],':a'=>$h[4],':fld'=>$h[5],':old'=>$h[6],':new'=>$h[7],':os'=>$h[8],':ns'=>$h[9],':d'=>$h[10]]);
     }
 }
+endif;
 
 $repo = new ReceiptRepository($pdo);
 $service = new ReceiptService($pdo);
@@ -209,7 +221,9 @@ if ($action === 'list') {
     $b = json_decode(file_get_contents('php://input'), true) ?? [];
     try {
         $to = ReceiptStatus::from($b['to'] ?? '');
-        $service->changeStatus((int)($_GET['id'] ?? 0), $to, 1);
+        // Закрытие проходит через гарды и формирует акты расхождений
+        // (ReceiptService::changeStatus -> wms_close_receipt_guarded).
+        $closed = $service->changeStatus((int)($_GET['id'] ?? 0), $to, 1);
         // Закрытие из реестра тоже приходует факт в Номенклатуру (идемпотентно, дубль с ТСД исключен guard-таблицей).
         $stock = null;
         if (in_array($to, [ReceiptStatus::Closed, ReceiptStatus::ClosedShort], true)) {
@@ -220,7 +234,10 @@ if ($action === 'list') {
                 $stock = ['synced' => false, 'error' => $e->getMessage()];
             }
         }
-        echo json_encode(['ok' => true, 'stock' => $stock], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => true, 'stock' => $stock,
+            'acts' => $closed['acts'] ?? [], 'excess_qty' => $closed['excess_qty'] ?? 0,
+            'shortage_qty' => $closed['shortage_qty'] ?? 0, 'deviation' => $closed['deviation'] ?? ''],
+            JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(400);
         echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
@@ -266,7 +283,7 @@ if ($action === 'list') {
                 ? ['line_no' => 'п/п', 'code' => 'Код', 'sku' => 'Артикул', 'name' => 'Наименование', 'unit' => 'Ед.', 'qty' => 'Кол-во']
                 : null;
             $bcText = ($pKind === 'receiver_doc') ? (string)($data['head']['doc_no'] ?? '') : '';
-            wms_pdf_output(wms_pdf_auto($data, $force, $bcText !== '' ? $bcText : null), wms_pdf_filename($data['title'] ?? $pKind, $pId));
+            wms_pdf_output(wms_pdf_auto($data, $force, $bcText !== '' ? $bcText : null, true), wms_pdf_filename($data['title'] ?? $pKind, $pId));
         } catch (Throwable $e) {
             http_response_code(400);
             header('Content-Type: text/plain; charset=utf-8');
@@ -293,10 +310,11 @@ if ($action === 'list') {
         'warehouses' => $pdo->query("SELECT id, name FROM warehouses ORDER BY id")->fetchAll(),
     ], JSON_UNESCAPED_UNICODE);
 } elseif ($action === 'csv_receipt' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    // CSV-загрузка прихода (кнопка «Загрузить данные»): multipart file + warehouse_id.
-    // Поставщик — из колонки «Поставщик» файла (нового добавляем в справочник).
+    // Загрузка прихода (кнопка «Загрузить данные»): CSV или Excel-заявка (.xlsx).
+    // Поставщик — из колонки «Поставщик» либо из шапки заявки (нового добавляем в справочник).
     try {
-        $parsed = csv_upload_parse($_FILES['file'] ?? [], csv_upload_receipt_spec());
+        require_once __DIR__ . '/../shared/ReceiptExcel.php';
+        $parsed = receipt_upload_parse_file($_FILES['file'] ?? []);
         if (!$parsed['rows']) {
             http_response_code(422);
             echo json_encode(['error' => implode('; ', $parsed['errors']) ?: 'Нет корректных строк'], JSON_UNESCAPED_UNICODE);
@@ -305,10 +323,14 @@ if ($action === 'list') {
             $sup = csv_upload_resolve_contractor($pdo, (string)($hdr['supplier'] ?? ''));
             $r = csv_upload_import_receipt($pdo, wms_nomenclature_pdo(), $parsed['rows'],
                 $sup['id'], (int)($_POST['warehouse_id'] ?? 0), 1,
-                (string)($_FILES['file']['name'] ?? 'upload.csv'));
-            $r += ['supplier' => $sup['name'], 'supplier_new' => $sup['created']];
+                (string)($_FILES['file']['name'] ?? 'upload'), $hdr);
+            // Новый контрагент из прихода автоматически попадает в справочник (тип «клиент»).
+            WmsCounterparties::ensure($pdo, (string)$sup['name'], 'client');
+            $r += ['supplier' => $sup['name'], 'supplier_new' => $sup['created'],
+                'external_no' => ($hdr['external_no'] ?? ''), 'format' => ($parsed['format'] ?? '')];
             http_response_code(201);
-            echo json_encode($r + ['row_errors' => $parsed['errors']], JSON_UNESCAPED_UNICODE);
+            $flags = JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR;
+            echo json_encode($r + ['row_errors' => $parsed['errors']], $flags);
         }
     } catch (Throwable $e) {
         http_response_code(400);

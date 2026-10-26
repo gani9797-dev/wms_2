@@ -15,12 +15,17 @@ main{padding:12px;max-width:640px;margin:0 auto;padding-bottom:40px}
 .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
 .card.red{border-color:#EF9A9A;background:#FFEBEE}.card.green{border-color:#A5D6A7;background:#E8F5E9}.card.amber{border-color:#FFCC80;background:#FFF8E1}
 h2{margin:0 0 8px;font-size:20px}.mut{color:var(--mut);font-size:13px}
+.qtybig{margin:10px 0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#F8F6FF}
+.qtybig b{font-size:52px;line-height:1;font-weight:800;color:var(--vio)}
+.qtybig span{font-size:22px;font-weight:700;color:var(--ink)}
+.qtybig .mut{margin-top:4px;font-size:14px}
 input,select{width:100%;font-size:20px;padding:14px;border:1px solid var(--line);border-radius:10px;margin:6px 0;background:#fff}
 button{width:100%;font-size:19px;font-weight:700;padding:16px;border-radius:12px;border:1px solid var(--vio);background:var(--vio);color:#fff;cursor:pointer;margin:6px 0;min-height:58px}
 button.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
 button.red{background:var(--bad);border-color:var(--bad)}
 button.green{background:var(--ok);border-color:var(--ok)}
 button.amber{background:#EF6C00;border-color:#EF6C00}
+button.small{font-size:16px;padding:12px;min-height:48px}
 .row2{display:flex;gap:8px}.row2>*{flex:1}
 .prog{height:12px;background:#E6E6E6;border-radius:8px;overflow:hidden;margin:8px 0}.prog i{display:block;height:100%;background:#009900}
 .doc{padding:12px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:#fff;cursor:pointer}
@@ -33,20 +38,21 @@ table.mini{width:100%;border-collapse:collapse;font-size:14px}table.mini td,tabl
 </style>
 </head>
 <body>
-<header><div class="t"><a href="app.html">‹ Меню</a><b>ТСД — Отбор</b><span id="who" style="font-size:12px;color:#7CFC9A"></span></div><small id="dhead">роль → задания по приоритетам</small></header>
+<header><div class="t"><a href="app.html">‹ Меню</a><b>ТСД — Отбор</b><span id="who" style="font-size:12px;color:#7CFC9A"></span></div><small id="dhead">роль → режим отбора</small></header>
 <main id="m"></main>
 <div id="toast"></div>
 <button id="navback">← Назад</button>
 <script>
 const $=id=>document.getElementById(id);
-const TOKEN=localStorage.getItem('tsd_token')||'tsd-12345';
+const TOKEN=localStorage.getItem('tsd_token')||(window.WMS_TSD_TOKEN||'tsd-12345');
 const ME=JSON.parse(localStorage.getItem('tsd_me')||'null');
 if(ME)$('who').textContent=ME.fio;
 const uid=()=>ME?ME.id:null;
 const ufio=()=>ME?ME.fio:'';
 let ROLE=localStorage.getItem('tsd_role')||((ME&&/водител|driver/i.test(ME.role||''))?'driver':((ME&&ME.role)?'storekeeper':''));
-let DOC=null,ITEMS=[],IDX=0,PALLET=null,WAVE=null;
+let DOC=null,ITEMS=[],IDX=0,PALLET=null,WAVE=null,GATE_PICK='';
 function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',3000)}
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json','X-Tsd-Token':TOKEN},o.headers||{});return fetch('otbor.php'+p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN),o)}
 function apiPick(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json','X-Tsd-Token':TOKEN},o.headers||{});return fetch('tasks.php'+p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN),o)}
 const post=(a,b)=>api('?action='+a,{method:'POST',body:JSON.stringify(b||{})}).then(r=>r.json().then(j=>({s:r.status,j})));
@@ -62,74 +68,200 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();
 function myCellKey(){return 'otbor_user_cell_'+(uid()||'anon')}
 function myCell(){return localStorage.getItem(myCellKey())||''}
 function setMyCell(v){if(v)localStorage.setItem(myCellKey(),v);else localStorage.removeItem(myCellKey())}
+// Виртуальная промежуточная ячейка пользователя: VIRT-<user_id> (без id — VIRT-1).
+function vcell(){return 'VIRT-'+(uid()||1)}
+// Состояние буфера отбора (позиции в промежуточной ячейке / на воротах / собрано).
+function bufLine(b){
+  if(!b)return '';
+  const parts=[];
+  if(b.picked)parts.push('в промежуточной ячейке: '+b.picked);
+  if(b.at_gate)parts.push('на воротах: '+b.at_gate);
+  if(b.assembled)parts.push('собрано: '+b.assembled);
+  return parts.length?parts.join(' · '):'пусто';
+}
+// --- Сверка скана: артикул, код строки и штрихкоды номенклатуры («Штрихкоды (через запятую)»).
+//     Пробелы не учитываем: «4 673192631679» = «4673192631679».
+const normCode=s=>String(s==null?'':s).replace(/\s+/g,'');
+const itemCodes=it=>[it.sku,it.code].concat(it.barcodes||[]).filter(Boolean).map(normCode);
+const matchItemCode=(it,v)=>{const c=normCode(v);return c!==''&&itemCodes(it).includes(c)};
 
 // ---------- Роль (системно по настройкам, вручную — проверка) ----------
 function scrRole(){
-  head('роль → задания по приоритетам');
+  head('роль → режим отбора');
   const busy=myCell();
   $('m').innerHTML=`<div class="card"><div class="step">ОТБОР · РОЛЬ</div><h2>Кто отбирает?</h2>
   <div class="mut">Определяется системно по роли в настройках. Проверь:</div>
   <div class="row2"><button id="sk" class="${ROLE==='storekeeper'?'':'ghost'}">Кладовщик · ручной</button><button id="dr" class="${ROLE==='driver'?'':'ghost'}">Водитель</button></div>
   ${busy?`<div class="card amber" style="margin-top:8px"><b>Ячейка пользователя занята: ${busy}</b><div class="mut">При начале нового отбора ячейка должна быть пустой. Вернись на форму или освободи.</div><button class="ghost" id="clr">Освободить ячейку</button></div>`:''}
-  <button id="go" class="green">К заданиям →</button></div>`;
-  $('sk').onclick=()=>{ROLE='storekeeper';localStorage.setItem('tsd_role',ROLE);go('tasks',scrTasks)};
-  $('dr').onclick=()=>{ROLE='driver';localStorage.setItem('tsd_role',ROLE);go('tasks',scrTasks)};
+  <button id="go" class="green">К выбору режима →</button></div>`;
+  $('sk').onclick=()=>{ROLE='storekeeper';localStorage.setItem('tsd_role',ROLE);go('mode',scrMode)};
+  $('dr').onclick=()=>{ROLE='driver';localStorage.setItem('tsd_role',ROLE);go('mode',scrMode)};
   const c=$('clr');if(c)c.onclick=()=>{setMyCell('');scrRole()};
-  $('go').onclick=()=>{if(myCell()){toast('Ячейка пользователя не пустая');return}go('tasks',scrTasks)};
+  $('go').onclick=()=>{if(myCell()){toast('Ячейка пользователя не пустая');return}go('mode',scrMode)};
 }
-// ---------- Задания по приоритетам (1 = наивысший) ----------
-// Сверху — задания на отбор из модуля Задания (волна/построчно, фильтр по роли и уровню ячейки),
-// ниже — отгрузки старым способом. Роль: водитель => уровень >= 2, кладовщик => уровень = 1.
-async function scrTasks(){
-  DOC=null;ITEMS=[];IDX=0;PALLET=null;WAVE=null;head('выдача заданий по приоритетам');
+// ---------- Режим отбора: по документу / по зоне / по заданиям ----------
+function scrMode(){
+  head('режим отбора');
+  const roleRu=ROLE==='driver'?'ОТБОР ВОДИТЕЛЕМ':'РУЧНОЙ ОТБОР';
+  const busy=myCell();
+  $('m').innerHTML=`<div class="card"><div class="step">${roleRu}</div><h2>Как отбираем?</h2>
+  <div class="mut">Роль: ${ROLE==='driver'?'Водитель':'Кладовщик'}.${ROLE==='driver'?' Отбор водителем: зоны ячеек с отбором водителем.':' Ручной отбор: зоны ячеек с ручным отбором.'}</div>
+  ${busy?`<div class="card amber" style="margin-top:8px"><b>Ячейка пользователя занята: ${busy}</b><div class="mut">При начале нового отбора ячейка должна быть пустой. Вернись на форму или освободи.</div><button class="ghost" id="clr">Освободить ячейку</button></div>`:''}
+  <button id="mdoc">1. Отбор по документу</button>
+  <button id="mzone">2. Отбор по зоне</button>
+  <button id="mtask">3. Отбор по заданиям</button>
+  <button class="ghost" id="mrole">Сменить роль</button>
+  <button class="ghost" id="mback">В меню</button></div>`;
+  $('mdoc').onclick=()=>go('doc',scrDoc);
+  $('mzone').onclick=()=>go('zone',scrZones);
+  $('mtask').onclick=()=>go('tasks',scrPickTasks);
+  $('mrole').onclick=()=>go('role',scrRole);
+  $('mback').onclick=()=>location.href='app.html';
+  const c=$('clr');if(c)c.onclick=()=>{setMyCell('');scrMode()};
+}
+// ---------- Запрет отбора: товар ещё не на воротах / не собран ----------
+function showBlock(jj,backFn){
+  $('m').innerHTML=`<div class="card amber"><div class="step">ОТБОР ЗАПРЕЩЁН</div>
+  <h2>${esc(jj.error||'Отбор запрещён')}</h2>
+  <div class="mut">Товар лежит в виртуальной промежуточной ячейке ${esc(vcell())}. Отнеси паллету на ворота сортировки и соберите её на сборочной паллете по SSCC — после этого отбор снова доступен.</div>
+  <button class="ghost" id="bk">Назад</button></div>`;
+  $('bk').onclick=()=>{const f=backFn||scrDoc;go('list',f)};
+}
+// ---------- Отбор по документу: отгрузки по приоритетам ----------
+// Роль: водитель => уровень ячейки >= 2, кладовщик => уровень ячейки = 1.
+async function scrDoc(){
+  DOC=null;ITEMS=[];IDX=0;PALLET=null;WAVE=null;head('отбор по документу: отгрузки по приоритетам');
   const r=await api('?action=tasks&role='+ROLE);const j=await r.json();
   const rows=j.rows||[];
-  let picks=[];
-  try{
-    const rp=await apiPick('?action=tasks&type='+encodeURIComponent('сбор')+'&role='+ROLE);
-    const jp=await rp.json();
-    picks=jp.rows||[];
-  }catch(e){picks=[]}
-  if(!rows.length&&!picks.length){
-    $('m').innerHTML=`<div class="card amber"><div class="step">${ROLE==='driver'?'ОТБОР ВОДИТЕЛЕМ':'РУЧНОЙ ОТБОР'}</div><h2>Уведомление. Заданий нет</h2><div class="mut">${ROLE==='driver'?'Водитель: уровень ячейки ≥ 2':'Кладовщик: уровень ячейки = 1'}. Выпусти задания из Отгрузок (ПКМ → Выпуск заданий на отбор).</div><button class="ghost" id="bk">В меню</button></div>`;
-    $('bk').onclick=()=>location.href='app.html';return;
+  if(!rows.length){
+    $('m').innerHTML=`<div class="card amber"><div class="step">${ROLE==='driver'?'ОТБОР ВОДИТЕЛЕМ':'РУЧНОЙ ОТБОР'}</div><h2>Уведомление. Отгрузок нет</h2><div class="mut">${ROLE==='driver'?'Водитель: уровень ячейки ≥ 2':'Кладовщик: уровень ячейки = 1'}. Выпусти задания из Отгрузок (ПКМ → Выпуск заданий на отбор).</div><button class="ghost" id="bk">К режимам отбора</button></div>`;
+    $('bk').onclick=()=>go('mode',scrMode);return;
   }
   const wv=j.wave||{};
   const roleHint=ROLE==='driver'?'Водитель: уровень ячейки ≥ 2':'Кладовщик: уровень ячейки = 1';
-  $('m').innerHTML=`<div class="card"><div class="step">${ROLE==='driver'?'ОТБОР ВОДИТЕЛЕМ':'РУЧНОЙ ОТБОР'} · ПРИОРИТЕТ 1 = НАИВЫСШИЙ</div>
-  <h2>Задания на отбор: ${picks.length} · Отгрузки: ${rows.length}</h2>
+  $('m').innerHTML=`<div class="card"><div class="step">${ROLE==='driver'?'ОТБОР ВОДИТЕЛЕМ':'РУЧНОЙ ОТБОР'} · ОТБОР ПО ДОКУМЕНТУ</div>
+  <h2>Отгрузки: ${rows.length}</h2>
   <div class="mut">${roleHint}</div>
   ${wv.possible?`<div class="card amber"><b>Волна возможна</b><div class="mut">${wv.hint}. Пересечение: ${Object.keys(wv.cross_sku||{}).join(', ')}</div><button id="wave">Собрать волной</button></div>`:''}
   <div class="mut">id переходит в «в работе» и закрепляется за тобой. Выход → «в ожидании», таймер 2 мин, иначе возврат в доступ.</div></div>`
-  +(picks.length?`<div class="card"><div class="step">ОТБОР · ИЗ ОТГРУЗОК (ВОЛНА/СТРОКИ)</div>`+picks.map(t=>`<div class="doc" data-pick="${t.id}"><b>№${t.doc_no}</b> <span class="mut">приоритет ${t.prio} · сбор</span><br>
-    <span class="mut">отгрузки: ${t.doc_ref||'—'}${t.levels?(' · уровни '+t.levels.join(',')):''} · ${t.status}${t.lock_status?(' · '+t.lock_status+' ('+(t.lock_fio||t.lock_user||'')+')'):''}</span>
-    <div class="prog"><i style="width:${t.pct}%"></i></div><span class="mut">${t.fact_qty||0} / ${t.plan_qty||0}</span></div>`).join('')+`</div>`:'')
   +rows.map(t=>`<div class="doc" data-id="${t.id}"><b>№${t.doc_no}</b> <span class="mut">приоритет ${t.prio} · ${t.pick_type_ru}</span><br>
     <span class="mut">${t.consignee||''} · ворота ${t.gate||'—'}${t.levels?(' · уровни '+t.levels.join(',')):''} · ${t.status}${t.lock_status?(' · '+t.lock_status+' ('+(t.lock_fio||t.lock_user||'')+')'):''}</span>
     <div class="prog"><i style="width:${t.pct}%"></i></div><span class="mut">${t.fact_qty||0} / ${t.plan_qty||0}</span></div>`).join('');
   const w=$('wave');if(w)w.onclick=()=>go('wave',()=>scrWave(rows,wv));
-  document.querySelectorAll('[data-pick]').forEach(el=>el.onclick=async()=>{
-    const id=+el.dataset.pick;
-    const {j:jj}=await postPick('take',{task_id:id,user_id:uid(),user_fio:ufio()});
-    if(jj.error){toast(jj.error+(jj.busy_id?(' (№'+jj.busy_id+')'):''));return}
-    const st=await (await apiPick('?action=task&id='+id)).json();
-    if(st.error){toast(st.error);return}
-    DOC={id,doc_no:st.head.doc_no,consignee:st.head.doc_ref,gate:'—',status:st.head.status,_pick:st.head};
-    ITEMS=(st.items||[]).map(i=>({sku:i.sku,code:i.code,name:i.name,unit:i.unit,plan_qty:i.plan_qty,fact_qty:i.fact_qty,need:Math.max(0,(+i.plan_qty||0)-(+i.fact_qty||0)),cell:i.cell_from||i.cell||'',_pickItem:i}));
-    ITEMS=ITEMS.filter(i=>i.need>1e-9);
-    if(!ITEMS.length){toast('По заданию всё отобрано');go('tasks',scrTasks);return}
-    IDX=0;PALLET=null;go('head',()=>scrHead(true));
-  });
   document.querySelectorAll('[data-id].doc').forEach(el=>el.onclick=async()=>{
     const id=+el.dataset.id;
     const {s,j:jj}=await post('take',{shipment_id:id,user_id:uid(),user_fio:ufio()});
-    if(jj.error){toast(jj.error+(jj.busy_id?(' (№'+jj.busy_id+')'):''));if(jj.busy_id)scrTasks();return}
+    if(jj.error){toast(jj.error+(jj.busy_id?(' (№'+jj.busy_id+')'):''),4500);if(jj.need_assembly){showBlock(jj,scrDoc);return}if(jj.busy_id)scrDoc();return}
     const st=await (await api('?action=task&id='+id)).json();
     if(st.error){toast(st.error);return}
-    DOC=st.head;ITEMS=(st.items||[]).filter(i=>(+i.plan_qty||0)-(+i.fact_qty||0)>1e-9);
-    if(!ITEMS.length){toast('По заданию всё отобрано');go('tasks',scrTasks);return}
+    DOC=st.head;DOC.shipment_doc_no=st.head.doc_no;DOC.buffer=st.buffer||null;
+    ITEMS=(st.items||[]).filter(i=>(+i.plan_qty||0)-(+i.fact_qty||0)>1e-9);
+    if(!ITEMS.length){toast('По заданию всё отобрано');go('doc',scrDoc);return}
     IDX=0;PALLET=null;go('head',scrHead);
   });
+}
+// ---------- Отбор по заданиям: задания модуля Задания (волна/строки) ----------
+async function scrPickTasks(){
+  DOC=null;ITEMS=[];IDX=0;PALLET=null;WAVE=null;head('отбор по заданиям');
+  let picks=[],brokenHint=null;
+  try{
+    const rp=await apiPick('?action=tasks&type='+encodeURIComponent('сбор')+'&role='+ROLE);
+    const jp=await rp.json();
+    picks=jp.rows||[];
+    brokenHint=jp.broken_hint||null;
+  }catch(e){picks=[]}
+  if(!picks.length){
+    $('m').innerHTML=`<div class="card amber"><div class="step">${ROLE==='driver'?'ОТБОР ВОДИТЕЛЕМ':'РУЧНОЙ ОТБОР'}</div><h2>Уведомление. Заданий нет</h2><div class="mut">${ROLE==='driver'?'Водитель: уровень ячейки ≥ 2':'Кладовщик: уровень ячейки = 1'}. Выпусти задания из Отгрузок (ПКМ → Выпуск заданий на отбор) или открой «Отбор по зоне».</div>${brokenHint?`<div class="mut" style="margin-top:8px">${esc(brokenHint)}</div>`:''}<button class="ghost" id="bk">К режимам отбора</button></div>`;
+    $('bk').onclick=()=>go('mode',scrMode);return;
+  }
+  $('m').innerHTML=`<div class="card"><div class="step">${ROLE==='driver'?'ОТБОР ВОДИТЕЛЕМ':'РУЧНОЙ ОТБОР'} · ОТБОР ПО ЗАДАНИЯМ</div>
+  <h2>Задания на отбор: ${picks.length}</h2>
+  <div class="mut">id переходит в «в работе» и закрепляется за тобой.</div>
+  ${brokenHint?`<div class="mut" style="margin-top:8px">${esc(brokenHint)}</div>`:''}</div>`
+  +`<div class="card"><div class="step">ЗАДАНИЯ ИЗ ОТГРУЗОК (ВОЛНА/СТРОКИ)</div>`
+  +picks.map(t=>`<div class="doc" data-pick="${t.id}"><b>№${t.doc_no}</b> <span class="mut">приоритет ${t.prio} · сбор</span><br>
+    <span class="mut">отгрузка: ${esc(t.shipment_doc_no||t.doc_ref||'—')}${t.consignee?(' · '+esc(t.consignee)):''}${t.levels?(' · уровни '+t.levels.join(',')):''} · ${t.status}${t.lock_status?(' · '+t.lock_status+' ('+(t.lock_fio||t.lock_user||'')+')'):''}</span>
+    <div class="prog"><i style="width:${t.pct}%"></i></div><span class="mut">${t.fact_qty||0} / ${t.plan_qty||0}</span></div>`).join('')+`</div>`;
+  document.querySelectorAll('[data-pick]').forEach(el=>el.onclick=()=>openPickTask(+el.dataset.pick));
+}
+// ---------- Отбор по зоне: зоны отбора ячеек ----------
+async function scrZones(){
+  DOC=null;ITEMS=[];IDX=0;PALLET=null;WAVE=null;head('отбор по зоне: зоны ячеек');
+  let j={rows:[]};
+  try{ j=await (await apiPick('?action=zones&role='+ROLE)).json(); }catch(e){}
+  const rows=j.rows||[];
+  const mine=rows.filter(z=>z.mine);
+  if(!rows.length){
+    $('m').innerHTML=`<div class="card amber"><div class="step">ОТБОР ПО ЗОНЕ</div><h2>Уведомление. Зон нет</h2><div class="mut">В модуле «Ячейки хранения» проставь ячейкам дополнительные зоны: Ручной отбор / Отбор водителем.</div><button class="ghost" id="bk">К режимам отбора</button></div>`;
+    $('bk').onclick=()=>go('mode',scrMode);return;
+  }
+  $('m').innerHTML=`<div class="card"><div class="step">ОТБОР ПО ЗОНЕ</div><h2>Зоны отбора ячеек</h2>
+  <div class="mut">${j.role_hint||''}</div>
+  <div class="mut">Выбери зону — система сформирует списки заданий (PK-000001 …). Список типа «ручной отбор» падает только роли Кладовщик, «отбор водителем» — только роли Водитель.</div></div>`
+  +(mine.length?mine:rows).map(z=>`<div class="doc" data-zone="${z.zone}"><b>${esc(z.label)}</b> <span class="mut">${z.role_ru}</span><br>
+    <span class="mut">ячеек: ${z.cells} · списков: ${z.lists}${z.mine?' · <b>ваша зона</b>':''}</span></div>`).join('');
+  document.querySelectorAll('[data-zone]').forEach(el=>el.onclick=()=>go('zonelists',()=>scrZoneLists(el.dataset.zone)));
+}
+// ---------- Отбор по зоне: списки заданий (PK-000001 ...) ----------
+async function scrZoneLists(zone){
+  DOC=null;ITEMS=[];IDX=0;PALLET=null;WAVE=null;head('отбор по зоне: списки заданий');
+  let j={rows:[]};
+  try{ j=await (await apiPick('?action=zone_lists&zone='+encodeURIComponent(zone)+'&role='+ROLE+'&user_id='+(uid()||0))).json(); }catch(e){}
+  const rows=j.rows||[];
+  const sum=j.summary||{};
+  if(j.error){
+    $('m').innerHTML=`<div class="card amber"><div class="step">ОТБОР ПО ЗОНЕ</div><h2>Уведомление. Доступ закрыт</h2>
+      <div class="mut">${esc(j.error)}</div>
+      <button class="ghost" id="bk">К зонам</button><button class="ghost" id="bm">К режимам отбора</button></div>`;
+    $('bk').onclick=()=>go('zone',scrZones);$('bm').onclick=()=>go('mode',scrMode);return;
+  }
+  if(!rows.length){
+    $('m').innerHTML=`<div class="card amber"><div class="step">ОТБОР ПО ЗОНЕ</div><h2>Уведомление. Списков нет</h2>
+      <div class="mut">${sum.note||'Нет отгрузок с товаром в ячейках этой зоны.'}</div>
+      <button class="ghost" id="bk">К зонам</button><button class="ghost" id="bm">К режимам отбора</button></div>`;
+    $('bk').onclick=()=>go('zone',scrZones);$('bm').onclick=()=>go('mode',scrMode);return;
+  }
+  $('m').innerHTML=`<div class="card"><div class="step">ОТБОР ПО ЗОНЕ · ${esc(j.zone_label||zone)}</div>
+  <h2>Списки заданий: ${rows.length}</h2>
+  <div class="mut">Отгрузок в зоне: ${sum.shipments||0} · заданий: ${sum.tasks||0}. В списке — одна отгрузка (нарядов может быть несколько).</div></div>`
+  +rows.map(l=>`<div class="doc" data-list="${l.id}"><b>${esc(l.code)}</b> <span class="mut">${esc(l.type_ru)}</span><br>
+    <span class="mut">отгрузка: ${esc(l.shipment_doc_no||'—')}${l.orders&&l.orders.length?(' · наряды: '+l.orders.map(o=>esc(o.doc_no)).join(', ')):''}${l.name?(' · '+esc(l.name)):''} · заданий: ${l.tasks_count} (в работе ${l.tasks_open})</span>
+    <div class="prog"><i style="width:${l.pct}%"></i></div><span class="mut">${l.fact_qty} / ${l.plan_qty}</span></div>`).join('');
+  document.querySelectorAll('[data-list]').forEach(el=>el.onclick=()=>go('listtasks',()=>scrListTasks(+el.dataset.list,zone)));
+}
+// ---------- Отбор по зоне: задания списка ----------
+async function scrListTasks(listId,zone){
+  DOC=null;ITEMS=[];IDX=0;PALLET=null;WAVE=null;head('отбор по зоне: задания списка');
+  let j={rows:[],list:{}};
+  try{ j=await (await apiPick('?action=list_tasks&id='+listId+'&role='+ROLE)).json(); }catch(e){}
+  if(j.error){toast(j.error);go('zonelists',()=>scrZoneLists(zone));return}
+  const rows=j.rows||[], l=j.list||{};
+  if(!rows.length){
+    $('m').innerHTML=`<div class="card amber"><div class="step">Список ${esc(l.code||'')}</div><h2>Уведомление. Заданий нет</h2><button class="ghost" id="bk">К спискам</button></div>`;
+    $('bk').onclick=()=>go('zonelists',()=>scrZoneLists(zone));return;
+  }
+  $('m').innerHTML=`<div class="card"><div class="step">СПИСОК ${esc(l.code||'')} · ${esc(l.type_ru||'')}</div>
+  <h2>Отгрузка: ${esc(l.shipment_doc_no||'—')}</h2>
+  <div class="mut">Заданий: ${l.tasks_count||rows.length} · в работе: ${l.tasks_open||0}</div></div>`
+  +rows.map(t=>`<div class="doc" data-pick="${t.id}"><b>№${t.doc_no}</b> <span class="mut">${t.status}${t.lock_status?(' · '+t.lock_status+' ('+(t.lock_fio||t.lock_user||'')+')'):''}</span><br>
+    <span class="mut">${esc(t.doc_ref||'')}</span>
+    <div class="prog"><i style="width:${t.pct}%"></i></div><span class="mut">${t.fact_qty||0} / ${t.plan_qty||0}</span></div>`).join('');
+  document.querySelectorAll('[data-pick]').forEach(el=>el.onclick=()=>openPickTask(+el.dataset.pick));
+}
+// ---------- Открытие задания из модуля Задания (общее для отбора по заданиям и по зоне) ----------
+async function openPickTask(id){
+  const {s,j:jj}=await postPick('take',{task_id:id,user_id:uid(),user_fio:ufio()});
+  if(jj.error){toast(jj.error+(jj.busy_id?(' (№'+jj.busy_id+')'):''),4500);if(jj.need_assembly){showBlock(jj,scrPickTasks);return}return}
+  const st=await (await apiPick('?action=task&id='+id)).json();
+  if(st.error){toast(st.error);return}
+  // Отгрузка — по связи с модулем «Отгрузки» (не по тексту задания).
+  const sh=st.shipment||{};
+  DOC={id,doc_no:st.head.doc_no,consignee:sh.consignee||st.head.doc_ref,gate:sh.gate||'—',
+       shipment_doc_no:sh.doc_no||st.head.doc_ref,status:st.head.status,_pick:st.head,lists:st.lists||[],buffer:st.buffer||null};
+  ITEMS=(st.items||[]).map(i=>({sku:i.sku,code:i.code,name:i.name,unit:i.unit,plan_qty:i.plan_qty,fact_qty:i.fact_qty,need:Math.max(0,(+i.plan_qty||0)-(+i.fact_qty||0)),cell:i.cell_from||i.cell||'',barcodes:i.barcodes||[],_pickItem:i}));
+  ITEMS=ITEMS.filter(i=>i.need>1e-9);
+  if(!ITEMS.length){toast('По заданию всё отобрано');go('mode',scrMode);return}
+  IDX=0;PALLET=null;go('head',()=>scrHead(true));
 }
 // ---------- Волна: суммарная потребность + маршрут (ячейка 1 раз) ----------
 async function scrWave(rows,wv){
@@ -143,7 +275,7 @@ async function scrWave(rows,wv){
   const byCell={};
   details.forEach(d=>d.items.forEach(i=>{
     const need=(+i.plan_qty||0)-(+i.fact_qty||0);if(need<=0)return;
-    (byCell[i.cell]=byCell[i.cell]||[]).push({ship:d.head,sku:i.sku,name:i.name,code:i.code,unit:i.unit,need});
+    (byCell[i.cell]=byCell[i.cell]||[]).push({ship:d.head,sku:i.sku,name:i.name,code:i.code,unit:i.unit,need,barcodes:i.barcodes||[]});
   }));
   const route=Object.keys(byCell); // каждая ячейка 1 раз
   WAVE={details,byCell,route,ri:0};
@@ -180,7 +312,7 @@ function scrWaveSku(c,lines,tot){
   $('sku').focus();
   $('go').onclick=()=>{
     const v=$('sku').value.trim();
-    if(!lines.some(l=>l.sku===v||l.code===v)){toast('Уведомление: неверный штрихкод');return}
+    if(!lines.some(l=>matchItemCode(l,v))){toast('Уведомление: неверный штрихкод');return}
     go('waveqty',()=>scrWaveQty(c,lines,tot,v));
   };
   $('pr').onclick=()=>go('problem',()=>scrProblem(l0.ship.id,l0.sku,c,true));
@@ -212,7 +344,7 @@ function scrWaveSplit(c,lines){
     }
     for(let i=0;i<lines.length;i++){
       const l=lines[i],q=+$('q'+i).value||0;
-      const {s,j}=await post('confirm',{shipment_id:l.ship.id,sku:l.sku,qty:q,cell:c,pallet:myCell()||('W-'+(uid()||'0')),user_id:uid()});
+      const {s,j}=await post('confirm',{shipment_id:l.ship.id,sku:l.sku,qty:q,cell:c,pallet:myCell()||('W-'+(uid()||'0')),user_id:uid(),wave:1});
       if(j.error){toast('Ошибка: '+j.error);return}
     }
     WAVE.ri++;
@@ -221,22 +353,16 @@ function scrWaveSplit(c,lines){
   };
 }
 function scrWaveSort(){
-  head('волна завершена — распредели по воротам');
-  $('m').innerHTML=`<div class="card green"><div class="step">ВОЛНА ЗАВЕРШЕНА</div><h2>Уведомление: распредели товар по воротам</h2>
-  <input id="sscc" placeholder="Сканируй SSCC паллеты"><div class="mut">Отобразим ячейку сортировки.</div>
+  head('волна завершена — отправь паллету на ворота');
+  $('m').innerHTML=`<div class="card green"><div class="step">ВОЛНА ЗАВЕРШЕНА</div><h2>Отправь паллету на ворота сортировки</h2>
+  <input id="sscc" placeholder="Сканируй SSCC паллеты"><div class="mut">Дальше — форма отправки на ворота: ворота берём из отгрузки.</div>
   <button id="go">Далее →</button></div>`;
   $('go').onclick=async()=>{
     const ss=$('sscc').value.trim();if(!ss){toast('Отсканируй SSCC');return}
     const d=WAVE.details[0].head;
-    $('m').innerHTML=`<div class="card"><div class="step">СОРТИРОВКА · ${ss}</div><h2>Доки: ${WAVE.details.map(x=>x.head.doc_no).join(', ')}</h2>
-    <div class="mut">Ячейка сортировки: ЗОНА-СОРТИРОВКИ · ворота ${d.gate||'—'}</div>
-    <input id="cell" placeholder="Сканируй ячейку ворот"><button id="go2">Подтвердить</button></div>`;
-    $('go2').onclick=async()=>{
-      if($('cell').value.trim()!=='ВОРОТА-'+(d.gate||'')&&$('cell').value.trim()!=='ЗОНА-СОРТИРОВКИ'){toast('Уведомление: ячейка ворот указана неверно');return}
-      const {j}=await post('move_to_sort',{shipment_id:d.id,pallet:ss,gate_cell:'ЗОНА-СОРТИРОВКИ',user_id:uid(),moved_ok:1});
-      if(j.error||j.ok===false){toast('Ошибка, передана оператору');return}
-      toast('Паллета перенесена в зону сортировки');go('tasks',scrTasks);
-    };
+    PALLET=ss;
+    DOC={id:d.id,doc_no:d.doc_no,consignee:d.consignee||'',gate:d.gate||'—',shipment_doc_no:d.doc_no,status:d.status||'',buffer:null};
+    go('gate',scrGate);
   };
 }
 // ---------- Обычный отбор: шапка + построчно ----------
@@ -246,11 +372,13 @@ function scrHead(){
   head('№ '+(h.doc_no||h.id)+' · '+(h.status||''));
   const done=ITEMS.filter(i=>(+i.fact_qty||0)>= (+i.plan_qty||0)-1e-9).length;
   $('m').innerHTML=`<div class="card"><div class="step">ШАПКА · ЗАДАНИЕ ${IDX+1}/${ITEMS.length}</div>
-  <h2>№ ${h.doc_no||h.id} · ${h.consignee||''}</h2><div class="mut">Ворота: ${h.gate||'—'} · ${h.status||''} · строк готово: ${done}/${ITEMS.length}</div>
+  <h2>№ ${h.doc_no||h.id} · ${h.consignee||''}</h2><div class="mut">Отгрузка: ${h.shipment_doc_no||'—'} · ворота: ${h.gate||'—'} · ${h.status||''} · строк готово: ${done}/${ITEMS.length}</div>
+  <div class="mut">Промежуточная ячейка: <b>${esc(vcell())}</b> — ${esc(bufLine(h.buffer))}</div>
+  ${(h.lists&&h.lists.length)?`<div class="mut">Список заданий: <b>${h.lists.map(l=>esc(l.code)).join(', ')}</b>${h.lists.length===1?(' · '+esc(h.lists[0].name||'')):''}</div>`:''}
   <table class="mini"><tr><th>Ячейка</th><th>Артикул / Наименование</th><th>Кол-во</th></tr>
   ${ITEMS.map((i,n)=>`<tr style="${n===IDX?'background:#EDE7FF':''}"><td>${i.cell}</td><td><b>${i.sku}</b><br><span class="mut">${i.name||''} · ${i.code||''}</span><br>📦 фото</td><td>${i.fact_qty||0} / ${i.plan_qty} ${i.unit||'шт'}<br><span class="mut">паллет: ${PALLET||'—'}</span></td></tr>`).join('')}</table>
   <div class="row2"><button class="ghost" id="exit">Выйти из задания</button><button id="go" class="green">Отобрать строку →</button></div></div>`;
-  $('exit').onclick=async()=>{if(DOC._pick){await postPick('release',{task_id:DOC.id,user_id:uid()})}else{await post('release',{shipment_id:DOC.id,user_id:uid()})}toast('Статус: в ожидании (2 мин)');go('tasks',scrTasks)};
+  $('exit').onclick=async()=>{if(DOC._pick){await postPick('release',{task_id:DOC.id,user_id:uid()})}else{await post('release',{shipment_id:DOC.id,user_id:uid()})}toast('Статус: в ожидании (2 мин)');go('mode',scrMode)};
   $('go').onclick=()=>go('cell',scrCell);
   window.onbeforeunload=()=>{if(DOC)navigator.sendBeacon&&0};
 }
@@ -271,15 +399,18 @@ function scrCell(){
 function scrSku(){
   const it=cur();
   head(it.sku+' · скан товара');
+  const bcs=(it.barcodes||[]).filter(Boolean);
   $('m').innerHTML=`<div class="card"><div class="step">СКАН ТОВАРА · ${it.cell}</div>
-  <h2>${it.sku}</h2><div>${it.name||''}</div><div class="mut">Код: ${it.code||'—'} · к отбору: ${it.need} ${it.unit||'шт'}</div>
+  <h2>${it.sku}</h2><div>${it.name||''}</div><div class="mut">Код: ${it.code||'—'}</div>
+  <div class="qtybig"><b>${it.need}</b> <span>${it.unit||'шт'}</span><div class="mut">к отбору</div></div>
   <div style="background:#F4F5F7;border-radius:10px;text-align:center;padding:20px;font-size:44px">📦</div>
   <input id="sku" placeholder="Сканируй штрихкод" autocomplete="off"><button id="go">Проверить</button>
+  ${bcs.length?`<div class="mut">Штрихкоды товара: ${bcs.map(esc).join(', ')}</div>`:''}
   <button class="amber" id="pr">1. Проблема с товаром</button></div>`;
   const e=$('sku');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();$('go').click()}};
   $('go').onclick=()=>{
     const v=e.value.trim();
-    if(v!==it.sku&&v!==it.code){toast('Уведомление: неверный штрихкод');return}
+    if(!matchItemCode(it,v)){toast('Уведомление: неверный штрихкод');return}
     go('qty',scrQty);
   };
   $('pr').onclick=()=>go('problem',()=>scrProblem(DOC.id,it.sku,it.cell,false));
@@ -303,16 +434,18 @@ function scrProblem(sid,sku,cell,fromWave){
     $('m').innerHTML=`<div class="card amber"><div class="step">ЯЧЕЙКА ЗАБЛОКИРОВАНА · ${j.block}</div>
     <h2>Новое резервирование произведено</h2>
     <div class="mut">Log: id ячейки ${l.cell||cell} · id товара ${sku} · id сотрудника ${uid()||'—'} · причина ${l.reason||j.block} · ${l.dt||''}</div>
-    <button class="green" id="go">К заданиям (выдача по приоритетам)</button></div>`;
-    $('go').onclick=()=>go('tasks',scrTasks);
+    <button class="green" id="go">К режимам отбора</button></div>`;
+    $('go').onclick=()=>go('mode',scrMode);
   }
 }
 // ---------- Ввод кол-ва (меньшее допустимо, большее — нет) ----------
 function scrQty(){
   const it=cur();
   head(it.sku+' · количество');
-  $('m').innerHTML=`<div class="card"><div class="step">КОЛ-ВО · ${it.sku} · к отбору ${it.need}</div>
-  <h2>Введи количество (${it.unit||'шт'})</h2><input id="q" value="${it.need}" inputmode="numeric">
+  $('m').innerHTML=`<div class="card"><div class="step">КОЛ-ВО · ${it.sku}</div>
+  <h2>Введи количество (${it.unit||'шт'})</h2>
+  <div class="qtybig"><b>${it.need}</b> <span>${it.unit||'шт'}</span><div class="mut">к отбору</div></div>
+  <input id="q" value="${it.need}" inputmode="numeric">
   <div class="mut">Допустимо меньшее кол-во. Большее — запрещено.</div><button id="go">Далее (Enter)</button></div>`;
   $('go').onclick=()=>{
     const q=+$('q').value||0;
@@ -329,52 +462,38 @@ function scrPicked(){
   <button id="go">К паллете (Enter) →</button></div>`;
   $('go').onclick=()=>go('palletq',scrPalletQ);
 }
-// ---------- Паллета: есть ли в ячейке пользователя? + 3 проверки ----------
-function scrPalletQ(){
+// ---------- Паллета: решение принимает система (вопросов оператору нет) ----------
+// Система сама проверяет: паллета в ячейке оператора годится / нужна новая / отказ.
+async function scrPalletQ(){
   const it=cur();
   head(it.sku+' · паллета');
+  const isPick=!!DOC._pick;
   $('m').innerHTML=`<div class="card"><div class="step">ПАЛЛЕТА · ${it.sku} × ${it._q}</div>
-  <h2>В ячейке пользователя есть паллета данной отгрузки?</h2>
-  <div class="mut">Ячейка пользователя: ${myCell()||'пустая'} · при начале нового отбора должна быть пустой.</div>
-  <div class="row2"><button id="y">Да</button><button class="ghost" id="n">Нет</button></div></div>`;
-  $('y').onclick=()=>{
-    if(!myCell()){toast('В ячейке пользователя нет паллеты — выбери «Нет» и отсканируй');return}
-    PALLET=myCell();go('palletchecks',scrPalletChecks);
-  };
-  $('n').onclick=()=>go('palletscan',scrPalletScan);
+  <h2>Проверяю паллету…</h2><div class="mut">Ячейка оператора: ${myCell()||'пустая'}</div></div>`;
+  const body=isPick?{task_id:DOC.id,pallet:myCell(),user_id:uid()}:{shipment_id:DOC.id,pallet:myCell(),user_id:uid()};
+  const {j}=isPick?await postPick('pallet_check',body):await post('pallet_check',body);
+  if(j.error){toast(j.error);go('qty',scrQty);return}
+  if(j.state==='error'){scrPalletScan(j.error||'Паллета не подходит');return}
+  if(j.state==='cell'){PALLET=j.pallet;setMyCell(j.pallet);go('afterline',scrAfterLine);return}
+  scrPalletScan('',j.hint||'Отсканируй паллету');
 }
-function scrPalletScan(){
+function scrPalletScan(err,hint){
   head('сканирование паллеты');
   $('m').innerHTML=`<div class="card"><div class="step">СКАНИРОВАНИЕ ПАЛЛЕТЫ</div>
-  <input id="pal" placeholder="Сканируй паллету (SSCC)"><input id="vol" placeholder="Объем, м3 (лимит 2.0)" inputmode="decimal">
+  ${err?`<div class="card red" style="margin:0 0 10px"><b>${esc(err)}</b></div>`:(hint?`<div class="mut" style="margin-bottom:10px">${esc(hint)}</div>`:'')}
+  <input id="pal" placeholder="Сканируй паллету (SSCC)" autocomplete="off"><input id="vol" placeholder="Объем, м3 (лимит 2.0)" inputmode="decimal">
   <button id="go">Проверить паллету</button>
-  <div class="mut">Проверки: нет другой отгрузки · не в зоне сортировки · объем не превышает.</div></div>`;
-  $('go').onclick=()=>{
-    const p=$('pal').value.trim();if(!p){toast('Отсканируй паллету');return}
-    if(/^SORT/i.test(p)){toast('Уведомление: паллета находится в зоне сортировки');return}
-    const v=+$('vol').value||0;
-    if(v>2.0){toast('Уведомление: паллета превышает допустимый объем');return}
-    if(myCell()&&myCell()!==p){toast('Уведомление: в ячейке пользователя есть паллет для другой отгрузки');return}
-    PALLET=p;setMyCell(p);go('palletchecks',scrPalletChecks);
-  };
-}
-function scrPalletChecks(){
-  head('проверки паллеты '+PALLET);
-  $('m').innerHTML=`<div class="card"><div class="step">ПАЛЛЕТА ${PALLET} · ПРОВЕРКИ</div><h2>Подтверди проверки</h2>
-  <div class="mut">1. На паллете нет другой отгрузки · 2. Паллета не в зоне сортировки · 3. Объем не превышает</div>
-  <div class="row2"><button class="green" id="y">Да, всё верно</button><button class="red" id="n">Нет, проблема</button></div></div>`;
-  $('y').onclick=()=>go('afterline',scrAfterLine);
-  $('n').onclick=()=>{
-    const w=$('m');
-    $('m').innerHTML=`<div class="card red"><div class="step">ПАЛЛЕТА ${PALLET}</div><h2>Какая проблема?</h2>
-    <button class="amber" id="o">На паллете другая отгрузка</button>
-    <button class="amber" id="s">Паллета в зоне сортировки</button>
-    <button class="amber" id="v">Превышен объем</button>
-    <button class="ghost" id="bk">Назад</button></div>`;
-    $('o').onclick=()=>toast('Уведомление: отсканированная паллета принадлежит другой отгрузке');
-    $('s').onclick=()=>toast('Уведомление: отсканированная паллета находится в зоне сортировки');
-    $('v').onclick=()=>toast('Уведомление: отсканированная паллета превышает допустимый объем');
-    $('bk').onclick=scrPalletChecks;
+  <div class="mut">Проверки выполняет система: нет другой отгрузки · не в зоне сортировки · объем не превышает.</div></div>`;
+  const e=$('pal');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();$('go').click()}};
+  $('go').onclick=async()=>{
+    const p=e.value.trim();if(!p){toast('Отсканируй паллету');return}
+    const v=$('vol').value!==''?+$('vol').value:null;
+    const isPick=!!DOC._pick;
+    const body=isPick?{task_id:DOC.id,pallet:p,volume:v,user_id:uid()}:{shipment_id:DOC.id,pallet:p,volume:v,user_id:uid()};
+    const {j}=isPick?await postPick('pallet_check',body):await post('pallet_check',body);
+    if(j.error){scrPalletScan(j.error||'Паллета не подходит');return}
+    PALLET=j.pallet;setMyCell(j.pallet);
+    go('afterline',scrAfterLine);
   };
 }
 async function scrAfterLine(){
@@ -383,13 +502,17 @@ async function scrAfterLine(){
   const {s,j}=isPick
     ? await postPick('confirm',{task_id:DOC.id,sku:it.sku,qty:it._q,cell:it.cell,pallet:PALLET,user_id:uid()})
     : await post('confirm',{shipment_id:DOC.id,sku:it.sku,qty:it._q,cell:it.cell,pallet:PALLET,user_id:uid()});
-  if(j.error){toast('Ошибка: '+j.error+(j.need!=null?(' · к отбору '+j.need):''));go('qty',scrQty);return}
-  $('m').innerHTML=`<div class="card green"><div class="step">СТРОКА ГОТОВА · ${it.sku} × ${it._q} → ${PALLET}</div>
-  <h2>Список задания не окончен?</h2><div class="row2"><button id="y">Да — след. строка</button><button class="green" id="n">Нет — к воротам</button></div></div>`;
+  if(j.error){toast('Ошибка: '+j.error+(j.need!=null?(' · к отбору '+j.need):''),4500);
+    if(j.need_assembly){showBlock(j,scrDoc);return}
+    go('qty',scrQty);return}
+  $('m').innerHTML=`<div class="card green"><div class="step">СТРОКА ГОТОВА · ${it.sku} × ${it._q} → ${PALLET||'—'}</div>
+  <h2>Товар в промежуточной ячейке: ${esc(vcell())}</h2>
+  <div class="mut">Список задания не окончен? Товар остаётся в виртуальной ячейке, пока не отправлен на ворота сортировки.</div>
+  <div class="row2"><button id="y">Да — след. строка</button><button class="green" id="n">Нет — к воротам</button></div></div>`;
   $('y').onclick=async()=>{
     if(isPick){
       const st=await (await apiPick('?action=task&id='+DOC.id)).json();
-      ITEMS=(st.items||[]).map(x=>({sku:x.sku,code:x.code,name:x.name,unit:x.unit,plan_qty:x.plan_qty,fact_qty:x.fact_qty,need:Math.max(0,(+x.plan_qty||0)-(+x.fact_qty||0)),cell:x.cell_from||x.cell||''})).filter(x=>x.need>1e-9);
+      ITEMS=(st.items||[]).map(x=>({sku:x.sku,code:x.code,name:x.name,unit:x.unit,plan_qty:x.plan_qty,fact_qty:x.fact_qty,need:Math.max(0,(+x.plan_qty||0)-(+x.fact_qty||0)),cell:x.cell_from||x.cell||'',barcodes:x.barcodes||[]})).filter(x=>x.need>1e-9);
     }else{
       const st=await (await api('?action=task&id='+DOC.id)).json();
       ITEMS=(st.items||[]).filter(i=>(+i.plan_qty||0)-(+i.fact_qty||0)>1e-9);
@@ -398,39 +521,91 @@ async function scrAfterLine(){
   };
   $('n').onclick=()=>go('gate',scrGate);
 }
-// ---------- Ворота: скан ячейки отгрузки + контроль переноса в сортировку ----------
-function scrGate(){
-  head('ворота · '+DOC.doc_no);
-  const h=DOC;
-  $('m').innerHTML=`<div class="card"><div class="step">ВОРОТА · ПЕРЕНОС В СОРТИРОВКУ</div>
-  <h2>${h.consignee||''} · № ${h.doc_no} · ворота ${h.gate||'—'}</h2>
-  <div class="mut">Отнеси паллет ${PALLET||'—'} в ворота. Сканируй ячейку отгрузки.</div>
-  <input id="cell" placeholder="Сканируй ячейку отгрузки"><button id="go">Подтвердить</button></div>`;
+// ---------- Отправка паллеты на ворота сортировки ----------
+// Ворота отгрузки (shipments.gate / gates_extra) — источник истины:
+// можно выбрать только те ворота, что указаны в отгрузке.
+async function scrGate(){
+  const h=DOC||{};
+  const isPick=!!h._pick;
+  head('отправка на ворота сортировки · '+(h.doc_no||''));
+  $('m').innerHTML=`<div class="card"><div class="step">ОТПРАВКА ПАЛЛЕТЫ НА ВОРОТА СОРТИРОВКИ</div>
+    <h2>№ ${esc(h.doc_no||'')} · ${esc(h.consignee||'')}</h2>
+    <div class="mut">Отгрузка: ${esc(h.shipment_doc_no||'—')} · промежуточная ячейка: ${esc(vcell())}</div>
+    <div class="mut">Загружаю ворота отгрузки…</div></div>`;
+  let g={gates:[],has_gates:false};
+  try{
+    const r=isPick?await apiPick('?action=gate_info&task_id='+h.id):await api('?action=gate_info&shipment_id='+h.id);
+    const j=await r.json();
+    if(j&&!j.error)g=j;
+  }catch(e){}
+  const gates=g.gates||[];
+  if(!GATE_PICK||gates.indexOf(GATE_PICK)<0)GATE_PICK=gates[0]||'';
+  const cur=GATE_PICK;
+  $('m').innerHTML=`<div class="card"><div class="step">ОТПРАВКА ПАЛЛЕТЫ НА ВОРОТА СОРТИРОВКИ</div>
+    <h2>№ ${esc(h.doc_no||'')} · ${esc(h.consignee||'')}</h2>
+    <div class="mut">Отгрузка: ${esc(h.shipment_doc_no||'—')} · товар в промежуточной ячейке: ${esc(vcell())}</div>
+    <input id="sscc" placeholder="Сканируй SSCC паллеты" value="${esc(PALLET||myCell()||'')}" autocomplete="off" inputmode="none">
+    <div class="mut" style="margin-top:12px"><b>Ворота отгрузки (источник истины):</b></div>
+    ${gates.length
+      ? `<div id="chips" style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0">${gates.map(x=>`<button type="button" class="small chip${x===cur?'':' ghost'}" data-g="${esc(x)}" style="width:auto;margin:0">${esc(x)}</button>`).join('')}</div>`
+      : `<div class="card amber" style="margin:8px 0"><b>В отгрузке ворота не указаны</b><div class="mut">Укажи ворота вручную — система не сможет проверить их по отгрузке.</div></div>
+         <input id="gatein" placeholder="Введи номер ворот" inputmode="numeric">`}
+    <div class="mut">Подсказка: ворота отгрузки — источник истины. Ворота, которых нет в отгрузке, система не пропустит («Ворота X не указаны в отгрузке …»).</div>
+    <button id="go" class="green">Отправить на ворота</button>
+    <button class="ghost" id="bk">Назад</button></div>`;
+  document.querySelectorAll('.chip').forEach(el=>el.onclick=()=>{
+    GATE_PICK=el.dataset.g;
+    document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('ghost',x.dataset.g!==GATE_PICK));
+  });
+  $('bk').onclick=()=>back();
   $('go').onclick=async()=>{
-    const v=$('cell').value.trim();
-    const exp='ВОРОТА-'+(h.gate||'');
-    if(!h._pick&&v!==exp&&v!=='ЗОНА-СОРТИРОВКИ'){toast('Уведомление: отсканирована неверная ячейка сортировки');return}
-    const moved=confirm('Паллета '+PALLET+' физически перенесена в зону сортировки? OK=Да / Отмена=Нет (системная ошибка)');
-    const {j}=h._pick
-      ? await postPick('move_to_sort',{task_id:h.id,pallet:PALLET||myCell()||'—',gate_cell:'ЗОНА-СОРТИРОВКИ',user_id:uid(),moved_ok:moved?1:0})
-      : await post('move_to_sort',{shipment_id:h.id,pallet:PALLET||myCell()||'—',gate_cell:'ЗОНА-СОРТИРОВКИ',user_id:uid(),moved_ok:moved?1:0});
+    const ss=($('sscc').value||'').trim();
+    if(!ss){toast('Отсканируй SSCC паллеты');return}
+    const gi=$('gatein');
+    const gate=gi?((gi.value||'').trim()):GATE_PICK;
+    if(!gate){toast('Укажи ворота сортировки');return}
+    if(!confirm('Паллета '+ss+' физически перенесена на ворота '+gate+'? OK=Да / Отмена=Нет (системная ошибка)')){
+      const body0={pallet:ss,gate:gate,gate_cell:'ВОРОТА-'+gate,user_id:uid(),user_fio:ufio(),moved_ok:0};
+      if(isPick)body0.task_id=h.id;else body0.shipment_id=h.id;
+      const {j:j0}=isPick?await postPick('move_to_sort',body0):await post('move_to_sort',body0);
+      const l=(j0&&j0.log)||{};
+      $('m').innerHTML=`<div class="card red"><div class="step">СИСТЕМНАЯ ОШИБКА</div>
+        <h2>Паллета не перенесена. Обратись к оператору</h2>
+        <div class="mut">Log: ячейка сортировки ${esc(l.cell||'')} · паллет ${esc(l.sku||ss)} · ${esc(ufio())} · ${esc(l.dt||'')} · уведомление в WMS отправлено</div>
+        <button class="ghost" id="go2">В меню</button></div>`;
+      $('go2').onclick=()=>location.href='app.html';
+      return;
+    }
+    const body={pallet:ss,gate:gate,gate_cell:'ВОРОТА-'+gate,user_id:uid(),user_fio:ufio(),moved_ok:1};
+    if(isPick)body.task_id=h.id;else body.shipment_id=h.id;
+    const {s,j}=isPick?await postPick('move_to_sort',body):await post('move_to_sort',body);
+    if(j.error){toast('Ошибка: '+j.error,5000);return}
     if(j.ok===false){
       const l=j.log||{};
       $('m').innerHTML=`<div class="card red"><div class="step">СИСТЕМНАЯ ОШИБКА</div>
-      <h2>Паллета не перенесена. Обратись к оператору</h2>
-      <div class="mut">Log: ячейка сортировки ${l.cell||''} · паллет ${l.sku||''} · ${ufio()} · ячейка сотрудника ${myCell()||'—'} · ${l.dt||''} · уведомление в WMS отправлено</div>
-      <button class="ghost" id="go2">В меню</button></div>`;
-      $('go2').onclick=()=>location.href='app.html';return;
+        <h2>Паллета не перенесена. Обратись к оператору</h2>
+        <div class="mut">Log: ячейка сортировки ${esc(l.cell||'')} · паллет ${esc(l.sku||ss)} · ${esc(ufio())} · ${esc(l.dt||'')} · уведомление в WMS отправлено</div>
+        <button class="ghost" id="go2">В меню</button></div>`;
+      $('go2').onclick=()=>location.href='app.html';
+      return;
     }
-    setMyCell('');
-    $('m').innerHTML=`<div class="card green"><div class="step">СОРТИРОВКА OK</div>
-    <h2>Уведомление: паллета ${PALLET} перенесена в зону сортировки. Продолжить отбор?</h2>
+    // Волна: остальные отгрузки волны — на те же ворота.
+    if(WAVE&&Array.isArray(WAVE.details)&&WAVE.details.length>1){
+      for(let i=1;i<WAVE.details.length;i++){
+        const d=WAVE.details[i].head;
+        await post('move_to_sort',{shipment_id:d.id,pallet:ss,gate:gate,gate_cell:'ВОРОТА-'+gate,user_id:uid(),user_fio:ufio(),moved_ok:1});
+      }
+    }
+    setMyCell('');GATE_PICK='';
+    $('m').innerHTML=`<div class="card green"><div class="step">ПАЛЛЕТА НА ВОРОТАХ</div>
+    <h2>Паллета ${esc(ss)} отправлена на ворота ${esc(gate)}</h2>
+    <div class="mut">Товар ждёт сборки на сборочной паллете (сканируется SSCC на экране сортировки). До сборки следующий отбор запрещён.</div>
     <div class="row2"><button id="y">Да, продолжить</button><button class="ghost" id="n">Нет, в меню</button></div></div>`;
-    $('y').onclick=()=>go('tasks',scrTasks);$('n').onclick=()=>location.href='app.html';
+    $('y').onclick=()=>go('mode',scrMode);$('n').onclick=()=>location.href='app.html';
   };
 }
-// Роль уже выбрана в меню (или известна из входа) — сразу к заданиям; экран выбора только если роль неизвестна.
-if(ROLE){go('tasks',scrTasks)}else{go('role',scrRole)}
+// Роль уже выбрана в меню (или известна из входа) — сразу к режимам отбора; экран выбора роли — если роль неизвестна.
+if(ROLE){go('mode',scrMode)}else{go('role',scrRole)}
 </script>
 </body>
 </html>

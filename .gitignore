@@ -25,3 +25,19 @@ Thumbs.db
 
 # PHP sessions / cache
 /tmp/
+
+# Secrets / runtime
+.env
+shared/robot_settings.json
+shared/.robot.lock
+
+# Robot exchange reports
+in/success/*
+in/error/*
+out/success/*
+out/error/*
+!in/success/.gitkeep
+!in/error/.gitkeep
+!out/success/.gitkeep
+!out/error/.gitkeep
+

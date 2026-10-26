@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/ReceiptStatus.php';
 require_once __DIR__ . '/ReceiptFilter.php';
+require_once __DIR__ . '/../shared/pg.php';
+require_once __DIR__ . '/../shared/Volume.php';
 
 // Репозиторий реестра поступлений. Чистый PHP + PDO, переносится в Laravel Eloquent.
 // Алгоритм списка по макету:
@@ -31,11 +33,25 @@ final class ReceiptRepository
         $total = (int)$cnt->fetchColumn();
 
         $offset = ($f->page - 1) * $f->perPage;
+        // Сортировка по любому столбцу реестра (А→Я / Я→А).
         $sortMap = [
-            'doc_date' => 'r.doc_date', 'doc_no' => 'r.doc_no',
-            'total_with_vat' => 'r.total_with_vat', 'id' => 'r.id',
+            'doc_date' => ['r.doc_date', 'd'], 'doc_no' => ['r.doc_no', 't'],
+            'total_with_vat' => ['r.total_with_vat', 'n'], 'id' => ['r.id', 'n'],
+            'external_no' => ['r.external_no', 't'], 'arrival_date' => ['r.arrival_date', 'd'],
+            'accept_date' => ['r.accept_date', 'd'], 'place_date' => ['r.place_date', 'd'],
+            'supplier' => ['sup.name', 't'], 'vehicle' => ['r.vehicle', 't'],
+            'gate' => ['r.gate', 't'], 'unload_type' => ['r.unload_type', 't'],
+            'warehouse' => ['w.name', 't'], 'status' => ['r.status', 't'],
+            // Сортируем по той же колонке, что показана в гриде («Сумма, ₽» = r.total).
+            // Раньше здесь стояло r.total_with_vat — клик по заголовку сортировал
+            // по ДРУГОМУ числу, чем то, которое видно в строке.
+            'total' => ['r.total', 'n'], 'sku_count' => ['r.sku_count', 'n'],
+            'qty_total' => ['r.qty_total', 'n'], 'accepted_qty' => ['r.accepted_qty', 'n'],
+            'accepted_pct' => ['r.accepted_pct', 'n'], 'placed_pct' => ['r.placed_pct', 'n'],
+            'deviation' => ['(r.excess_qty - r.shortage_qty)', 'n'],
+            'flags' => ['(r.serial_scan + r.marking_scan)', 'n'],
         ];
-        $orderBy = ($sortMap[$f->sort] ?? 'r.doc_date') . ' ' . $f->dir;
+        $orderBy = wms_order_by($this->pdo, $f->sort, $f->dir, $sortMap, 'r.doc_date', 'd');
 
         // Колонки реестра по макету: № документа, № внешний, Дата прибытия/приемки,
         // Поставщик, Склад, ТС, Ворота, Тип разгрузки, Статус приемки, Сумма, SKU, шт.,
@@ -49,6 +65,7 @@ final class ReceiptRepository
                        r.total, r.total_with_vat, r.sku_count, r.qty_total, r.items_count,
                        r.accepted_qty, r.accepted_pct, r.placed_pct, r.priority, r.has_diff,
                        r.serial_scan, r.marking_scan, r.volume, r.cargo_places_plan,
+                       r.excess_qty, r.shortage_qty, r.comment, r.deviation_qty,
                        u.fio AS created_by_name
                 FROM receipts r
                 LEFT JOIN contractors sup ON sup.id = r.supplier_id
@@ -64,11 +81,61 @@ final class ReceiptRepository
         $st->bindValue(':off', $offset, PDO::PARAM_INT);
         $st->execute();
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        $this->attachVolumes($rows);
 
         $from = $total === 0 ? 0 : $offset + 1;
         $to = min($offset + $f->perPage, $total);
         return ['rows' => $rows, 'total' => $total, 'from' => $from, 'to' => $to,
                 'active_filters' => $f->activeCount()];
+    }
+
+    /**
+     * Объём по документу (м³): план — по количеству в receipt_items,
+     * факт — по фактически принятому количеству (receipt_operations «Принято»).
+     * Единичный объём = Д × Ш × В товара (без паллеты).
+     */
+    private function attachVolumes(array &$rows): void
+    {
+        if (!$rows) {
+            return;
+        }
+        $ids = array_values(array_filter(array_map(static fn($r): int => (int)($r['id'] ?? 0), $rows)));
+        if (!$ids) {
+            return;
+        }
+        $in = implode(',', array_map('intval', $ids));
+        $plan = [];
+        $fact = [];
+        $skus = [];
+        try {
+            foreach ($this->pdo->query(
+                "SELECT receipt_id, sku, COALESCE(SUM(qty),0) AS q
+                 FROM receipt_items WHERE receipt_id IN ($in) GROUP BY receipt_id, sku"
+            ) as $r) {
+                $rid = (int)$r['receipt_id'];
+                $sku = (string)$r['sku'];
+                $plan[$rid][$sku] = (float)$r['q'];
+                $skus[$sku] = true;
+            }
+            foreach ($this->pdo->query(
+                "SELECT receipt_id, sku, COALESCE(SUM(qty),0) AS q
+                 FROM receipt_operations WHERE receipt_id IN ($in) AND accept_status='Принято'
+                 GROUP BY receipt_id, sku"
+            ) as $r) {
+                $rid = (int)$r['receipt_id'];
+                $sku = (string)$r['sku'];
+                $fact[$rid][$sku] = (float)$r['q'];
+                $skus[$sku] = true;
+            }
+        } catch (Throwable) {
+        }
+        $unit = wms_volume_unit_map(array_keys($skus));
+        foreach ($rows as &$row) {
+            $rid = (int)($row['id'] ?? 0);
+            $row['volume'] = wms_volume_sum($plan[$rid] ?? [], $unit);
+            $row['volume_fact'] = wms_volume_sum($fact[$rid] ?? [], $unit);
+        }
+        unset($row);
     }
 
     public function findById(int $id): ?array
@@ -151,14 +218,15 @@ final class ReceiptRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // Вкладка "Оприходования": № паллеты, артикул, наименование, кол-во со знаком.
+    // Вкладка "Оприходования": дата изменения, № паллеты, артикул, наименование, кол-во со знаком.
     // Знак: accept_status='Принято' -> плюс, иначе (Брак/Отменено/...) -> минус.
     // Наименование тянем из receipt_items (первое совпадение по sku).
+    // Дата изменения = accept_date операции приемки.
     public function stockin(int $receiptId): array
     {
         try {
             $st = $this->pdo->prepare(
-                "SELECT o.pallet, o.sku, o.qty, o.accept_status,
+                "SELECT o.pallet, o.sku, o.qty, o.accept_status, o.accept_date AS changed_at,
                         (SELECT i.name FROM receipt_items i
                           WHERE i.receipt_id = o.receipt_id AND i.sku = o.sku LIMIT 1) AS name,
                         (SELECT p.status FROM tsd_pallets p
@@ -187,6 +255,7 @@ final class ReceiptRepository
                 || in_array($pStatRaw, ['Отменена', 'Отменено', 'ОТМЕНЕНА', 'ОТМЕНЕНО'], true);
             $accepted = ((string)($r['accept_status'] ?? '') === 'Принято') && !$isPalletCancelled;
             $out[] = [
+                'changed_at' => (string)($r['changed_at'] ?? ''),
                 'pallet' => ($r['pallet'] ?? '') !== '' ? $r['pallet'] : null,
                 'sku' => (string)($r['sku'] ?? ''),
                 'name' => (string)($r['name'] ?? ''),
@@ -276,12 +345,14 @@ final class ReceiptRepository
         } elseif ($f->hasDiff === 'no') {
             $w[] = 'r.has_diff = 0';
         }
+        // Фильтр «Сумма» — по той же колонке, что показана в гриде (r.total).
+        // Раньше фильтровалось по r.total_with_vat — другое число, чем видит оператор.
         if ($f->sumFrom !== null) {
-            $w[] = 'r.total_with_vat >= :sf';
+            $w[] = 'r.total >= :sf';
             $p[':sf'] = $f->sumFrom;
         }
         if ($f->sumTo !== null) {
-            $w[] = 'r.total_with_vat <= :st2';
+            $w[] = 'r.total <= :st2';
             $p[':st2'] = $f->sumTo;
         }
         if ($f->skuFrom !== null) {

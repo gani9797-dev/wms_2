@@ -11,23 +11,614 @@ aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14
 aside .logo{font-size:22px;font-weight:700;margin:6px 0 22px}
 aside a{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
 aside a.on{background:var(--vio);color:#fff}
-main{flex:1;padding:18px 22px;max-width:1100px}
-.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px}
-code{background:#F4F0FB;padding:2px 6px;border-radius:6px}
+main{flex:1;padding:18px 22px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:4px 0;font-size:24px}
+.user{display:flex;gap:10px;align-items:center;font-size:14px}
+.ava{width:36px;height:36px;border-radius:50%;background:#CBD5E0;color:#4A5568;display:flex;align-items:center;justify-content:center;font-weight:700}
+.bar{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap}
+.bar input[type=text]{width:400px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:14px;position:relative}
+.btn.pri{background:var(--vio);color:#fff;border-color:var(--vio);font-weight:700}
+.btn.sm{padding:6px 10px;font-size:13px;border-radius:8px}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px;color:#2C313C;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+tr.sel{background:#F8F6FC}tr:hover td{background:#fafaff}
+a.num{color:var(--vio);font-weight:700;text-decoration:none;cursor:pointer}
+.st{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap}
+.st-active{background:#C6F6D5;color:#276749}
+.st-blocked{background:#FED7D7;color:#C53030}
+.st-fired{background:#E6E6E6;color:#666}
+.pager{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;color:var(--mut);font-size:13px}
+.pg button{border:1px solid var(--line);background:#fff;border-radius:8px;min-width:34px;padding:6px 8px;margin:0 2px;cursor:pointer}
+.pg button.on{background:var(--vio);color:#fff;border-color:var(--vio)}
+.fpanel{position:fixed;top:0;right:-560px;width:520px;max-width:96vw;height:100vh;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.15);transition:right .25s;padding:18px;overflow:auto;z-index:50}
+.fpanel.open{right:0}.fpanel label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:12px 0 4px}
+.fpanel input,.fpanel select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px}
+.frow{display:flex;gap:8px}.frow>*{flex:1}
+.fgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px}
+.chk{font-weight:400 !important;display:flex !important;align-items:center;gap:6px;margin:4px 0 !important}
+.chk input{width:auto !important}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.chip{background:#F4F0FB;color:#663EB2;border-radius:12px;padding:5px 10px;font-size:12px}
+.chip a{color:#663EB2;text-decoration:none;margin-left:4px}
+.ctx{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:99;min-width:280px;padding:6px 0;font-size:14px}
+.ctx div{padding:9px 18px;cursor:pointer}.ctx div:hover{background:#F4F2FF}.ctx hr{border:0;border-top:1px solid #F0F0F0}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:60}
+.modal.open{display:flex}
+.mbox{background:#fff;border-radius:12px;padding:20px;width:460px;max-width:94vw;max-height:92vh;overflow:auto}
+.mbox.wide{width:940px;max-width:96vw}
+.mbox h3{margin:0 0 4px;font-size:19px}
+.mbox label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:10px 0 4px}
+.mbox input,.mbox select,.mbox textarea{width:100%;padding:9px;margin:6px 0;border:1px solid var(--line);border-radius:8px}
+.mbox input.bad,.mbox select.bad{border-color:#E53E3E;background:#FFF5F5}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 14px}
+.tabs{display:flex;gap:18px;border-bottom:2px solid #EDE9FE;margin:10px 0 12px;font-size:14px;flex-wrap:wrap}
+.tabs span{padding-bottom:8px;cursor:pointer;color:#999}
+.tabs span.on{color:var(--vio);font-weight:700;border-bottom:3px solid var(--vio)}
+.rowset{display:flex;gap:16px;flex-wrap:wrap}
+.fset{flex:1;min-width:240px}
+.fset label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:10px 0 4px}
+.fset input,.fset select{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;margin:0}
+.req{color:#ff0000}
+.hint{font-size:12px;color:var(--mut)}
+.flag{display:inline-block;width:15px;height:15px;border-radius:3px;border:2px solid #E6E6E6;background:#fff;vertical-align:middle}
+.flag.on{background:#808080;border-color:#808080}
+.flag.red{border-color:#FF0000}
+.flag.grn{border-color:#38A169;background:#38A169}
+.pavatar{width:26px;height:26px;border-radius:50%;background:#CBD5E0;color:#4A5568;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.accrow{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #F0F0F0;font-size:13px}
+.accrow .nm{flex:1}
+.accrow select{width:150px;padding:5px;border:1px solid var(--line);border-radius:8px}
+.accrow .x{cursor:pointer;color:#663EB2;font-size:16px;width:22px;text-align:center}
+.mini{width:100%;border-collapse:collapse;font-size:12px}
+.mini td,.mini th{border-bottom:1px solid #F0F0F0;padding:7px;white-space:nowrap}
+.mini th{color:#6B7280;font-weight:700;text-align:left}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:99;max-width:90vw}
+.mfoot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.sec{font-size:13px;color:#4A4A4A;font-weight:700;margin:14px 0 4px}
+.linkish{color:var(--vio);cursor:pointer}
+#bcprev{border:1px dashed #CBD5E0;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#F7FAFC;overflow:hidden}
+</style>
+<style>
+#navhidebtn{width:100%;background:#2A3446;color:#8A92A6;border:0;border-radius:8px;padding:8px;cursor:pointer;font-size:13px;margin-bottom:10px}
+#navhidebtn:hover{background:#3A4658;color:#fff}
+#navshowbtn{position:fixed;top:12px;left:8px;z-index:200;display:none;background:#1C2331;color:#fff;border:1px solid #444;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:14px}
+body.navhide aside{display:none}
+body.navhide #navshowbtn{display:block}
+body.navhide main{max-width:none}
 </style>
 <style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
 <body>
-<aside><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp open" data-grp="10"><div class="par"><a class="mi on" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<button id="navshowbtn" title="Показать меню">▶</button>
+<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp open" data-grp="10"><div class="par"><a class="mi on" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
 <main>
-<h1>10 Сотрудники</h1>
-<div class="card">
-<p>Модуль в разработке. Структура БД — см. <code>schema.sql</code> в этой папке.</p>
-<ul>
-<li>Номер по схеме «Список модулей ИТОГО»: <b>10</b></li>
-<li>Папка: <code>10-sotrudniki/</code></li>
-<li>Таблицы: <code>10-sotrudniki/schema.sql</code></li>
-</ul>
+<div class="top"><h1>Сотрудники</h1><div class="user"><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span><span style="color:var(--mut)">▼</span></div></div>
+<div class="bar">
+<input id="q" type="text" placeholder="🔍 Поиск по ФИО, ID, должности ...">
+<button class="btn" id="fbtn">Фильтры (<span id="fbadge">0</span>)</button>
+<button class="btn" id="exp">Экспорт</button>
+<button class="btn pri" id="mk">+ Создать</button>
+</div>
+<div class="chips" id="chips"></div>
+<div class="card" style="overflow:auto">
+<table data-sort-mode="server"><thead><tr>
+<th><input type="checkbox" id="chall"></th>
+<th data-col="id" data-sort="id">ID_user</th>
+<th data-col="fio" data-sort="fio">ФИО</th>
+<th data-col="position" data-sort="position">Должность</th>
+<th data-col="code" data-sort="code">Код</th>
+<th data-col="shift" data-sort="shift">Смена</th>
+<th data-col="pattern">График</th>
+<th data-col="worktime">Рабочее время</th>
+<th data-col="start">Начало</th>
+<th data-col="end">Конец</th>
+<th data-col="worked">Отработано</th>
+<th data-col="onshift">Работает</th>
+<th data-col="unplanned">Внеплановый выход</th>
+<th data-col="blocked">Заблокирован</th>
+<th data-col="tsd">ТСД</th>
+<th data-col="photo">Фото</th>
+<th></th>
+</tr></thead>
+<tbody id="rows"><tr><td colspan="17">Загрузка...</td></tr></tbody></table>
+<div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
+<select id="pp"><option>16</option><option selected>24</option><option>50</option><option>100</option></select></div>
+<div class="pg" id="pg"></div></div>
 </div>
 </main>
-<script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>
+
+<!-- Панель фильтров -->
+<div class="fpanel" id="fp">
+<div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0;font-size:20px">Фильтры</h2><span class="linkish" id="fclose">✕</span></div>
+<label>Дата создания</label>
+<div class="frow"><input type="date" id="f_cf"><input type="date" id="f_ct"></div>
+<label>Дата редактирования</label>
+<div class="frow"><input type="date" id="f_uf"><input type="date" id="f_ut"></div>
+<div class="fgrid">
+<div><label>Отдел</label><select id="f_dep"><option value="">Все отделы</option></select></div>
+<div><label>Должность</label><select id="f_pos"><option value="">Все должности</option></select></div>
+<div><label>Склад</label><select id="f_wh"><option value="">Все склады</option></select></div>
+</div>
+<label>Статус</label>
+<select id="f_status"><option value="">Все статусы</option><option value="active">Активный</option><option value="blocked">Заблокирован</option><option value="fired">Уволен</option></select>
+<div class="fgrid">
+<div><label>Был на смене (с)</label><input type="date" id="f_sf"><label>по</label><input type="date" id="f_st"></div>
+<div><label>Дата приема (с)</label><input type="date" id="f_hf"><label>по</label><input type="date" id="f_ht"></div>
+<div><label>Стаж в компании, мес.</label><input type="number" min="0" id="f_ef" placeholder="от"><label>по</label><input type="number" min="0" id="f_et" placeholder="до"></div>
+</div>
+<label>График работ</label>
+<div class="frow"><input type="date" id="f_gf"><input type="date" id="f_gt"></div>
+<div style="margin-top:14px">
+<label class="chk"><input type="checkbox" id="fg_shift"> На смене</label>
+<label class="chk"><input type="checkbox" id="fg_block"> Заблокирован</label>
+<label class="chk"><input type="checkbox" id="fg_unpl"> Внеплановый выход</label>
+</div>
+<div class="mfoot">
+<button class="btn sm" id="fclr">Сбросить фильтры</button>
+<button class="btn sm pri" id="fok">Применить</button>
+<button class="btn sm" id="fcancel">Отмена</button>
+</div>
+</div>
+
+<!-- Карточка сотрудника -->
+<div class="modal" id="card"><div class="mbox wide">
+<div style="display:flex;justify-content:space-between;align-items:flex-start">
+<div><h3 id="ctitle">Сотрудник</h3><div class="hint" id="csub"></div></div>
+<span class="linkish" id="cclose" style="font-size:20px">✕</span>
+</div>
+<div class="tabs" id="ctabs">
+<span class="on" data-tab="main">Общие данные</span>
+<span data-tab="sched">График</span>
+<span data-tab="access">Права и роли</span>
+<span data-tab="exits">История выходов</span>
+<span data-tab="hist">История изменений</span>
+</div>
+<div id="tabmain">
+<div class="rowset">
+<div class="fset"><label>Роль <span class="req">*</span></label><select id="c_role"></select></div>
+<div class="fset"><label>Зона</label><select id="c_zone"></select></div>
+</div>
+<div class="rowset" style="margin-top:6px">
+<div class="fset"><label>Доступ в WMS</label><div id="c_wms" class="linkish" style="padding:9px;border:1px solid var(--line);border-radius:8px">Выбрать . . . ▾</div></div>
+<div class="fset"><label>Доступ в ТСД</label><div id="c_tsd" class="linkish" style="padding:9px;border:1px solid var(--line);border-radius:8px">Выбрать . . . ▾</div></div>
+</div>
+<div class="rowset" style="margin-top:6px">
+<div class="fset"><label>Стаж в компании</label><div id="c_exp" style="padding:9px 0;font-size:14px">—</div></div>
+<div class="fset"><label>Статус</label><div id="c_status" style="padding:9px 0;font-size:14px">—</div></div>
+</div>
+<div class="hint" style="margin-top:12px">Права и роли настраиваются на вкладке «Права и роли».</div>
+</div>
+<div id="tabsched" style="display:none">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+<b>Список графиков</b><button class="btn sm pri" id="schadd">+ Добавить</button>
+</div>
+<div style="overflow:auto"><table class="mini"><thead><tr><th>Начало графика</th><th>Конец графика</th><th>График</th><th>Смена</th><th>Начало смены</th><th>Конец смены</th><th></th></tr></thead>
+<tbody id="schrows"><tr><td colspan="7">Загрузка...</td></tr></tbody></table></div>
+<div class="hint" style="margin-top:8px">ПКМ по строке — удалить график.</div>
+</div>
+<div id="tabaccess" style="display:none">
+<div class="hint" id="accrole" style="margin-bottom:10px"></div>
+<div class="sec">Доступ в WMS — права роли</div>
+<div id="accwms"></div>
+<div class="sec" style="margin-top:16px">Доступ в ТСД</div>
+<div id="acctsd"></div>
+<div class="sec" style="margin-top:16px">Добавить по аналогии с пользователем</div>
+<div style="display:flex;gap:8px;align-items:center">
+<select id="accuser" style="flex:1"></select>
+<button class="btn sm" id="acccopy">Применить</button>
+</div>
+<div class="mfoot"><button class="btn sm pri" id="accsave">Сохранить права</button></div>
+</div>
+<div id="tabexits" style="display:none">
+<div class="sec">История выходов (СКУД)</div>
+<div style="overflow:auto"><table class="mini"><thead><tr><th>Дата</th><th>СКУД</th><th>Направление</th></tr></thead>
+<tbody id="exitrows"><tr><td colspan="3">Загрузка...</td></tr></tbody></table></div>
+</div>
+<div id="tabhist" style="display:none">
+<div class="sec">История изменений</div>
+<div style="overflow:auto"><table class="mini"><thead><tr><th>Дата</th><th>Пользователь</th><th>Что изменилось</th><th>Было</th><th>Стало</th></tr></thead>
+<tbody id="histrows"><tr><td colspan="5">Загрузка...</td></tr></tbody></table></div>
+</div>
+</div></div>
+
+<!-- Форма создания / редактирования -->
+<div class="modal" id="frm"><div class="mbox wide">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<h3 id="ftitle">Создать нового сотрудника</h3><span class="linkish" id="frmclose" style="font-size:20px">✕</span></div>
+<div class="grid3">
+<div><label>Имя <span class="req">*</span></label><input id="i_first" autocomplete="off"></div>
+<div><label>Фамилия <span class="req">*</span></label><input id="i_last" autocomplete="off"></div>
+<div><label>Отчество <span class="req">*</span></label><input id="i_mid" autocomplete="off" list="dl_mid"><datalist id="dl_mid"></datalist></div>
+</div>
+<div class="grid3">
+<div><label>Табельный номер <span class="req">*</span></label><input id="i_pers" autocomplete="off"></div>
+<div><label>Дата рождения <span class="req">*</span></label><input type="date" id="i_birth"></div>
+<div><label>Дата приема <span class="req">*</span></label><input type="date" id="i_hired"></div>
+</div>
+<div class="grid3">
+<div><label>Отдел <span class="req">*</span></label><select id="i_dep"></select></div>
+<div><label>Должность <span class="req">*</span></label><select id="i_pos"></select></div>
+<div><label>Код</label><input id="i_code" autocomplete="off" placeholder="НС, К, У..."></div>
+</div>
+<div class="grid3">
+<div><label>Фото</label><input type="file" id="i_photo" accept="image/*"><div class="hint" id="i_photo_prev">Файл не выбран</div></div>
+<div><label>Телефон (внутренний) <span class="req">*</span></label><input id="i_phone_i" autocomplete="off"></div>
+<div><label>Мобильный телефон <span class="req">*</span></label><input id="i_phone_m" autocomplete="off"></div>
+</div>
+<div class="grid3">
+<div><label>Почта <span class="req">*</span></label><input id="i_email" autocomplete="off"></div>
+<div><label>Статус</label><select id="i_status"></select></div>
+<div><label>Склад <span class="req">*</span></label><select id="i_wh"></select></div>
+</div>
+<div class="mfoot">
+<button class="btn sm" id="frmcancel">Закрыть</button>
+<button class="btn sm" id="frmreset">Сбросить</button>
+<button class="btn sm pri" id="frmsave">Создать</button>
+</div>
+</div></div>
+
+<!-- График -->
+<div class="modal" id="sch"><div class="mbox">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<h3>Добавить новый график</h3><span class="linkish" id="schclose" style="font-size:20px">✕</span></div>
+<label>Смена <span class="req">*</span></label>
+<select id="s_shift"><option>1 смена</option><option>2 смена</option><option>3 смена</option><option>4 смена</option></select>
+<label>График <span class="req">*</span></label>
+<select id="s_pattern"><option>1/3</option><option>2/2</option><option>3/3</option><option>5/2</option><option>1/1</option></select>
+<label>Рабочее время <span class="req">*</span></label>
+<div class="frow"><input type="time" id="s_from" value="08:00"><input type="time" id="s_to" value="20:00"></div>
+<label>Начало графика <span class="req">*</span></label>
+<input type="date" id="s_df">
+<label>Конец графика <span class="req">*</span></label>
+<input type="date" id="s_dt">
+<div class="mfoot">
+<button class="btn sm" id="s_cancel">Отмена</button>
+<button class="btn sm pri" id="s_ok">Добавить</button>
+</div>
+</div></div>
+
+<!-- Печать личного ШК -->
+<div class="modal" id="bcmodal"><div class="mbox">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<h3>Печать личного ШК</h3><span class="linkish" id="bcclose" style="font-size:20px">✕</span></div>
+<div class="frow" style="margin-top:10px">
+<div><label>Ширина, мм</label><input type="number" id="bc_w" value="58"></div>
+<div><label>Высота, мм</label><input type="number" id="bc_h" value="40"></div>
+<div><label>Копий</label><input type="number" id="bc_n" value="1" min="1" max="999"></div>
+</div>
+<div style="margin:12px auto;width:260px" id="bcprev"></div>
+<div class="hint" id="bchint"></div>
+<div class="mfoot">
+<button class="btn sm" id="bc_html">Печать в браузере</button>
+<button class="btn sm pri" id="bc_zpl">Скачать ZPL</button>
+</div>
+</div></div>
+
+<div class="ctx" id="ctx">
+<div data-a="edit">Редактировать</div>
+<div data-a="view">Просмотр</div>
+<hr>
+<div data-a="block">Заблокировать</div>
+<div data-a="unblock">Разблокировать</div>
+<div data-a="tsd">Снять ТСД</div>
+<div data-a="unplanned">Разрешить внеплановый выход</div>
+<hr>
+<div data-a="print">Печать личного ШК</div>
+</div>
+<div id="toast"></div>
+
+<script src="../shared/sort.js"></script>
+<script>
+const API='demo_sqlite.php';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let page=1,perPage=24,lastRows=[],ctxId=null,curId=null,cardTab='main',cardData=null;
+let accessItems=[],accessModules={},accessLevels={},accessUsers=[];
+let def={departments:[],positions:[],warehouses:[],statuses:[],zones:[],roles:[]};
+const $=id=>document.getElementById(id);
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
+const dFmt=s=>{s=String(s||'');return s.length>=16?s.slice(0,16).replace('T',' '):s};
+const hm=s=>{s=String(s||'');const m=s.match(/^(\d{1,2}):(\d{2})/);return m?(m[1].padStart(2,'0')+':'+m[2]):''};
+function flagVal(id){const e=$(id);return e&&e.checked?'1':''}
+function initials(fio){const p=String(fio||'').trim().split(/\s+/);return((p[1]||'')[0]||'')+((p[0]||'')[0]||'')}
+function opts(sel,arr,cur,ph){const e=$(sel);if(!e)return;e.innerHTML=(ph!==undefined?`<option value="">${ph}</option>`:'')+arr.map(x=>{const v=typeof x==='object'?x.value:x,l=typeof x==='object'?x.label:x;return `<option value="${v}"${String(v)===String(cur??'')?' selected':''}>${l}</option>`}).join('')}
+
+/* ---------------- Параметры запроса ---------------- */
+function params(){const p=new URLSearchParams({action:'list',page,per_page:perPage});
+const v=(id,k)=>{const e=$(id);if(e&&e.value!==''&&e.value!==null)p.set(k,e.value)};
+if($('q').value)p.set('search',$('q').value.trim());
+v('f_cf','created_from');v('f_ct','created_to');v('f_uf','updated_from');v('f_ut','updated_to');
+v('f_dep','department');v('f_pos','position');v('f_wh','warehouse_id');v('f_status','status');
+v('f_sf','shift_from');v('f_st','shift_to');v('f_hf','hired_from');v('f_ht','hired_to');
+v('f_ef','experience_from');v('f_et','experience_to');
+v('f_gf','schedule_from');v('f_gt','schedule_to');
+[['fg_shift','on_shift'],['fg_block','is_blocked'],['fg_unpl','unplanned_exit']].forEach(([id,k])=>{const f=flagVal(id);if(f)p.set(k,f)});
+Sort.params(p);return p}
+
+/* ---------------- Реестр ---------------- */
+function stBadge(o){const m={'active':'st-active','blocked':'st-blocked','fired':'st-fired'};return `<span class="st ${m[o.status]||'st-active'}">${o.status_label||o.status}</span>`}
+function flagCell(on,cls){return `<span class="flag ${on?'on':''} ${cls||''}"></span>`}
+async function load(){const r=await fetch(API+'?'+params());const j=await r.json();lastRows=j.rows||[];
+$('info').textContent=`Показано ${j.from}–${j.to} из ${j.total}`;
+const n=j.active_filters||0;$('fbadge').textContent=n;
+const q=params();const chips=[];const chip=(k,l)=>chips.push({k,l});
+if(q.get('search'))chip('search','Поиск: '+q.get('search'));
+if(q.get('department'))chip('department','Отдел: '+q.get('department'));
+if(q.get('position'))chip('position','Должность: '+q.get('position'));
+if(q.get('warehouse_id'))chip('warehouse_id','Склад: '+(q.get('warehouse_id')||''));
+if(q.get('status'))chip('status','Статус: '+q.get('status'));
+[['created_from','created_to','Дата создания'],['updated_from','updated_to','Дата редактирования'],['shift_from','shift_to','Был на смене'],['hired_from','hired_to','Дата приема'],['schedule_from','schedule_to','График работ']].forEach(([a,b,l])=>{if(q.get(a)||q.get(b))chip(a,l+': '+(q.get(a)||'…')+'–'+(q.get(b)||'…'))});
+if(q.get('experience_from')||q.get('experience_to'))chip('experience_from','Стаж: '+(q.get('experience_from')||'…')+'–'+(q.get('experience_to')||'…')+' мес.');
+if(q.get('on_shift')==='1')chip('on_shift','На смене');
+if(q.get('is_blocked')==='1')chip('is_blocked','Заблокирован');
+if(q.get('is_blocked')==='0')chip('is_blocked','Не заблокирован');
+if(q.get('unplanned_exit')==='1')chip('unplanned_exit','Внеплановый выход');
+$('chips').innerHTML=chips.map(c=>`<span class="chip">${c.l} <a href="#" data-chip="${c.k}" style="color:#663EB2;text-decoration:none" title="Убрать фильтр">✕</a></span>`).join('')+(n?` <a href="#" id="clrall" style="font-size:12px">Сбросить все</a>`:'');
+const ca=$('clrall');if(ca)ca.onclick=e=>{e.preventDefault();clrF()};
+document.querySelectorAll('[data-chip]').forEach(a=>a.onclick=e=>{e.preventDefault();clearChip(a.dataset.chip)});
+$('rows').innerHTML=lastRows.map(o=>`<tr data-id="${o.id}" class="${curId===o.id?'sel':''}">
+<td><input type="checkbox" data-ch="${o.id}"></td>
+<td data-col="id">${o.id}</td>
+<td data-col="fio"><a class="num" data-open="${o.id}">${o.fio||''}</a></td>
+<td data-col="position">${o.position||''}</td>
+<td data-col="code">${o.code||''}</td>
+<td data-col="shift">${o.cur_shift||'—'}</td>
+<td data-col="pattern">${o.cur_pattern||'—'}</td>
+<td data-col="worktime">${o.work_time||'—'}</td>
+<td data-col="start">${hm(o.start_at)||'—'}</td>
+<td data-col="end">${hm(o.end_at)||'—'}</td>
+<td data-col="worked">${o.worked_text||'—'}</td>
+<td data-col="onshift">${flagCell(o.on_shift)}</td>
+<td data-col="unplanned">${flagCell(o.unplanned_exit)}</td>
+<td data-col="blocked">${flagCell(o.is_blocked,o.is_blocked?'red':'')}</td>
+<td data-col="tsd">${flagCell(o.tsd_access)}</td>
+<td data-col="photo"><span class="pavatar" title="${o.fio||''}">${initials(o.fio)}</span></td>
+<td>⋮</td></tr>`).join('')||'<tr><td colspan="17">Ничего не найдено</td></tr>';
+const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
+h+=`<button data-p="1" title="В начало">«</button><button data-p="${Math.max(1,page-1)}" title="Назад">‹</button>`;
+let s=Math.max(1,Math.min(page-1,pages-2));const nums=[];for(let i=s;i<=Math.min(pages,s+2);i++)nums.push(i);
+nums.forEach(i=>{h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`});
+h+=`<button data-p="${Math.min(pages,page+1)}" title="Вперёд">›</button><button data-p="${pages}" title="В конец">»</button>`;
+$('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()});
+document.querySelectorAll('#rows tr').forEach(tr=>{if(!tr.dataset.id)return;
+tr.onclick=e=>{if(e.target.tagName==='INPUT'||e.target.closest('[data-open]'))return;openCard(+tr.dataset.id,'view')};
+tr.oncontextmenu=e=>{e.preventDefault();ctxId=+tr.dataset.id;showCtx(e.clientX,e.clientY)}});
+document.querySelectorAll('[data-open]').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openCard(+a.dataset.open,'view')});
+document.querySelectorAll('[data-ch]').forEach(c=>c.onchange=()=>{})}
+
+/* ---------------- Фильтры ---------------- */
+function clrF(){['q','f_cf','f_ct','f_uf','f_ut','f_sf','f_st','f_hf','f_ht','f_ef','f_et','f_gf','f_gt'].forEach(i=>{if($(i))$(i).value=''});
+['f_dep','f_pos','f_wh','f_status'].forEach(i=>{if($(i))$(i).value=''});
+['fg_shift','fg_block','fg_unpl'].forEach(i=>{if($(i))$(i).checked=false});page=1;load()}
+function clearChip(key){
+if(key==='search')$('q').value='';
+else if(key==='department')$('f_dep').value='';
+else if(key==='position')$('f_pos').value='';
+else if(key==='warehouse_id')$('f_wh').value='';
+else if(key==='status')$('f_status').value='';
+else if(key==='on_shift')$('fg_shift').checked=false;
+else if(key==='is_blocked')$('fg_block').checked=false;
+else if(key==='unplanned_exit')$('fg_unpl').checked=false;
+else if(key==='experience_from'){$('f_ef').value='';$('f_et').value=''}
+else if(key==='created_from'){$('f_cf').value='';$('f_ct').value=''}
+else if(key==='updated_from'){$('f_uf').value='';$('f_ut').value=''}
+else if(key==='shift_from'){$('f_sf').value='';$('f_st').value=''}
+else if(key==='hired_from'){$('f_hf').value='';$('f_ht').value=''}
+else if(key==='schedule_from'){$('f_gf').value='';$('f_gt').value=''}
+else return clrF();
+page=1;load()}
+$('fbtn').onclick=()=>$('fp').classList.add('open');
+$('fclose').onclick=()=>$('fp').classList.remove('open');
+$('fcancel').onclick=()=>$('fp').classList.remove('open');
+$('fok').onclick=()=>{page=1;$('fp').classList.remove('open');load()};
+$('fclr').onclick=clrF;
+$('q').onchange=()=>{page=1;load()};
+$('q').onkeydown=e=>{if(e.key==='Enter'){page=1;load()}};
+$('pp').onchange=e=>{perPage=+e.target.value;page=1;load()};
+$('exp').onclick=()=>{window.open(API+'?action=export&'+params(),'_blank')};
+Sort.init({mode:'server',key:'fio',dir:'ASC',onChange:()=>{page=1;load()}});
+
+/* ---------------- Справочники для фильтров и формы ---------------- */
+async function loadDefs(){try{const d=await (await fetch(API+'?action=defaults')).json();def=d||{};
+opts('f_dep',def.departments||[],'','Все отделы');
+opts('f_pos',def.positions||[],'','Все должности');
+opts('f_wh',(def.warehouses||[]).map(w=>({value:w.id,label:w.name})),'','Все склады');
+opts('i_dep',def.departments||[],'','— выберите —');
+opts('i_pos',def.positions||[],'','— выберите —');
+opts('i_wh',(def.warehouses||[]).map(w=>({value:w.id,label:w.name})),'','— выберите —');
+opts('i_status',def.statuses||[],'active');
+opts('c_role',def.roles||[],'Администратор');
+opts('c_zone',def.zones||[],'Все зоны');
+const dl=$('dl_mid');if(dl)dl.innerHTML=(def.positions||[]).map(p=>`<option value="${p}">`).join('');
+}catch(e){}}
+
+/* ---------------- Карточка ---------------- */
+function setTab(t){cardTab=t;
+document.querySelectorAll('#ctabs span').forEach(s=>s.classList.toggle('on',s.dataset.tab===t));
+['main','sched','access','exits','hist'].forEach(k=>{const e=$('tab'+k);if(e)e.style.display=(k===t)?'':'none'});
+if(t==='sched')loadSchedules();
+if(t==='access')loadAccess();
+if(t==='exits')loadExits();
+if(t==='hist')loadHistory();}
+$('ctabs').onclick=e=>{const s=e.target.closest('span');if(s)setTab(s.dataset.tab)};
+async function openCard(id,mode){curId=id;cardData=null;
+const r=await (await fetch(`${API}?action=show&id=${id}`)).json();
+if(!r||r.error){toast('Не удалось загрузить карточку');return}
+cardData=r;
+$('ctitle').textContent=`${r.id} ${r.code||''} ${r.fio||''}`.trim();
+$('csub').textContent=`${r.position||''} · ${r.department||''} · ${r.personnel_no||''}`;
+$('c_role').value=r.role||'';opts('c_role',def.roles||[],r.role);
+$('c_zone').value=r.zone||'';opts('c_zone',def.zones||[],r.zone);
+$('c_exp').textContent=r.experience||'—';
+$('c_status').innerHTML=stBadge(r);
+$('c_wms').textContent='Настроить права ▾';
+$('c_tsd').textContent='Настроить права ▾';
+$('c_role').onchange=()=>saveCardField('role',$('c_role').value);
+$('c_zone').onchange=()=>saveCardField('zone',$('c_zone').value);
+setTab('main');$('card').classList.add('open');document.body.style.overflow='hidden';}
+async function saveCardField(field,value){const r=await fetch(`${API}?action=update&id=${curId}`,
+{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({[field]:value})});
+const j=await r.json();toast(r.ok?'Сохранено':'Ошибка: '+(j.error||''));if(r.ok)load()}
+$('cclose').onclick=()=>{$('card').classList.remove('open');document.body.style.overflow='';curId=null;load()};
+$('c_wms').onclick=()=>setTab('access');
+$('c_tsd').onclick=()=>setTab('access');
+
+async function loadSchedules(){const r=await (await fetch(`${API}?action=schedules&id=${curId}`)).json();
+$('schrows').innerHTML=(r||[]).map(s=>`<tr data-sid="${s.id}"><td>${s.date_from||''}</td><td>${s.date_to||''}</td>
+<td>${s.pattern||''}</td><td>${s.shift||''}</td><td>${hm(s.work_from)||'—'}</td><td>${hm(s.work_to)||'—'}</td><td>⋮</td></tr>`).join('')
+||'<tr><td colspan="7">Графиков пока нет</td></tr>';
+document.querySelectorAll('#schrows tr').forEach(tr=>{if(!tr.dataset.sid)return;
+tr.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();if(confirm('Удалить график?'))delSchedule(+tr.dataset.sid)}})}
+async function delSchedule(sid){const r=await fetch(`${API}?action=schedule_delete&id=${curId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({schedule_id:sid})});
+const j=await r.json();toast(r.ok?'График удалён':'Ошибка: '+(j.error||''));loadSchedules();load();}
+
+let accessRole='';
+async function loadAccess(){const r=await (await fetch(`${API}?action=access&id=${curId}`)).json();
+accessItems=r.items||[];accessModules=r.modules||{};accessLevels=r.levels||{};accessUsers=r.users||[];accessRole=r.role||'';
+if($('accrole'))$('accrole').innerHTML='Права задаются <b>для роли</b> «'+esc(accessRole||'—')+'» и действуют на всех сотрудников с этой ролью. Уровни: полный доступ / только просмотр / нет доступа.';
+opts('accuser',accessUsers.map(u=>({value:u.id,label:u.fio+(u.position?' ('+u.position+')':'')})),'','— выберите пользователя —');
+renderAccess();}
+function renderAccess(){
+const wms=Object.keys(accessModules);const tsd=accessItems.filter(a=>a.scope==='tsd');
+const tsdLevels={full:accessLevels.full||'Полный доступ',view:accessLevels.view||'Только просмотр'};
+$('accwms').innerHTML=wms.map(k=>{const it=accessItems.find(a=>a.scope==='wms'&&a.module_key===k);
+const lv=it?it.level:'none';
+return `<div class="accrow" data-key="${k}"><span class="nm">${accessModules[k]}</span>
+<select data-lv="${k}">${Object.entries(accessLevels).map(([v,l])=>`<option value="${v}"${v===lv?' selected':''}>${l}</option>`).join('')}</select>
+<span class="x" data-del="${k}" title="Снять доступ">✕</span></div>`}).join('')||'<div class="hint">Нет модулей</div>';
+$('acctsd').innerHTML=tsd.map(a=>`<div class="accrow" data-key="tsd"><span class="nm">ТСД</span>
+<select data-lv="tsd">${Object.entries(tsdLevels).map(([v,l])=>`<option value="${v}"${v===a.level?' selected':''}>${l}</option>`).join('')}</select>
+<span class="x" data-del="tsd" title="Снять доступ">✕</span></div>`).join('')||'<div class="hint">Доступ в ТСД не задан</div>';
+document.querySelectorAll('#accwms select,#acctsd select').forEach(s=>s.onchange=()=>{collectAccess()});
+document.querySelectorAll('[data-del]').forEach(x=>x.onclick=()=>{
+const k=x.dataset.del;const sc=(k==='tsd'?'tsd':'wms');
+const it=accessItems.find(a=>a.scope===sc&&a.module_key===k);
+if(it){it.level='none';}else{accessItems.push({scope:sc,module_key:k,level:'none'})}
+renderAccess();})}
+function collectAccess(){const out=[];
+document.querySelectorAll('#accwms .accrow').forEach(row=>{const k=row.dataset.key;const s=row.querySelector('select');
+out.push({scope:'wms',module_key:k,level:s?s.value:'none'})});
+document.querySelectorAll('#acctsd .accrow').forEach(row=>{const s=row.querySelector('select');
+out.push({scope:'tsd',module_key:'tsd',level:s?s.value:'none'})});
+accessItems=out;}
+$('accsave').onclick=async()=>{collectAccess();
+const r=await fetch(`${API}?action=access_save&id=${curId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:accessItems})});
+const j=await r.json();toast(r.ok?'Права сохранены':'Ошибка: '+(j.error||''));if(r.ok)loadAccess()};
+$('acccopy').onclick=async()=>{const uid=+$('accuser').value;if(!uid){toast('Выберите пользователя');return}
+const r=await fetch(`${API}?action=access_copy&id=${curId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:uid})});
+const j=await r.json();toast(r.ok?'Права скопированы':'Ошибка: '+(j.error||''));if(r.ok)loadAccess()};
+
+async function loadExits(){const r=await (await fetch(`${API}?action=exits&id=${curId}`)).json();
+$('exitrows').innerHTML=(r||[]).map(x=>`<tr><td>${dFmt(x.event_at)}</td><td>${x.checkpoint||'—'}</td>
+<td>${x.direction==='exit'?'Выход':'Вход'}</td></tr>`).join('')||'<tr><td colspan="3">Событий нет</td></tr>';}
+async function loadHistory(){const r=await (await fetch(`${API}?action=history&id=${curId}`)).json();
+$('histrows').innerHTML=(r||[]).map(x=>`<tr><td>${dFmt(x.created_at)}</td><td>${x.user_fio||'—'}</td>
+<td>${x.field_label||x.field||''}</td><td>${x.old_value||'—'}</td><td>${x.new_value||'—'}</td></tr>`).join('')
+||'<tr><td colspan="5">Изменений пока нет</td></tr>';}
+
+/* ---------------- Форма ---------------- */
+let formMode='create',formRole='',formZone='';
+function frmReset(){formRole='';formZone='';['i_first','i_last','i_mid','i_pers','i_birth','i_hired','i_code','i_phone_i','i_phone_m','i_email','i_photo'].forEach(i=>{if($(i))$(i).value=''});
+opts('i_dep',def.departments||[],'','— выберите —');
+opts('i_pos',def.positions||[],'','— выберите —');
+opts('i_wh',(def.warehouses||[]).map(w=>({value:w.id,label:w.name})),'','— выберите —');
+opts('i_status',def.statuses||[],'active');
+$('i_photo_prev').textContent='Файл не выбран';}
+$('mk').onclick=()=>{formMode='create';$('ftitle').textContent='Создать нового сотрудника';$('frmsave').textContent='Создать';frmReset();$('frm').classList.add('open');document.body.style.overflow='hidden'};
+async function openEdit(id){formMode='edit';curId=id;$('ftitle').textContent='Редактирование сотрудника';$('frmsave').textContent='Сохранить';
+const r=await (await fetch(`${API}?action=show&id=${id}`)).json();if(!r||r.error){toast('Не удалось загрузить карточку');return}
+frmReset();
+$('i_first').value=r.first_name||'';$('i_last').value=r.last_name||'';$('i_mid').value=r.middle_name||'';
+$('i_pers').value=r.personnel_no||'';$('i_birth').value=r.birth_date||'';$('i_hired').value=r.hired_at||'';
+opts('i_dep',def.departments||[],r.department,'— выберите —');
+opts('i_pos',def.positions||[],r.position,'— выберите —');
+$('i_code').value=r.code||'';$('i_phone_i').value=r.phone_internal||'';$('i_phone_m').value=r.phone_mobile||'';
+$('i_email').value=r.email||'';opts('i_status',def.statuses||[],r.db_status||r.status);
+opts('i_wh',(def.warehouses||[]).map(w=>({value:w.id,label:w.name})),r.warehouse_id,'— выберите —');
+formRole=r.role||'';formZone=r.zone||'';
+$('frm').classList.add('open');document.body.style.overflow='hidden';}
+$('frmclose').onclick=()=>{$('frm').classList.remove('open');document.body.style.overflow=''};
+$('frmcancel').onclick=()=>{$('frm').classList.remove('open');document.body.style.overflow=''};
+$('frmreset').onclick=()=>{frmReset();toast('Форма очищена')};
+$('i_photo').onchange=()=>{const f=$('i_photo').files[0];$('i_photo_prev').textContent=f?f.name:'Файл не выбран'};
+$('frmsave').onclick=async()=>{
+const body={last_name:$('i_last').value,first_name:$('i_first').value,middle_name:$('i_mid').value,
+personnel_no:$('i_pers').value,birth_date:$('i_birth').value,hired_at:$('i_hired').value,
+department:$('i_dep').value,position:$('i_pos').value,code:$('i_code').value,
+phone_internal:$('i_phone_i').value,phone_mobile:$('i_phone_m').value,email:$('i_email').value,
+status:$('i_status').value,warehouse_id:+$('i_wh').value,
+role:formRole||'Кладовщик',zone:formZone||'Все зоны'};
+const r=await fetch(`${API}?action=${formMode==='edit'?'update':'store'}${formMode==='edit'?'?id='+curId:''}`,
+{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const j=await r.json();
+if(r.ok){
+ const nid=formMode==='edit'?curId:(j.id||0);
+ toast(formMode==='edit'?'Сохранено':'Сотрудник создан. Следующий шаг — права роли');
+ $('frm').classList.remove('open');document.body.style.overflow='';load();
+ if(nid){await openCard(nid,'view');setTab('access')}
+}else toast('Ошибка: '+(j.error||''))};
+
+/* ---------------- График ---------------- */
+$('schadd').onclick=()=>{$('s_df').value='';$('s_dt').value='';$('s_from').value='08:00';$('s_to').value='20:00';$('sch').classList.add('open')};
+$('schclose').onclick=()=>$('sch').classList.remove('open');
+$('s_cancel').onclick=()=>$('sch').classList.remove('open');
+$('s_ok').onclick=async()=>{const body={shift:$('s_shift').value,pattern:$('s_pattern').value,
+work_from:$('s_from').value,work_to:$('s_to').value,date_from:$('s_df').value,date_to:$('s_dt').value};
+const r=await fetch(`${API}?action=schedule_add&id=${curId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const j=await r.json();toast(r.ok?'График добавлен':'Ошибка: '+(j.error||''));
+if(r.ok){$('sch').classList.remove('open');loadSchedules();load()}};
+
+/* ---------------- Контекстное меню ---------------- */
+function showCtx(x,y){const c=$('ctx');c.style.display='block';c.style.left=Math.min(x,innerWidth-300)+'px';c.style.top=Math.min(y,innerHeight-320)+'px';
+const o=lastRows.find(r=>r.id===ctxId)||{};
+c.querySelector('[data-a="block"]').style.display=o.is_blocked?'none':'';
+c.querySelector('[data-a="unblock"]').style.display=o.is_blocked?'':'none';
+c.querySelector('[data-a="tsd"]').textContent=o.tsd_access?'Снять ТСД':'Выдать ТСД';}
+document.addEventListener('click',e=>{if(!$('ctx').contains(e.target))$('ctx').style.display='none'});
+$('ctx').onclick=async e=>{const a=e.target.dataset.a;if(!a)return;const id=ctxId;$('ctx').style.display='none';
+const post=async(url,body)=>{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+const j=await r.json();toast(r.ok?'Готово':'Ошибка: '+(j.error||''));load();return j};
+if(a==='edit')openEdit(id);
+else if(a==='view')openCard(id,'view');
+else if(a==='block')post(`${API}?action=block&id=${id}`);
+else if(a==='unblock')post(`${API}?action=unblock&id=${id}`);
+else if(a==='tsd'){const o=lastRows.find(r=>r.id===id)||{};post(`${API}?action=tsd&id=${id}`,{on:!o.tsd_access})}
+else if(a==='unplanned'){const o=lastRows.find(r=>r.id===id)||{};post(`${API}?action=unplanned&id=${id}`,{allow:!o.allow_unplanned_exit})}
+else if(a==='print')openBcPrint(id);};
+
+/* ---------------- Печать личного ШК ---------------- */
+let bcId=null;
+async function openBcPrint(id){bcId=id;
+try{const r=await (await fetch(`${API}?action=print&id=${id}`)).json();
+if(r.error){toast('Ошибка: '+r.error);return}
+renderBc(r);$('bcmodal').classList.add('open');document.body.style.overflow='hidden'}catch(e){toast('Не удалось загрузить данные печати')}}
+function bcDims(){let w=parseFloat($('bc_w').value)||58,h=parseFloat($('bc_h').value)||40;
+w=Math.min(250,Math.max(20,w));h=Math.min(250,Math.max(15,h));return[w,h]}
+function renderBc(data){const[w,h]=bcDims();const n=Math.min(999,Math.max(1,parseInt($('bc_n').value)||1));
+const code=(data&&data.code)||'';const name=(data&&data.name)||'';
+const sc=Math.min(3.2,260/Math.max(w,h*1.4));const pv=$('bcprev');
+pv.style.width=(w*sc)+'px';pv.style.height=(h*sc)+'px';pv.style.padding=(Math.min(w,h)*0.05*sc)+'px';
+const fsS=(w*0.095*sc),fsN=(w*0.068*sc),fsC=(w*0.075*sc);
+pv.innerHTML=`<div style="font-weight:700;font-size:${fsS}px;line-height:1.15;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis">${code}</div>
+<div style="font-size:${fsN}px;line-height:1.2;max-height:${fsN*2.5}px;overflow:hidden;text-align:center">${name}</div>
+<div style="margin-top:${2*sc}px;font-size:${fsC}px;text-align:center">CODE-128</div>
+<div style="font-size:${fsC}px;letter-spacing:.4px;margin-top:${1*sc}px;text-align:center">${code}</div>`;
+$('bchint').textContent=`Табельный номер (или ID_user) печатается кодом CODE-128. Копий: ${n}.`}
+$('bcclose').onclick=()=>{$('bcmodal').classList.remove('open');document.body.style.overflow=''};
+['bc_w','bc_h','bc_n'].forEach(id=>$(id).oninput=()=>{const o=lastRows.find(r=>r.id===bcId)||{};renderBc({code:o.personnel_no||o.id,name:o.fio})});
+$('bc_html').onclick=()=>{const[w,h]=bcDims();const n=Math.min(999,Math.max(1,parseInt($('bc_n').value)||1));
+window.open(`${API}?action=print&id=${bcId}&format=label&w=${w}&h=${h}&copies=${n}&autoprint=1`,'_blank')};
+$('bc_zpl').onclick=()=>{const[w,h]=bcDims();const n=Math.min(999,Math.max(1,parseInt($('bc_n').value)||1));
+window.open(`${API}?action=print&id=${bcId}&format=zpl&w=${w}&h=${h}&copies=${n}&dpi=203`,'_blank')};
+
+/* ---------------- Прочее ---------------- */
+$('chall').onchange=e=>{document.querySelectorAll('[data-ch]').forEach(c=>c.checked=e.target.checked)};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){['card','frm','sch','bcmodal'].forEach(i=>{const el=$(i);if(el)el.classList.remove('open')});document.body.style.overflow=''}});
+$('navhidebtn').onclick=()=>document.body.classList.add('navhide');
+$('navshowbtn').onclick=()=>document.body.classList.remove('navhide');
+document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open')});
+loadDefs().then(load);
+</script></body>
 </html>

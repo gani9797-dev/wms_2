@@ -11,23 +11,326 @@ aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14
 aside .logo{font-size:22px;font-weight:700;margin:6px 0 22px}
 aside a{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
 aside a.on{background:var(--vio);color:#fff}
-main{flex:1;padding:18px 22px;max-width:1100px}
-.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px}
-code{background:#F4F0FB;padding:2px 6px;border-radius:6px}
+main{flex:1;padding:18px 22px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:4px 0;font-size:24px}
+.user{display:flex;gap:10px;align-items:center;font-size:14px}
+.ava{width:36px;height:36px;border-radius:50%;background:#EAEAEA;color:#4A5568;display:flex;align-items:center;justify-content:center;font-weight:700}
+.bar{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap;align-items:center}
+.bar input[type=text]{width:360px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:14px;position:relative;text-decoration:none;color:var(--ink);display:inline-block}
+.btn.pri{background:var(--vio);color:#fff;border-color:var(--vio);font-weight:700}
+.badge{position:absolute;top:-8px;right:-8px;background:var(--vio);color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;display:flex;align-items:center;justify-content:center}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px;color:#2C313C;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+td{padding:10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+tr.sel{background:#F8F6FC}tr:hover td{background:#fafaff}
+a.num{color:var(--vio);font-weight:700;text-decoration:none;cursor:pointer}
+.st{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap}
+.st-active{background:#C6F6D5;color:#276749}
+.st-inactive{background:#FED7D7;color:#9B2C2C}
+.pager{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;color:var(--mut);font-size:13px;flex-wrap:wrap;gap:8px}
+.pg button{border:1px solid var(--line);background:#fff;border-radius:8px;min-width:34px;padding:6px 8px;margin:0 2px;cursor:pointer}
+.pg button.on{background:var(--vio);color:#fff;border-color:var(--vio)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.chip{background:#F4F0FB;color:#663EB2;border-radius:12px;padding:5px 10px;font-size:12px}
+.hint{font-size:12px;color:var(--mut)}
+.fpanel{position:fixed;top:0;right:-520px;width:480px;max-width:94vw;height:100vh;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.15);transition:right .25s;padding:18px;overflow:auto;z-index:50}
+.fpanel.open{right:0}
+.fpanel label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:12px 0 4px}
+.fpanel input,.fpanel select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px}
+.drawer{position:fixed;top:0;right:-900px;width:860px;max-width:97vw;height:100vh;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.15);transition:right .25s;padding:18px 22px;overflow:auto;z-index:40}
+.drawer.open{right:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);margin:10px 0 16px;font-size:14px;flex-wrap:wrap}
+.tabs span{padding-bottom:8px;cursor:pointer;color:#6C757D}
+.tabs span.on{color:var(--vio);font-weight:700;border-bottom:3px solid var(--vio)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.box{border:1px solid #F0F0F0;border-radius:8px;padding:14px 16px;margin-bottom:14px}
+.box h3{margin:0 0 8px;font-size:14px}
+.kv{display:flex;justify-content:space-between;padding:7px 0;font-size:13px;gap:12px}
+.kv i{color:#4A4A4A;font-style:normal}
+.fld{margin:10px 0}
+.fld label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin-bottom:4px}
+.fld input,.fld select,.fld textarea{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:13px}
+.chk{font-weight:400 !important;display:flex !important;align-items:center;gap:6px;margin:4px 0 !important}
+.chk input{width:auto !important}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:60}
+.modal.open{display:flex}
+.mbox{background:#fff;border-radius:12px;padding:20px;width:520px;max-width:96vw;max-height:92vh;overflow:auto}
+.mbox h3{margin:0 0 10px;font-size:18px}
+table.mini{width:100%;border-collapse:collapse;font-size:13px}
+table.mini td,table.mini th{border-bottom:1px solid #F0F0F0;padding:7px;white-space:nowrap}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:99}
+.zonelist{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:4px}
+</style>
+<style>
+#navhidebtn{width:100%;background:#2A3446;color:#8A92A6;border:0;border-radius:8px;padding:8px;cursor:pointer;font-size:13px;margin-bottom:10px}
+#navhidebtn:hover{background:#3A4658;color:#fff}
+#navshowbtn{position:fixed;top:12px;left:8px;z-index:200;display:none;background:#1C2331;color:#fff;border:1px solid #444;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:14px}
+body.navhide aside{display:none}
+body.navhide #navshowbtn{display:block}
+body.navhide main{max-width:none}
 </style>
 <style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
 <body>
-<aside><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp open" data-grp="9"><div class="par"><a class="mi on" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<button id="navshowbtn" title="Показать меню">▶</button>
+<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav">
+<a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a>
+<div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div>
+<div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div>
+<div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div>
+<a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a>
+<div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div>
+<a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a>
+<a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a>
+<div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div>
+<div class="grp open" data-grp="9"><div class="par"><a class="mi on" href="../09-kontragenty-i-gruzopoluchateli/app.html">🤝 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div>
+<div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👥 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div>
+<a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a>
+<a class="mi" href="../12-uvedomleniya/app.html">🔔 12 Уведомления</a>
+<div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div>
+<hr style="border:0;border-top:1px solid #333;margin:10px 0">
+<a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a><a class="mi" href="../tsd/app.html">📱 ТСД</a>
+</nav></aside>
 <main>
-<h1>9 Контрагенты и грузополучатели</h1>
-<div class="card">
-<p>Модуль в разработке. Структура БД — см. <code>schema.sql</code> в этой папке.</p>
-<ul>
-<li>Номер по схеме «Список модулей ИТОГО»: <b>9</b></li>
-<li>Папка: <code>09-kontragenty-i-gruzopoluchateli/</code></li>
-<li>Таблицы: <code>09-kontragenty-i-gruzopoluchateli/schema.sql</code></li>
-</ul>
+<div class="top"><h1>Контрагенты и грузополучатели</h1><div class="user"><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span></div></div>
+<div class="bar">
+<input id="q" type="text" placeholder="🔍 Поиск по наименованию, ИНН, телефону...">
+<button class="btn" id="fbtn">Фильтры<span class="badge" id="fbadge" style="display:none">0</span></button>
+<button class="btn pri" id="mk">+ Контрагент</button>
+</div>
+<div class="chips" id="chips"></div>
+<div class="card" style="overflow:auto">
+<table data-sort-mode="server"><thead><tr>
+<th data-col="name" data-sort="name">Наименование</th>
+<th data-col="inn" data-sort="inn">ИНН</th>
+<th data-col="ctype" data-sort="ctype">Тип</th>
+<th data-col="phone" data-sort="phone">Телефон</th>
+<th data-col="reserved" data-sort="reserved">Резерв</th>
+<th data-col="reserve" data-sort="reserve">Принцип резервирования</th>
+<th data-col="scan_in">С/н на входе</th>
+<th data-col="scan_out">С/н на выходе</th>
+<th data-col="zones">Зоны размещения</th>
+<th data-col="active" data-sort="active">Статус</th>
+</tr></thead>
+<tbody id="rows"><tr><td colspan="10">Загрузка...</td></tr></tbody></table>
+<div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
+<select id="pp"><option>10</option><option selected>20</option><option>50</option><option>100</option></select></div>
+<div class="pg" id="pg"></div></div>
 </div>
 </main>
-<script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>
+
+<!-- Фильтры -->
+<div class="fpanel" id="fp">
+<h2 style="margin:0">Фильтры <span class="badge" id="fbadge2" style="position:static;display:inline-flex">0</span></h2>
+<label>Тип контрагента</label><select id="fctype"><option value="">Все типы</option><option value="supplier">Поставщик</option><option value="client">Клиент</option><option value="consignee">Грузополучатель</option></select>
+<label>Статус</label><select id="fact"><option value="all">Все</option><option value="1">Активные</option><option value="0">Неактивные</option></select>
+<div style="display:flex;gap:10px;margin-top:16px"><button class="btn" id="fclr">Сбросить фильтры</button><button class="btn pri" id="fok">Применить</button><button class="btn" id="fclose">Отмена</button></div>
+<p style="color:var(--mut);font-size:13px">Активные фильтры: <span id="factive">0</span> · <a href="#" id="freset">Сбросить все</a></p>
+</div>
+
+<!-- Карточка контрагента -->
+<div class="drawer" id="dr">
+<button class="btn" id="drclose">✕</button>
+<h2 id="dh">Контрагент</h2>
+<div class="tabs" id="tabs"><span class="on" data-t="main">Основное</span><span data-t="settings">Настройки</span><span data-t="csg">Грузополучатели</span></div>
+
+<div id="pane-main">
+<div class="grid2">
+<div class="box">
+<div class="fld"><label>Наименование *</label><input id="c_name" type="text" placeholder="ООО «Эталон»"></div>
+<div class="fld"><label>ИНН</label><input id="c_inn" type="text" placeholder="7707083893"></div>
+<div class="fld"><label>Тип</label><select id="c_ctype"><option value="supplier">Поставщик</option><option value="client">Клиент</option><option value="consignee">Грузополучатель</option></select></div>
+</div>
+<div class="box">
+<div class="fld"><label>Телефон</label><input id="c_phone" type="text" placeholder="+7 495 120-45-67"></div>
+<div class="fld"><label>Статус</label><select id="c_active"><option value="1">Активен</option><option value="0">Не активен</option></select></div>
+<div class="kv"><i>Артикулов клиента</i><span id="c_products">—</span></div>
+<div class="kv"><i>В резерве</i><span id="c_reserved">—</span></div>
+</div>
+</div>
+<div style="display:flex;gap:10px;margin:10px 0;flex-wrap:wrap"><button class="btn pri" id="csave">Сохранить</button><button class="btn" id="cdelete">Удалить</button><button class="btn" id="drclose2">Закрыть</button></div>
+</div>
+
+<div id="pane-settings" style="display:none">
+<div class="box">
+<h3>Принцип резервирования</h3>
+<div class="fld"><label>Принцип резервирования (впуск заданий на отбор)</label><select id="st_strategy"><option value="FIFO">FIFO — по очереди</option><option value="FEFO">FEFO — по сроку годности</option><option value="LIFO">LIFO — последним пришёл, первым ушёл</option></select></div>
+<h3>Сканирование серийных номеров</h3>
+<label class="chk"><input type="checkbox" id="st_serial_in"> Сканировать серийные номера на входе</label>
+<label class="chk"><input type="checkbox" id="st_serial_out"> Сканировать серийные номера на выходе</label>
+</div>
+<div class="box">
+<h3>Зоны и ячейки размещения</h3>
+<div class="fld"><label>Зоны размещения (можно выбрать несколько)</label><div class="zonelist" id="st_zones"></div></div>
+<div class="fld"><label>Коды зон через запятую (дополнительно)</label><input id="st_zones_extra" type="text" placeholder="storage, ship"></div>
+<div class="fld"><label>Ячейки размещения (коды ячеек через запятую)</label><input id="st_cells" type="text" placeholder="A3-100-06-1, A3-100-06-2"></div>
+<p class="hint">Ячейки задают приоритет размещения: товар клиента кладём ближе к этому же клиенту.</p>
+</div>
+<div class="box">
+<p class="hint">Глобальные флаги проставляются всем артикулам клиента и всем новым зашедшим товарам. На уровне артикула флаг можно точечно снять (модуль 08 Номенклатура → карточка артикула → Правила).</p>
+<div style="display:flex;gap:10px;margin:10px 0;flex-wrap:wrap"><button class="btn pri" id="st_save">Сохранить настройки</button><button class="btn" id="drclose3">Закрыть</button></div>
+</div>
+</div>
+
+<div id="pane-csg" style="display:none">
+<div class="box">
+<h3>Грузополучатели</h3>
+<table class="mini"><thead><tr><th>Наименование</th><th>Адрес</th><th>Телефон</th></tr></thead><tbody id="csg_rows"></tbody></table>
+</div>
+</div>
+</div>
+
+<!-- Создание контрагента -->
+<div class="modal" id="mm"><div class="mbox"><h3>Новый контрагент</h3>
+<div class="fld"><label>Наименование *</label><input id="n_name" type="text" placeholder="ООО «Эталон»"></div>
+<div class="fld"><label>ИНН</label><input id="n_inn" type="text" placeholder="7707083893"></div>
+<div class="fld"><label>Тип</label><select id="n_ctype"><option value="supplier">Поставщик</option><option value="client" selected>Клиент</option><option value="consignee">Грузополучатель</option></select></div>
+<div class="fld"><label>Телефон</label><input id="n_phone" type="text" placeholder="+7 495 120-45-67"></div>
+<div class="fld"><label>Статус</label><select id="n_active"><option value="1">Активен</option><option value="0">Не активен</option></select></div>
+<div style="display:flex;gap:10px;margin-top:12px"><button class="btn" id="ncancel">Отмена</button><button class="btn pri" id="nok">Создать</button></div>
+</div></div>
+
+<div id="toast"></div>
+<script src="../shared/sort.js"></script>
+<script>
+const API='demo_sqlite.php';
+let page=1,perPage=20,lastRows=[],curId=null,curTab='main',curData=null,ZONES=[];
+const $=id=>document.getElementById(id);
+const fmtN=v=>{if(v===null||v===undefined||v==='')return '0';const n=Number(v);return isFinite(n)?n.toLocaleString('ru-RU',{maximumFractionDigits:3}):v};
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const dFmt=s=>(s||'').slice(0,16).replace('T',' ');
+function flagVal(id){const e=$(id);return e&&e.checked?'1':''}
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2400)}
+const CTYPES={supplier:'Поставщик',client:'Клиент',consignee:'Грузополучатель'};
+const STRATS=['FIFO','FEFO','LIFO'];
+function ctypeLabel(v){return CTYPES[v]||v||'—'}
+function stBadge(on){return on?'<span class="st st-active">Да</span>':'<span class="st st-inactive">Нет</span>'}
+
+function params(){const p=new URLSearchParams({action:'list',page,per_page:perPage});
+if($('q').value.trim())p.set('search',$('q').value.trim());
+if($('fctype').value)p.set('ctype',$('fctype').value);
+if($('fact').value!=='all')p.set('is_active',$('fact').value);
+Sort.params(p);
+return p}
+
+function renderChips(){const c=[];
+if($('q').value.trim())c.push('Поиск: '+$('q').value.trim());
+if($('fctype').value)c.push('Тип: '+ctypeLabel($('fctype').value));
+if($('fact').value==='1')c.push('Только активные');
+if($('fact').value==='0')c.push('Только неактивные');
+$('chips').innerHTML=c.map(x=>`<span class="chip">${esc(x)}</span>`).join('')+(c.length?' <a href="#" id="chclr" style="font-size:12px">Сбросить всё</a>':'');
+const a=$('chclr');if(a)a.onclick=e=>{e.preventDefault();clrF()}}
+
+async function load(){const r=await fetch(API+'?'+params());const j=await r.json();lastRows=j.rows||[];
+$('info').textContent=`Показано ${esc(j.from)}–${esc(j.to)} из ${esc(j.total)}`;
+const n=j.active_filters||0;$('fbadge').style.display=n?'flex':'none';$('fbadge').textContent=n;$('fbadge2').textContent=n;$('factive').textContent=n;
+renderChips();
+$('rows').innerHTML=lastRows.map(o=>{const zones=(o.placement_zones||[]).map(z=>`<span class="chip">${esc(z)}</span>`).join(' ');
+return `<tr data-id="${esc(o.id)}">
+<td data-col="name"><a class="num" href="#" data-id="${esc(o.id)}">${esc(o.name||'')}</a></td>
+<td data-col="inn">${esc(o.inn||'—')}</td>
+<td data-col="ctype">${esc(o.ctype_label||ctypeLabel(o.ctype))}</td>
+<td data-col="phone">${esc(o.phone||'—')}</td>
+<td data-col="reserved"><b>${fmtN(o.reserved_qty)}</b> <small style="color:var(--mut)">${esc(o.products_count)} арт.</small></td>
+<td data-col="reserve"><span class="chip">${esc(o.reserve_strategy||'FIFO')}</span></td>
+<td data-col="scan_in">${stBadge(!!+o.scan_serial_in)}</td>
+<td data-col="scan_out">${stBadge(!!+o.scan_serial_out)}</td>
+<td data-col="zones">${zones||'—'}</td>
+<td data-col="active"><span class="st ${+o.is_active?'st-active':'st-inactive'}">${+o.is_active?'Активен':'Не активен'}</span></td>
+</tr>`}).join('')||'<tr><td colspan="10">Ничего не найдено</td></tr>';
+const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
+for(let i=1;i<=Math.min(pages,7);i++)h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`;
+$('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()});
+document.querySelectorAll('#rows tr').forEach(tr=>{if(!tr.dataset.id)return;
+tr.onclick=e=>{if(e.target.tagName==='INPUT'||(e.target.closest&&e.target.closest('a.num')))return;openCard(+tr.dataset.id)};
+tr.oncontextmenu=e=>{e.preventDefault();openCard(+tr.dataset.id)}});
+document.querySelectorAll('#rows a.num').forEach(a=>a.onclick=e=>{e.preventDefault();openCard(+a.dataset.id)})}
+
+async function openCard(id,tab){curId=id;if(tab)curTab=tab;
+const r=await fetch(`${API}?action=show&id=${esc(id)}`);const s=await r.json();
+if(s.error){toast(s.error);return}
+curData=s;
+$('dh').textContent=(s.name||'Контрагент')+(s.inn?' · ИНН '+s.inn:'');
+document.querySelectorAll('#tabs [data-t]').forEach(el=>el.classList.toggle('on',el.dataset.t===curTab));
+$('pane-main').style.display=curTab==='main'?'block':'none';
+$('pane-settings').style.display=curTab==='settings'?'block':'none';
+$('pane-csg').style.display=curTab==='csg'?'block':'none';
+if(curTab==='main'){
+$('c_name').value=s.name||'';$('c_inn').value=s.inn||'';$('c_ctype').value=s.ctype||'client';
+$('c_phone').value=s.phone||'';$('c_active').value=s.is_active?'1':'0';
+$('c_products').textContent=fmtN((s.stats&&s.stats.products_count)||0);
+$('c_reserved').textContent=fmtN((s.stats&&s.stats.reserved_qty)||0);
+}
+if(curTab==='settings'){fillSettings(s)}
+if(curTab==='csg'){loadCsg(id)}
+$('dr').classList.add('open')}
+
+function fillSettings(s){const st=(s&&s.settings)||{};
+$('st_strategy').value=STRATS.indexOf(st.reserve_strategy)>=0?st.reserve_strategy:'FIFO';
+$('st_serial_in').checked=!!+st.scan_serial_in;
+$('st_serial_out').checked=!!+st.scan_serial_out;
+$('st_cells').value=(st.placement_cell_codes||[]).join(', ');
+loadZones(st.placement_zones||[])}
+
+async function loadZones(current){try{const r=await (await fetch(API+'?action=zones')).json();ZONES=(r&&r.rows)||[]}catch(e){ZONES=[]}
+const known=ZONES.map(z=>z.code);
+const extra=(current||[]).filter(c=>known.indexOf(c)<0);
+$('st_zones').innerHTML=ZONES.map(z=>`<label class="chk"><input type="checkbox" value="${esc(z.code)}" ${(current||[]).indexOf(z.code)>=0?'checked':''}> ${esc(z.code)} — ${esc(z.name)}</label>`).join('')||'<div class="hint">Зоны размещения не заданы</div>';
+$('st_zones_extra').value=extra.join(', ')}
+
+async function loadCsg(id){try{const r=await (await fetch(`${API}?action=consignees&counterparty_id=${esc(id)}`)).json();const rows=(r&&r.rows)||[];
+$('csg_rows').innerHTML=rows.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.address||'—')}</td><td>${esc(x.phone||'—')}</td></tr>`).join('')||'<tr><td colspan="3">Грузополучатели не заданы</td></tr>'}catch(e){$('csg_rows').innerHTML='<tr><td colspan="3">Не удалось загрузить грузополучателей</td></tr>'}}
+
+document.querySelectorAll('#tabs [data-t]').forEach(el=>el.onclick=()=>{curTab=el.dataset.t;openCard(curId,curTab)});
+$('drclose').onclick=$('drclose2').onclick=$('drclose3').onclick=()=>$('dr').classList.remove('open');
+
+$('csave').onclick=async()=>{if(!curId)return;
+const body={name:$('c_name').value.trim(),inn:$('c_inn').value.trim(),ctype:$('c_ctype').value,phone:$('c_phone').value.trim(),is_active:+$('c_active').value};
+if(!body.name){toast('Наименование обязательно');return}
+const r=await fetch(`${API}?action=update&id=${esc(curId)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const j=await r.json();
+if(r.ok){toast('Контрагент сохранён');openCard(curId,'main');load()}else toast('Ошибка: '+(j.error||''))};
+
+$('st_save').onclick=async()=>{if(!curId)return;
+const picked=[...document.querySelectorAll('#st_zones input[type=checkbox]:checked')].map(c=>c.value);
+const extra=$('st_zones_extra').value.split(/[,\s;]+/).map(s=>s.trim()).filter(Boolean);
+const zones=[];picked.concat(extra).forEach(z=>{if(z&&zones.indexOf(z)<0)zones.push(z)});
+const body={reserve_strategy:$('st_strategy').value,scan_serial_in:flagVal('st_serial_in')?1:0,scan_serial_out:flagVal('st_serial_out')?1:0,
+placement_zones:zones.join(', '),placement_cell_codes:$('st_cells').value.trim()};
+const r=await fetch(`${API}?action=settings_save&id=${esc(curId)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const j=await r.json();
+if(r.ok){toast('Настройки клиента сохранены');openCard(curId,'settings');load()}else toast('Ошибка: '+(j.error||''))};
+
+$('cdelete').onclick=async()=>{if(!curId)return;
+if(!confirm('Удалить контрагента? Если у него есть артикулы или грузополучатели, удаление будет отклонено.'))return;
+const r=await fetch(`${API}?action=delete&id=${esc(curId)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+const j=await r.json();
+if(r.ok){toast('Контрагент удалён');$('dr').classList.remove('open');curId=null;load()}else toast('Ошибка: '+(j.error||''))};
+
+$('mk').onclick=()=>{$('n_name').value='';$('n_inn').value='';$('n_ctype').value='client';$('n_phone').value='';$('n_active').value='1';$('mm').classList.add('open');$('n_name').focus()};
+$('ncancel').onclick=()=>$('mm').classList.remove('open');
+$('nok').onclick=async()=>{const body={name:$('n_name').value.trim(),inn:$('n_inn').value.trim(),ctype:$('n_ctype').value,phone:$('n_phone').value.trim(),is_active:+$('n_active').value};
+if(!body.name){toast('Наименование обязательно');return}
+const r=await fetch(API+'?action=store',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const j=await r.json();
+if(r.ok){$('mm').classList.remove('open');toast('Контрагент создан: #'+j.id);load();openCard(j.id,'main')}else toast('Ошибка: '+(j.error||''))};
+
+$('fbtn').onclick=()=>$('fp').classList.add('open');
+$('fclose').onclick=()=>$('fp').classList.remove('open');
+$('fok').onclick=()=>{page=1;$('fp').classList.remove('open');load()};
+function clrF(){$('q').value='';$('fctype').value='';$('fact').value='all';page=1;load()}
+$('fclr').onclick=clrF;
+$('freset').onclick=e=>{e.preventDefault();clrF()};
+$('q').onchange=()=>{page=1;load()};
+$('pp').onchange=e=>{perPage=+e.target.value;page=1;load()};
+if(localStorage.getItem('navhide')==='1')document.body.classList.add('navhide');
+$('navhidebtn').onclick=()=>{document.body.classList.add('navhide');try{localStorage.setItem('navhide','1')}catch(e){}};
+$('navshowbtn').onclick=()=>{document.body.classList.remove('navhide');try{localStorage.setItem('navhide','0')}catch(e){}};
+Sort.init({mode:'server',key:'name',dir:'ASC',onChange:()=>{page=1;load()}});
+load();
+</script>
+<script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script>
+</body>
 </html>

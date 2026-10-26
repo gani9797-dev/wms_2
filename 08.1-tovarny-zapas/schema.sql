@@ -8,11 +8,15 @@ CREATE TABLE IF NOT EXISTS product_stock (
   product_id BIGINT UNSIGNED NOT NULL,
   warehouse_id BIGINT UNSIGNED NOT NULL,
   cell VARCHAR(50) NOT NULL COMMENT 'Ячейка: A-01-01 / B-02-03',
-  pallet VARCHAR(50) NULL COMMENT 'Паллета: номер/SSCC (клик — смена тары)',
+  pallet VARCHAR(50) NULL COMMENT 'Паллета: номер/SSCC (клик — смена тары/партии)',
   pallet_type VARCHAR(10) NULL COMMENT 'Тара: euro (1200x800x144) / fin (1200x1000x138); fallback — products.pallet_type',
+  supplier_batch VARCHAR(100) NULL COMMENT 'Партия поставщика (подвязана к номеру паллеты)',
+  pallet_date DATE NULL COMMENT 'Дата паллеты',
+  prod_date DATE NULL COMMENT 'Дата производства партии (заполняется на приёмке при контроле даты)',
   qty DECIMAL(14,3) NOT NULL DEFAULT 0,
   receipt_id BIGINT UNSIGNED NULL COMMENT 'Приход: id документа поступления',
   receipt_no VARCHAR(50) NULL COMMENT 'Приход: номер документа (для фильтра)',
+  quality VARCHAR(20) NULL DEFAULT 'новый' COMMENT 'Качество: новый / брак (заполняется при приёмке)',
   CONSTRAINT fk_ps_prod FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
   KEY idx_ps_prod (product_id),
   KEY idx_ps_wh (warehouse_id),
@@ -26,6 +30,10 @@ CREATE TABLE IF NOT EXISTS product_stock (
 --   Объем — Д×Ш×В, м3. Вес — qty × products.weight_g + тара 25 кг (если есть номер паллеты).
 --   Отгрузка — номера отгрузок из резерва (задания на отбор), через запятую.
 --   Резерв — сумма qty резерва по всем отгрузкам.
+--   Дата производства — product_stock.prod_date (заполняется на приёмке через ТСД,
+--     если на артикуле включён products.control_prod_date).
+--   Срок хранения артикула — products.shelf_life_days (дней).
+--   Дата окончания срока = prod_date + shelf_life_days; осталось дней = дата - CURRENT_DATE.
 -- Смена тары POST ?action=pallet_update сверяет storage_cells.allowed_pallet_types:
 --   несовпадение => 400 «Изменение паллеты невозможно, ячейка не предназначена для данного типа паллеты.»
 --

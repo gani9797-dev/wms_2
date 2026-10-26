@@ -661,7 +661,7 @@ function wms_pdf_wrap(WmsTtf $f, string $s, float $size, float $maxW): array
  * @param array $rows строки-ассоциативные массивы
  * @param string|null $barcode текст штрихкода Code128 справа вверху первой страницы
  */
-function wms_pdf_table(string $title, array $meta, array $cols, array $rows, ?string $barcode = null): string
+function wms_pdf_table(string $title, array $meta, array $cols, array $rows, ?string $barcode = null, bool $landscape = false): string
 {
     [$regFile, $boldFile] = wms_pdf_font_files();
     $reg = new WmsTtf($regFile);
@@ -669,8 +669,8 @@ function wms_pdf_table(string $title, array $meta, array $cols, array $rows, ?st
     $regBytes = (string)file_get_contents($regFile);
     $boldBytes = (string)file_get_contents($boldFile);
 
-    $PW = 595.28;
-    $PH = 841.89;
+    $PW = $landscape ? 841.89 : 595.28;
+    $PH = $landscape ? 595.28 : 841.89;
     $ML = 36.0;
     $MR = 36.0;
     $MT = 46.0;
@@ -957,19 +957,24 @@ function wms_pdf_labels(): array
         'accept_date' => 'Приемка', 'vehicle' => 'ТС', 'gate' => 'Ворота',
         'supplier' => 'Поставщик', 'supplier_name' => 'Поставщик',
         'contractor' => 'Контрагент', 'warehouse' => 'Склад', 'warehouse_name' => 'Склад',
-        'status' => 'Статус', 'status_label' => 'Статус', 'total' => 'Сумма',
+        'status' => 'Статус', 'status_label' => 'Статус',         'total' => 'Сумма',
         'total_with_vat' => 'Итого с НДС', 'sku_count' => 'SKU', 'qty_total' => 'Штук',
+        'volume_total' => 'Объем, м³', 'weight_total' => 'Вес, кг', 'customer' => 'Клиент',
         'items_count' => 'Позиций', 'accepted_pct' => 'Принято %', 'placed_pct' => 'Размещено %',
         'line_no' => 'п/п', 'code' => 'Код', 'barcode' => 'Штрихкод', 'sku' => 'Артикул',
         'name' => 'Наименование', 'unit' => 'Ед.', 'qty' => 'Кол-во', 'sscc' => 'SSCC',
         'plan_qty' => 'План', 'fact_qty' => 'Факт', 'price' => 'Цена', 'sum' => 'Сумма',
         'type' => 'Тип', 'qty_diff' => 'Отклонение', 'created_at' => 'Дата',
+        'supplier_batch' => 'Партия', 'batch' => 'Партия',
         'flag_date' => 'Дата', 'pallet' => 'Паллета', 'cell' => 'Ячейка',
         'zone' => 'Зона', 'check_label' => 'Этикетка', 'contract_no' => 'Договор',
         'priority' => 'Приоритет', 'comment' => 'Комментарий', 'category' => 'Категория',
         'brand' => 'Бренд', 'owner' => 'Владелец', 'qty_in_box' => 'Шт в коробе',
         'title' => 'Документ', 'quality' => 'Качество', 'prod_group' => 'Группа',
+        'volume' => 'Объем, м³', 'weight' => 'Вес, кг',
         'prod_date' => 'Дата произв.', 'temp_label' => 'Темп. режим',
+        'consignee' => 'Грузополучатель', 'address' => 'Адрес доставки',
+        'gate' => 'Ворота', 'doc_no' => '№ документа', 'line_no' => 'п/п',
     ];
 }
 
@@ -989,18 +994,24 @@ function wms_pdf_skip_key(string $k): bool
  * @param array|null $forceCols [ключ => подпись] — явные колонки вместо авто
  * @param string|null $barcodeText текст для штрихкода Code128 справа вверху (первая страница)
  */
-function wms_pdf_auto(array $data, ?array $forceCols = null, ?string $barcodeText = null): string
+function wms_pdf_auto(array $data, ?array $forceCols = null, ?string $barcodeText = null, bool $landscape = false): string
 {
     $labels = wms_pdf_labels();
     $kinds = ['act' => 'Акт приема-передачи', 'act_rasx' => 'Акт о расхождениях',
         'receiver_doc' => 'Документ приемщика', 'label' => 'Этикетка', 'barcode' => 'Штрихкод',
         'list' => 'Документ', 'torg12' => 'ТОРГ-12', 'torg2' => 'ТОРГ-2', 'mx1' => 'МХ-1',
         'pick_list' => 'Сборочный лист', 'pack_list' => 'Упаковочный лист',
-        'shk' => 'Штрихкоды', 're' => 'Реестр', 'pal' => 'Паллетный лист'];
+        'shk' => 'Штрихкоды', 're' => 'Реестр', 'pal' => 'Паллетный лист',
+        'nar' => 'По отгрузке', 'p-nar' => 'По отгрузке',
+        'upd' => 'УПД', 'p-upd' => 'УПД',
+        'tn' => 'Торговая накладная', 'p-tn' => 'Торговая накладная',
+        'ttn' => 'Транспортная накладная', 'p-ttn' => 'Транспортная накладная',
+        'summary' => 'Сводный', 'p-summary' => 'Сводный'];
     $title = (string)($data['title'] ?? $kinds[$data['kind'] ?? ''] ?? 'Документ');
     $meta = [];
     $metaKeys = ['doc_no', 'doc_date', 'external_no', 'supplier_name', 'supplier', 'warehouse_name', 'warehouse',
         'status_label', 'status', 'total', 'total_with_vat', 'gate', 'vehicle', 'contract_no',
+        'consignee', 'address', 'customer', 'qty_total', 'volume_total', 'weight_total',
         'code', 'zone', 'type', 'sku', 'name', 'barcode', 'unit', 'sscc'];
     $head = $data['head'] ?? null;
     if (is_array($head)) {
@@ -1020,6 +1031,14 @@ function wms_pdf_auto(array $data, ?array $forceCols = null, ?string $barcodeTex
     if (!is_array($rows)) {
         $rows = [];
     }
+    // Специализированные документы: наряд, УПД, ТН, ТТН — свой PDF-шаблон.
+    $k = $data['kind'] ?? '';
+    if ($k === 'nar' || $k === 'p-nar') {
+        return wms_pdf_nar_doc($data);
+    }
+    if ($k === 'upd' || $k === 'p-upd' || $k === 'tn' || $k === 'p-tn' || $k === 'ttn' || $k === 'p-ttn') {
+        return wms_pdf_primary_doc($data);
+    }
     $cols = $forceCols;
     if ($cols === null) {
         $cols = [];
@@ -1034,7 +1053,7 @@ function wms_pdf_auto(array $data, ?array $forceCols = null, ?string $barcodeTex
             }
         }
     }
-    return wms_pdf_table($title, $meta, $cols, array_values($rows), $barcodeText);
+    return wms_pdf_table($title, $meta, $cols, array_values($rows), $barcodeText, $landscape);
 }
 
 /**
@@ -1056,7 +1075,15 @@ function wms_shipment_print(array $data, ?array $force = null): array
     $data['items'] = $rows;
     if ($force === null) {
         $k = $data['kind'] ?? '';
-        if ($k === 'pick_list') {
+        if ($k === 'nar' || $k === 'p-nar') {
+            // Наряд без цен: п/п, артикул, наименование, кол-во.
+            $force = ['line_no' => 'п/п', 'sku' => 'Артикул', 'name' => 'Наименование',
+                'unit' => 'Ед.', 'qty' => 'Кол-во'];
+        } elseif ($k === 'summary' || $k === 'p-summary') {
+            // Сводный: одинаковые SKU объединены, добавлены объём и вес.
+            $force = ['line_no' => 'п/п', 'sku' => 'Артикул', 'name' => 'Наименование',
+                'unit' => 'Ед.', 'qty' => 'Кол-во', 'volume' => 'Объем, м³', 'weight' => 'Вес, кг'];
+        } elseif ($k === 'pick_list') {
             $force = ['line_no' => 'п/п', 'code' => 'Код', 'sku' => 'Артикул', 'name' => 'Наименование',
                 'unit' => 'Ед.', 'plan_qty' => 'План', 'fact_qty' => 'Отобрано'];
         } elseif ($k === 'pack_list') {
@@ -1068,6 +1095,663 @@ function wms_shipment_print(array $data, ?array $force = null): array
         }
     }
     return [$data, $force];
+}
+
+/**
+ * Наряд PDF: на каждую страницу — один наряд (заказ), первым идет общая отгрузка.
+ * Условие ТЗ: без цен, п/п + артикул + наименование + кол-во,
+ * шапка: клиент, адрес доставки, ворота отгрузки, штрихкоды документа и наряда.
+ */
+function wms_pdf_nar_doc(array $data): string
+{
+    [$regFile, $boldFile] = wms_pdf_font_files();
+    $reg = new WmsTtf($regFile);
+    $bold = new WmsTtf($boldFile);
+    $regBytes = (string)file_get_contents($regFile);
+    $boldBytes = (string)file_get_contents($boldFile);
+
+    $PW = 595.28;
+    $PH = 841.89;
+    $ML = 36.0;
+    $MR = 36.0;
+    $MT = 46.0;
+    $MB = 44.0;
+    $W = $PW - $ML - $MR;
+
+    $head = $data['head'] ?? [];
+    $orders = $data['orders'] ?? [];
+
+    $useR = [];
+    $useB = [];
+    $mark = static function (string $s, bool $b) use (&$useR, &$useB) {
+        foreach (WmsTtf::cps($s) as $cp) {
+            if ($b) $useB[$cp] = true;
+            else $useR[$cp] = true;
+        }
+    };
+
+    // Все подписи/данные отмечаем ДО создания шрифтовых объектов: иначе
+    // символы, добавленные при верстке, не попадут в /W и ToUnicode.
+    $staticText = 'Отгрузка Наряд п/п Артикул Наименование Кол-во Получатель Штук Объём, м³ Вес, кг '
+        . 'Итого по отгрузке: нарядов штук объём вес Клиент / получатель Адрес доставки Ворота отгрузки Дата '
+        . 'Нет строк Итого позиций: Страница 0123456789.,:()—';
+    $mark($staticText, false);
+    $mark($staticText, true);
+    $mark((string)($head['doc_no'] ?? ''), false);
+    $mark((string)($head['consignee'] ?? ''), false);
+    $mark((string)($head['address'] ?? ''), false);
+    $mark((string)($head['gate'] ?? ''), false);
+    foreach ($orders as $o) {
+        $mark((string)($o['doc_no'] ?? ''), true);
+        $mark((string)($o['doc_no'] ?? ''), false);
+        $mark((string)($o['consignee'] ?? ''), false);
+        foreach (($o['items'] ?? []) as $it) {
+            $mark((string)($it['sku'] ?? ''), false);
+            $mark((string)($it['name'] ?? ''), false);
+        }
+    }
+
+    $pdf = new WmsPdf();
+    $fontObjs = [];
+    foreach ([['F1', $reg, $regBytes, $useR], ['F2', $bold, $boldBytes, $useB]] as [$tag, $f, $bytes, $used]) {
+        $gids = [];
+        foreach (array_keys($used) as $cp) $gids[$f->gid($cp)] = true;
+        $gids = array_keys($gids);
+        sort($gids);
+        $w = '';
+        $run = null;
+        foreach ($gids as $g) {
+            $ww = (int)round($f->pdfW($g));
+            if ($run === null || $g !== $run[1] + 1) {
+                if ($run !== null) $w .= $run[0] . ' [' . implode(' ', $run[2]) . '] ';
+                $run = [$g, $g, []];
+            }
+            $run[1] = $g;
+            $run[2][] = $ww;
+        }
+        if ($run !== null) $w .= $run[0] . ' [' . implode(' ', $run[2]) . '] ';
+        $tu = "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n"
+            . "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n"
+            . "/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n"
+            . "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"
+            . count($used) . " beginbfchar\n";
+        foreach (array_keys($used) as $cp) {
+            $tu .= sprintf('<%04X> <%s>', $f->gid($cp), strtoupper(bin2hex(WmsTtf::utf16be($cp)))) . "\n";
+        }
+        $tu .= "endbfchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n";
+        $ps = $f->psName;
+        $bb = $f->bbox;
+        $asc = (int)round($f->ascent * 1000 / $f->upm);
+        $desc = (int)round($f->descent * 1000 / $f->upm);
+        $fileId = $pdf->add("<< /Length " . strlen($bytes) . " /Length1 " . strlen($bytes) . " >>\nstream\n" . $bytes . "\nendstream");
+        $descId = $pdf->add("<< /Type /FontDescriptor /FontName /$ps /Flags 32 "
+            . "/FontBBox [$bb[0] $bb[1] $bb[2] $bb[3]] /ItalicAngle 0 /Ascent $asc /Descent $desc /StemV 80 /FontFile2 $fileId 0 R >>");
+        $dw = (int)round($f->pdfW(0));
+        $cidId = $pdf->add("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /$ps "
+            . "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> "
+            . "/DW $dw /W [$w] /FontDescriptor $descId 0 R >>");
+        $tuId = $pdf->add("<< /Length " . strlen($tu) . " >>\nstream\n" . $tu . "endstream");
+        $t0Id = $pdf->add("<< /Type /Font /Subtype /Type0 /BaseFont /$ps /Encoding /Identity-H "
+            . "/DescendantFonts [$cidId 0 R] /ToUnicode $tuId 0 R >>");
+        $fontObjs[$tag] = $t0Id;
+    }
+
+    $enc = static function (WmsTtf $f, string $s): string {
+        $h = '';
+        foreach (WmsTtf::cps($s) as $cp) $h .= sprintf('%04X', $f->gid($cp));
+        return $h;
+    };
+    $T = static function (string $tag, float $size, float $x, float $y, string $hex): string {
+        return "BT /$tag " . rtrim(rtrim(sprintf('%.2F', $size), '0'), '.') . " Tf 1 0 0 1 "
+            . sprintf('%.2F %.2F', $x, $y) . " Tm <$hex> Tj ET\n";
+    };
+
+    $contentIds = [];
+    $allGroups = [];
+    // Первая группа — общая отгрузка (без строк товаров, только шапка + штрихкод документа).
+    $allGroups[] = ['type' => 'shipment', 'head' => $head, 'order' => null, 'items' => []];
+    foreach ($orders as $o) {
+        $allGroups[] = ['type' => 'order', 'head' => $head, 'order' => $o, 'items' => $o['items'] ?? []];
+    }
+
+    foreach ($allGroups as $gi => $g) {
+        $s = '';
+        $y = $PH - $MT;
+
+        // Заголовок группы.
+        $isShipment = $g['type'] === 'shipment';
+        $title = $isShipment ? ('Отгрузка ' . esc_pdf($head['doc_no'] ?? ''))
+            : ('Наряд ' . esc_pdf($g['order']['doc_no'] ?? ''));
+        $s .= $T('F2', 15.0, $ML, $y - 15, $enc($bold, $title));
+        $y -= 22;
+
+        // Штрихкод документа (отгрузки или наряда) справа вверху.
+        $bcText = $isShipment ? (string)($head['doc_no'] ?? '') : (string)($g['order']['doc_no'] ?? '');
+        $barMods = null;
+        try {
+            $barMods = WmsCode128::modules($bcText);
+        } catch (Throwable) {
+            $barMods = null;
+        }
+        if ($barMods !== null) {
+            $mark($bcText, false);
+            $modW = min(1.0, ($W * 0.55) / max(1, array_sum($barMods)));
+            $barH = 30.0;
+            $totW = array_sum($barMods) * $modW;
+            $bx = $ML + $W - 10 * $modW - $totW;
+            $by = $PH - $MT;
+            $s .= "0 g\n";
+            $cx = $bx;
+            foreach ($barMods as $mi => $mw) {
+                if ($mi % 2 === 0) {
+                    $s .= sprintf('%.2F %.2F %.2F %.2F re f' . "\n", $cx, $by - $barH, $mw * $modW, $barH);
+                }
+                $cx += $mw * $modW;
+            }
+            $capW = $reg->strW($bcText, 8);
+            $s .= $T('F1', 8, $bx + max(0.0, ($totW - $capW) / 2), $by - $barH - 10, $enc($reg, $bcText));
+        }
+
+        $y -= 10;
+
+        // Шапка документа: клиент, адрес, ворота.
+        $cust = $isShipment ? (string)($head['consignee'] ?? '') : (string)($g['order']['consignee'] ?? '');
+        $addr = $isShipment ? (string)($head['address'] ?? '') : (string)($g['order']['address'] ?? '');
+        $gate = $isShipment ? (string)($head['gate'] ?? '') : (string)($g['order']['gate'] ?? '');
+        if ($addr === '' && isset($g['order']['address'])) {
+            $addr = (string)($g['order']['address'] ?? '');
+        }
+
+        $metaLines = [];
+        $metaLines[] = ['Клиент / получатель', $cust];
+        if ($addr !== '') $metaLines[] = ['Адрес доставки', $addr];
+        if ($gate !== '') $metaLines[] = ['Ворота отгрузки', $gate];
+        $metaLines[] = ['Дата', date('d.m.Y H:i')];
+
+        foreach ($metaLines as [$l, $v]) {
+            $mark($l . ': ' . $v, false);
+            $s .= $T('F1', 10.0, $ML, $y - 10, $enc($reg, $l . ': ' . $v));
+            $y -= 12;
+        }
+        $y -= 6;
+        $s .= sprintf("%.2F %.2F m %.2F %.2F l S\n", $ML, $y, $ML + $W, $y);
+        $y -= 8;
+
+        if ($isShipment) {
+            // Первая страница: перечень нарядов отгрузки с итогами.
+            $ocols = [
+                'line_no' => '№', 'doc_no' => 'Наряд', 'consignee' => 'Получатель',
+                'qty' => 'Штук', 'volume' => 'Объём, м³', 'weight' => 'Вес, кг',
+            ];
+            $cw = ['line_no' => 24, 'doc_no' => 90, 'consignee' => 230, 'qty' => 65, 'volume' => 75, 'weight' => 65];
+            $sum = array_sum($cw);
+            $f = $W / $sum;
+            foreach ($cw as $k => $v) $cw[$k] = max(18.0, $v * $f);
+            $cw[array_key_last($cw)] += $W - array_sum($cw);
+            $headH = 14;
+            $s .= "0.92 0.92 0.92 rg\n";
+            $x = $ML;
+            foreach ($ocols as $k => $label) {
+                $s .= sprintf('%.2F %.2F %.2F %.2F re f' . "\n", $x, $y - $headH, $cw[$k], $headH);
+                $x += $cw[$k];
+            }
+            $s .= "0 g\n";
+            $x = $ML;
+            foreach ($ocols as $k => $label) {
+                $s .= sprintf('%.2F %.2F %.2F %.2F re S' . "\n", $x, $y - $headH, $cw[$k], $headH);
+                $s .= $T('F2', 9.0, $x + 4, $y - 9, $enc($bold, $label));
+                $x += $cw[$k];
+            }
+            $y -= $headH + 2;
+            $rowH = 16;
+            foreach ($orders as $i => $o) {
+                if ($y - $rowH < $MB) {
+                    $contentIds[] = $pdf->add("<< /Length " . strlen($s) . " >>\nstream\n" . $s . "endstream");
+                    $s = '';
+                    $y = $PH - $MT;
+                    $s .= "0.92 0.92 0.92 rg\n";
+                    $x = $ML;
+                    foreach ($ocols as $k => $label) {
+                        $s .= sprintf('%.2F %.2F %.2F %.2F re f' . "\n", $x, $y - $headH, $cw[$k], $headH);
+                        $x += $cw[$k];
+                    }
+                    $s .= "0 g\n";
+                    $x = $ML;
+                    foreach ($ocols as $k => $label) {
+                        $s .= sprintf('%.2F %.2F %.2F %.2F re S' . "\n", $x, $y - $headH, $cw[$k], $headH);
+                        $s .= $T('F2', 9.0, $x + 4, $y - 9, $enc($bold, $label));
+                        $x += $cw[$k];
+                    }
+                    $y -= $headH + 2;
+                }
+                $vals = [
+                    'line_no' => (string)($i + 1),
+                    'doc_no' => esc_pdf($o['doc_no'] ?? ''),
+                    'consignee' => esc_pdf($o['consignee'] ?? ''),
+                    'qty' => fmtN_pdf((float)($o['qty_total'] ?? 0)),
+                    'volume' => fmtN_pdf((float)($o['volume_total'] ?? 0)),
+                    'weight' => fmtN_pdf((float)($o['weight_total'] ?? 0)),
+                ];
+                $x = $ML;
+                foreach ($ocols as $k => $label) {
+                    $mark($vals[$k], false);
+                    $s .= sprintf('%.2F %.2F %.2F %.2F re S' . "\n", $x, $y - $rowH, $cw[$k], $rowH);
+                    $s .= $T('F1', 9.0, $x + 4, $y - 11, $enc($reg, $vals[$k]));
+                    $x += $cw[$k];
+                }
+                $y -= $rowH;
+            }
+            $y -= 8;
+            $totalLine = 'Итого по отгрузке: нарядов ' . count($orders)
+                . ' · штук ' . fmtN_pdf((float)($head['qty_total'] ?? 0))
+                . ' · объём ' . fmtN_pdf((float)($head['volume_total'] ?? 0)) . ' м³'
+                . ' · вес ' . fmtN_pdf((float)($head['weight_total'] ?? 0)) . ' кг';
+            $mark($totalLine, true);
+            $s .= $T('F2', 10.0, $ML, $y - 10, $enc($bold, $totalLine));
+            $y -= 18;
+        } else {
+            // Страница наряда: позиции без цен.
+            $items = $g['items'];
+            $cols = [
+                'line_no' => 'п/п',
+                'sku' => 'Артикул',
+                'name' => 'Наименование',
+                'qty' => 'Кол-во',
+            ];
+            $cw = ['line_no' => 30, 'sku' => 110, 'name' => 330, 'qty' => 80];
+            $sum = array_sum($cw);
+            $f = $W / $sum;
+            foreach ($cw as $k => $v) $cw[$k] = max(20.0, $v * $f);
+            $cw[array_key_last($cw)] += $W - array_sum($cw);
+
+            $headH = 14;
+            $s .= "0.92 0.92 0.92 rg\n";
+            $x = $ML;
+            foreach ($cols as $k => $label) {
+                $s .= sprintf('%.2F %.2F %.2F %.2F re f' . "\n", $x, $y - $headH, $cw[$k], $headH);
+                $x += $cw[$k];
+            }
+            $s .= "0 g\n";
+            $x = $ML;
+            foreach ($cols as $k => $label) {
+                $s .= sprintf('%.2F %.2F %.2F %.2F re S' . "\n", $x, $y - $headH, $cw[$k], $headH);
+                $s .= $T('F2', 9.0, $x + 4, $y - 9, $enc($bold, $label));
+                $x += $cw[$k];
+            }
+            $y -= $headH + 2;
+
+            if (empty($items)) {
+                $mark('Нет строк', false);
+                $s .= $T('F1', 10.0, $ML, $y - 10, $enc($reg, 'Нет строк'));
+                $y -= 14;
+            } else {
+                $rowH = 16;
+                foreach ($items as $i => $it) {
+                    $rh = $rowH;
+                    if ($y - $rh < $MB) {
+                        $contentIds[] = $pdf->add("<< /Length " . strlen($s) . " >>\nstream\n" . $s . "endstream");
+                        $s = '';
+                        $y = $PH - $MT;
+                        $s .= "0.92 0.92 0.92 rg\n";
+                        $x = $ML;
+                        foreach ($cols as $k => $label) {
+                            $s .= sprintf('%.2F %.2F %.2F %.2F re f' . "\n", $x, $y - $headH, $cw[$k], $headH);
+                            $x += $cw[$k];
+                        }
+                        $s .= "0 g\n";
+                        $x = $ML;
+                        foreach ($cols as $k => $label) {
+                            $s .= sprintf('%.2F %.2F %.2F %.2F re S' . "\n", $x, $y - $headH, $cw[$k], $headH);
+                            $s .= $T('F2', 9.0, $x + 4, $y - 9, $enc($bold, $label));
+                            $x += $cw[$k];
+                        }
+                        $y -= $headH + 2;
+                    }
+                    $x = $ML;
+                    $vals = [
+                        'line_no' => (string)($i + 1),
+                        'sku' => esc_pdf($it['sku'] ?? ''),
+                        'name' => esc_pdf($it['name'] ?? ''),
+                        'qty' => esc_pdf(fmtN_pdf((float)($it['qty'] ?? 0))),
+                    ];
+                    foreach ($cols as $k => $label) {
+                        $s .= sprintf('%.2F %.2F %.2F %.2F re S' . "\n", $x, $y - $rh, $cw[$k], $rh);
+                        $s .= $T('F1', 9.0, $x + 4, $y - 11, $enc($reg, $vals[$k]));
+                        $x += $cw[$k];
+                    }
+                    $y -= $rh;
+                }
+            }
+            $mark('Итого', false);
+            $s .= $T('F2', 10.0, $ML, $y - 10, $enc($bold, 'Итого позиций: ' . count($items)));
+            $y -= 16;
+        }
+
+        // Футер страницы.
+        $s .= $T('F1', 8, $ML, 24, $enc($reg, 'Страница ' . ($gi + 1) . ' · ' . date('d.m.Y H:i')));
+        $contentIds[] = $pdf->add("<< /Length " . strlen($s) . " >>\nstream\n" . $s . "endstream");
+    }
+
+    $pagesId = $pdf->add('@@KIDS@@');
+    $pageKids = [];
+    foreach ($contentIds as $ci) {
+        $pageKids[] = $pdf->add("<< /Type /Page /Parent $pagesId 0 R /MediaBox [0 0 $PW $PH] "
+            . "/Contents $ci 0 R /Resources << /Font << /F1 {$fontObjs['F1']} 0 R /F2 {$fontObjs['F2']} 0 R >> >> >>");
+    }
+    $kids = implode(' ', array_map(static fn($k): string => "$k 0 R", $pageKids));
+    $pdf->objs[$pagesId - 1] = "<< /Type /Pages /Kids [$kids] /Count " . count($pageKids) . " >>";
+    $pdf->add("<< /Type /Catalog /Pages $pagesId 0 R >>");
+    return $pdf->render();
+}
+
+/**
+ * Первичный документ (УПД / ТН / ТТН) — упрощённый шаблон на основе актуальных форм.
+ * В строковой части без цен: п/п, артикул, наименование, кол-во.
+ * В шапке: клиент, адрес, ворота, дата, номер документа.
+ */
+function wms_pdf_primary_doc(array $data): string
+{
+    [$regFile, $boldFile] = wms_pdf_font_files();
+    $reg = new WmsTtf($regFile);
+    $bold = new WmsTtf($boldFile);
+    $regBytes = (string)file_get_contents($regFile);
+    $boldBytes = (string)file_get_contents($boldFile);
+
+    // Первичные документы (УПД/ТН/ТТН) печатаем в альбомной ориентации.
+    $PW = 841.89;
+    $PH = 595.28;
+    $ML = 32.0;
+    $MR = 32.0;
+    $MT = 40.0;
+    $MB = 40.0;
+    $W = $PW - $ML - $MR;
+
+    $head = $data['head'] ?? [];
+    $items = $data['items'] ?? [];
+    $kind = $data['kind'] ?? 'upd';
+    $title = $data['title'] ?? 'Документ';
+
+    $useR = [];
+    $useB = [];
+    $mark = static function (string $s, bool $b) use (&$useR, &$useB) {
+        foreach (WmsTtf::cps($s) as $cp) {
+            if ($b) $useB[$cp] = true;
+            else $useR[$cp] = true;
+        }
+    };
+
+    $staticText = 'УПД ТОРГ-12 Транспортная накладная № документа Дата Грузополучатель Адрес доставки '
+        . 'Ворота отгрузки ТС Склад Поставщик (склад) Покупатель / клиент Статус документа Форма '
+        . 'п/п Артикул Наименование Ед. Кол-во Цена '
+        . 'Стоимость без НДС НДС Стоимость с НДС Итого Всего позиций Поставил: Получил: '
+        . 'Страница 0123456789.,:()—₽ м³ кг';
+    $mark($staticText, false);
+    $mark($staticText, true);
+    $mark((string)($head['doc_no'] ?? ''), false);
+    $mark((string)($head['consignee'] ?? ''), false);
+    $mark((string)($head['contractor'] ?? ''), false);
+    $mark((string)($head['warehouse'] ?? ''), false);
+    $mark((string)($head['address'] ?? ''), false);
+    $mark((string)($head['gate'] ?? ''), false);
+    foreach ($items as $it) {
+        $mark((string)($it['sku'] ?? ''), false);
+        $mark((string)($it['name'] ?? ''), false);
+    }
+
+    $pdf = new WmsPdf();
+    $fontObjs = [];
+    foreach ([['F1', $reg, $regBytes, $useR], ['F2', $bold, $boldBytes, $useB]] as [$tag, $f, $bytes, $used]) {
+        $gids = [];
+        foreach (array_keys($used) as $cp) $gids[$f->gid($cp)] = true;
+        $gids = array_keys($gids);
+        sort($gids);
+        $w = '';
+        $run = null;
+        foreach ($gids as $g) {
+            $ww = (int)round($f->pdfW($g));
+            if ($run === null || $g !== $run[1] + 1) {
+                if ($run !== null) $w .= $run[0] . ' [' . implode(' ', $run[2]) . '] ';
+                $run = [$g, $g, []];
+            }
+            $run[1] = $g;
+            $run[2][] = $ww;
+        }
+        if ($run !== null) $w .= $run[0] . ' [' . implode(' ', $run[2]) . '] ';
+        $tu = "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n"
+            . "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n"
+            . "/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n"
+            . "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"
+            . count($used) . " beginbfchar\n";
+        foreach (array_keys($used) as $cp) {
+            $tu .= sprintf('<%04X> <%s>', $f->gid($cp), strtoupper(bin2hex(WmsTtf::utf16be($cp)))) . "\n";
+        }
+        $tu .= "endbfchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n";
+        $ps = $f->psName;
+        $bb = $f->bbox;
+        $asc = (int)round($f->ascent * 1000 / $f->upm);
+        $desc = (int)round($f->descent * 1000 / $f->upm);
+        $fileId = $pdf->add("<< /Length " . strlen($bytes) . " /Length1 " . strlen($bytes) . " >>\nstream\n" . $bytes . "\nendstream");
+        $descId = $pdf->add("<< /Type /FontDescriptor /FontName /$ps /Flags 32 "
+            . "/FontBBox [$bb[0] $bb[1] $bb[2] $bb[3]] /ItalicAngle 0 /Ascent $asc /Descent $desc /StemV 80 /FontFile2 $fileId 0 R >>");
+        $dw = (int)round($f->pdfW(0));
+        $cidId = $pdf->add("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /$ps "
+            . "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> "
+            . "/DW $dw /W [$w] /FontDescriptor $descId 0 R >>");
+        $tuId = $pdf->add("<< /Length " . strlen($tu) . " >>\nstream\n" . $tu . "endstream");
+        $t0Id = $pdf->add("<< /Type /Font /Subtype /Type0 /BaseFont /$ps /Encoding /Identity-H "
+            . "/DescendantFonts [$cidId 0 R] /ToUnicode $tuId 0 R >>");
+        $fontObjs[$tag] = $t0Id;
+    }
+
+    $enc = static function (WmsTtf $f, string $s): string {
+        $h = '';
+        foreach (WmsTtf::cps($s) as $cp) $h .= sprintf('%04X', $f->gid($cp));
+        return $h;
+    };
+    $T = static function (string $tag, float $size, float $x, float $y, string $hex): string {
+        return "BT /$tag " . rtrim(rtrim(sprintf('%.2F', $size), '0'), '.') . " Tf 1 0 0 1 "
+            . sprintf('%.2F %.2F', $x, $y) . " Tm <$hex> Tj ET\n";
+    };
+
+    $s = '';
+    $y = $PH - $MT;
+
+    // Заголовок документа.
+    $s .= $T('F2', 16.0, $ML, $y - 16, $enc($bold, esc_pdf($title)));
+    $y -= 24;
+
+    // Штрихкод номера документа справа вверху.
+    $bcText = (string)($head['doc_no'] ?? '');
+    $barMods = null;
+    try {
+        $barMods = WmsCode128::modules($bcText);
+    } catch (Throwable) {
+        $barMods = null;
+    }
+    if ($barMods !== null) {
+        $mark($bcText, false);
+        $modW = min(1.0, ($W * 0.55) / max(1, array_sum($barMods)));
+        $barH = 30.0;
+        $totW = array_sum($barMods) * $modW;
+        $bx = $ML + $W - 10 * $modW - $totW;
+        $by = $PH - $MT;
+        $s .= "0 g\n";
+        $cx = $bx;
+        foreach ($barMods as $mi => $mw) {
+            if ($mi % 2 === 0) {
+                $s .= sprintf('%.2F %.2F %.2F %.2F re f' . "\n", $cx, $by - $barH, $mw * $modW, $barH);
+            }
+            $cx += $mw * $modW;
+        }
+        $capW = $reg->strW($bcText, 8);
+        $s .= $T('F1', 8, $bx + max(0.0, ($totW - $capW) / 2), $by - $barH - 10, $enc($reg, $bcText));
+    }
+
+    $y -= 12;
+
+    // Шапка документа (réquisités): кто поставил, кто получил, адрес, ворота, дата, номер.
+    $metaLines = [];
+    $metaLines[] = ['№ документа', esc_pdf($head['doc_no'] ?? '')];
+    $metaLines[] = ['Дата', date('d.m.Y')];
+    if ($kind === 'upd') $metaLines[] = ['Статус документа', '1'];
+    elseif ($kind === 'tn') $metaLines[] = ['Форма', 'ТОРГ-12'];
+    elseif ($kind === 'ttn') $metaLines[] = ['Форма', 'Транспортная накладная'];
+    $seller = (string)($head['warehouse'] ?? '');
+    if ($seller !== '') $metaLines[] = ['Поставщик (склад)', esc_pdf($seller)];
+    $cust = (string)($head['contractor'] ?? $head['consignee'] ?? '');
+    if ($cust !== '') $metaLines[] = ['Покупатель / клиент', esc_pdf($cust)];
+    $recv = (string)($head['consignee'] ?? '');
+    if ($recv !== '' && $recv !== $cust) $metaLines[] = ['Грузополучатель', esc_pdf($recv)];
+    $addr = (string)($head['address'] ?? '');
+    if ($addr !== '') $metaLines[] = ['Адрес доставки', esc_pdf($addr)];
+    $gate = (string)($head['gate'] ?? '');
+    if ($gate !== '') $metaLines[] = ['Ворота отгрузки', esc_pdf($gate)];
+    $veh = (string)($head['vehicle'] ?? '');
+    if ($veh !== '') $metaLines[] = ['ТС', esc_pdf($veh)];
+    $metaLines[] = ['Склад', esc_pdf((string)($head['warehouse'] ?? ''))];
+
+    foreach ($metaLines as [$l, $v]) {
+        $mark($l . ': ' . $v, false);
+        $s .= $T('F1', 10.0, $ML, $y - 10, $enc($reg, $l . ': ' . $v));
+        $y -= 12;
+    }
+    $y -= 10;
+    $s .= sprintf("%.2F %.2F m %.2F %.2F l S\n", $ML, $y, $ML + $W, $y);
+    $y -= 8;
+
+    // Таблица позиций: для УПД/ТН — с ценами и НДС, для ТТН — товарная часть.
+    $cols = [
+        'line_no' => 'п/п',
+        'sku' => 'Артикул',
+        'name' => 'Наименование товара',
+        'unit' => 'Ед.',
+        'qty' => 'Кол-во',
+        'price' => 'Цена',
+        'sum_novat' => 'Стоимость без НДС',
+        'vat' => 'НДС',
+        'sum_vat' => 'Стоимость с НДС',
+    ];
+    $cw = ['line_no' => 26, 'sku' => 78, 'name' => 230, 'unit' => 38, 'qty' => 48,
+        'price' => 66, 'sum_novat' => 82, 'vat' => 66, 'sum_vat' => 82];
+    $sum = array_sum($cw);
+    $f = $W / $sum;
+    foreach ($cw as $k => $v) $cw[$k] = max(20.0, $v * $f);
+    $cw[array_key_last($cw)] += $W - array_sum($cw);
+
+    $vatRate = (float)($head['vat_rate'] ?? 20);
+    $headH = 16;
+    $drawHead = function (float $yy) use (&$s, $ML, $headH, $cols, $cw, $T, $bold, $enc): void {
+        $s .= "0.92 0.92 0.92 rg\n";
+        $x = $ML;
+        foreach ($cols as $k => $label) {
+            $s .= sprintf('%.2F %.2F %.2F %.2F re f' . "\n", $x, $yy - $headH, $cw[$k], $headH);
+            $x += $cw[$k];
+        }
+        $s .= "0 g\n";
+        $x = $ML;
+        foreach ($cols as $k => $label) {
+            $s .= sprintf('%.2F %.2F %.2F %.2F re S' . "\n", $x, $yy - $headH, $cw[$k], $headH);
+            $s .= $T('F2', 7.5, $x + 3, $yy - 8, $enc($bold, esc_pdf($label)));
+            $x += $cw[$k];
+        }
+    };
+    $drawHead($y);
+    $y -= $headH + 2;
+
+    $totQty = 0.0;
+    $totNet = 0.0;
+    $totVat = 0.0;
+    $totGross = 0.0;
+    if (empty($items)) {
+        $mark('Нет строк', false);
+        $s .= $T('F1', 10.0, $ML, $y - 10, $enc($reg, 'Нет строк'));
+        $y -= 14;
+    } else {
+        $rowH = 16;
+        foreach ($items as $i => $it) {
+            $qty = (float)($it['qty'] ?? 0);
+            $price = (float)($it['price'] ?? 0);
+            $gross = (float)($it['sum'] ?? 0);
+            if ($gross <= 0) {
+                $gross = round($qty * $price, 2);
+            }
+            $net = $vatRate > 0 ? round($gross / (1 + $vatRate / 100), 2) : $gross;
+            $vat = round($gross - $net, 2);
+            $totQty += $qty;
+            $totNet += $net;
+            $totVat += $vat;
+            $totGross += $gross;
+            $rh = $rowH;
+            if ($y - $rh < $MB + 40) {
+                $contentIds[] = $pdf->add("<< /Length " . strlen($s) . " >>\nstream\n" . $s . "endstream");
+                $s = '';
+                $y = $PH - $MT;
+                $s .= $T('F2', 10.0, $ML, $y - 10, $enc($bold, esc_pdf($title . ' (продолжение)')));
+                $y -= 20;
+                $drawHead($y);
+                $y -= $headH + 2;
+            }
+            $x = $ML;
+            $vals = [
+                'line_no' => (string)($i + 1),
+                'sku' => esc_pdf($it['sku'] ?? ''),
+                'name' => esc_pdf($it['name'] ?? ''),
+                'unit' => esc_pdf($it['unit'] ?? 'шт'),
+                'qty' => fmtN_pdf($qty),
+                'price' => fmtN_pdf($price),
+                'sum_novat' => fmtN_pdf($net),
+                'vat' => fmtN_pdf($vat),
+                'sum_vat' => fmtN_pdf($gross),
+            ];
+            foreach ($cols as $k => $label) {
+                $s .= sprintf('%.2F %.2F %.2F %.2F re S' . "\n", $x, $y - $rh, $cw[$k], $rh);
+                $s .= $T('F1', 7.8, $x + 3, $y - 10, $enc($reg, $vals[$k]));
+                $x += $cw[$k];
+            }
+            $y -= $rh;
+        }
+    }
+
+    $y -= 8;
+    $totLine = 'Итого: позиций ' . count($items) . ' · штук ' . fmtN_pdf($totQty)
+        . ' · без НДС ' . fmtN_pdf($totNet) . ' ₽ · НДС ' . fmtN_pdf($totVat)
+        . ' ₽ · с НДС ' . fmtN_pdf($totGross) . ' ₽';
+    $mark($totLine, true);
+    $s .= $T('F2', 9.0, $ML, $y - 10, $enc($bold, $totLine));
+    $y -= 18;
+
+    // Подписи.
+    $s .= $T('F1', 9.0, $ML, $y - 10, $enc($reg, 'Поставил: ____________________'));
+    $s .= $T('F1', 9.0, $ML + 150, $y - 10, $enc($reg, 'Получил: ____________________'));
+    $y -= 24;
+    $s .= $T('F1', 8, $ML, 24, $enc($reg, 'Страница 1 · ' . date('d.m.Y H:i')));
+
+    $contentIds[] = $pdf->add("<< /Length " . strlen($s) . " >>\nstream\n" . $s . "endstream");
+
+    $pagesId = $pdf->add('@@KIDS@@');
+    $pageKids = [];
+    foreach ($contentIds as $ci) {
+        $pageKids[] = $pdf->add("<< /Type /Page /Parent $pagesId 0 R /MediaBox [0 0 $PW $PH] "
+            . "/Contents $ci 0 R /Resources << /Font << /F1 {$fontObjs['F1']} 0 R /F2 {$fontObjs['F2']} 0 R >> >> >>");
+    }
+    $kids = implode(' ', array_map(static fn($k): string => "$k 0 R", $pageKids));
+    $pdf->objs[$pagesId - 1] = "<< /Type /Pages /Kids [$kids] /Count " . count($pageKids) . " >>";
+    $pdf->add("<< /Type /Catalog /Pages $pagesId 0 R >>");
+    return $pdf->render();
+}
+
+/** Экранирование строки для PDF (убирает управляющие символы). */
+function esc_pdf(string $s): string
+{
+    return wms_pdf_clean((string)$s);
+}
+
+/** Форматирование числа для PDF. */
+function fmtN_pdf(float $v): string
+{
+    $s = number_format($v, 3, '.', '');
+    $s = rtrim(rtrim($s, '0'), '.');
+    return $s === '' ? '0' : $s;
 }
 
 /**

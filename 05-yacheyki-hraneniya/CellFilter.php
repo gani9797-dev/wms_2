@@ -4,6 +4,8 @@ declare(strict_types=1);
 // DTO фильтров реестра. Повторяет панель "Фильтры" из схемы 1-в-1.
 // Все поля nullable: null = фильтр не активен (для счетчика "Фильтры (N)").
 
+require_once __DIR__ . '/CellStatus.php';
+
 final class CellFilter
 {
     public ?string $search = null;      // Поиск по адресу, категории
@@ -24,6 +26,9 @@ final class CellFilter
     public ?int $palletTo = null;
     public ?float $qtyFrom = null;      // Остаток, шт от/до
     public ?float $qtyTo = null;
+    public ?string $pickZone = null;    // Доп. зона отбора: manual/driver (несколько зон у ячейки)
+    public ?string $mixedGoods = null;  // all/yes/no — Разные товары в одной ячейке
+    public ?string $multiPallet = null; // all/yes/no — Несколько типов паллет
 
     public int $page = 1;               // "Показано 1–14 из N"
     public int $perPage = 14;           // "Строк на странице: 14"
@@ -51,9 +56,17 @@ final class CellFilter
         $f->palletTo    = $get('pallet_to') !== null ? (int)$get('pallet_to') : null;
         $f->qtyFrom     = $get('qty_from') !== null ? (float)$get('qty_from') : null;
         $f->qtyTo       = $get('qty_to') !== null ? (float)$get('qty_to') : null;
+        $f->pickZone    = $get('pick_zone') ?? $get('pick_zones');
+        if ($f->pickZone !== null) {
+            $f->pickZone = CellStatus::normalizePickZone($f->pickZone);
+        }
+        $f->mixedGoods  = $get('mixed_goods');
+        $f->multiPallet = $get('multi_pallet_types');
         $f->page        = max(1, (int)($q['page'] ?? 1));
         $f->perPage     = min(200, max(5, (int)($q['per_page'] ?? 14)));
-        $allowed        = ['code', 'qty', 'capacity', 'id'];
+        $allowed        = ['code', 'qty', 'capacity', 'id',
+            'zone', 'cell_type', 'beam', 'height', 'pallet_types', 'category',
+            'status', 'fill', 'reserved', 'stock', 'pallets', 'temp', 'lock'];
         if (isset($q['sort']) && in_array($q['sort'], $allowed, true)) {
             $f->sort = $q['sort'];
         }
@@ -71,6 +84,7 @@ final class CellFilter
             $this->statuses, $this->category, $this->tempFrom, $this->tempTo,
             $this->fillFrom, $this->fillTo, $this->allowed,
             $this->palletFrom, $this->palletTo, $this->qtyFrom, $this->qtyTo,
+            $this->pickZone,
         ] as $v) {
             if ($v !== null && $v !== [] && $v !== '') {
                 $n++;
@@ -80,6 +94,12 @@ final class CellFilter
             $n++;
         }
         if ($this->hasGoods !== null && $this->hasGoods !== '' && $this->hasGoods !== 'all') {
+            $n++;
+        }
+        if ($this->mixedGoods !== null && $this->mixedGoods !== '' && $this->mixedGoods !== 'all') {
+            $n++;
+        }
+        if ($this->multiPallet !== null && $this->multiPallet !== '' && $this->multiPallet !== 'all') {
             $n++;
         }
         return $n;

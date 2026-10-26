@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/../shared/tsd_auth.php';
 // ТСД «Приход» — мастер приёмки по схеме «Приход ТСД» (drawio).
 // Маппинг схемы на таблицы (ЕДИНАЯ БД поступлений 02-postupleniya/wms_receipts.sqlite, см. shared/db.php):
 //   doc_priemka            -> receipts (статус «В работе» = accepting, «Закрыт» = ready_place)
@@ -9,33 +10,38 @@ declare(strict_types=1);
 //   mark_log               -> receipt_flags (+status: годный|брак|нечитаема, +reason)
 //   pallet                 -> tsd_pallets (sscc, status Заполняется|Закрыта, qty_total, weight)
 //   line_crossdock         -> tsd_crossdock (gate_id, sscc, status)
-//   act_rasx               -> tsd_act_rasx (тип: недостача|излишек|не_заявлен|брак, qty_diff)
-//   ostatok                -> tsd_stock (sku, pallet, qty)
-// Порядок этапов на ТСД: 1 ворота (скан) → 2 документы с этими воротами / ШК документа
-// (ворота проставляются в receipts.gate) → 3 скан ШК товара → 4 кросс-док? → 5 сканы
-// единиц (марки ЧЗ либо поштучные ШК) → 6 обмеры нового товара → 7 количество → 8 тарное
-// место → 9 качество. Шаги API: docs[?gate=], doc_by_code, start, ean, unclaimed,
-// pallet_open, sscc_accept, mark, qty, fact, confirm, pallet_close, crossdock,
-// crossdock_move, close, measure_save.
+//   act_rasxa              -> tsd_act_rasx (тип: недостача|излишек|не_заявлен|брак, qty_diff,
+//                             +supplier_batch — акт относится к партии позиции)
+//   остаток живого факта   -> receipt_operations (агрегат SUM(qty) по sku/pallet —
+//                             единый источник, читают ТСД-инфо и StockSync;
+//                             отдельно в Номенклатуру: product_stock (модуль 8.1).
+//   (таблица-дубль tsd_stock удалена — расходилась с фактом и с 8.1).
+// Порядок этапов на ТСД: 1 ворота = ячейка приёмки (DOK-01…DOK-10, зона «Приёмка»
+// в таблице ячеек хранения) → 2 документы с этими воротами / ШК документа
+// (ворота проставляются в receipts.gate) → 3 скан ШК товара → 4 кросс-док? →
+// 5 «Приёмка»: количество вручную + тарное место (2 — недостача, 3 — излишки) →
+// 6 качество → 7 подтверждение позиции и закрытие тарного места.
+// Марки ЧЗ (если требуются) сканируются перед приёмкой. Количество единиц вводится
+// только вручную — отдельного скана ШК единицы нет.
+// Частичная приёмка (10 из 100) — НЕ недостача: принимаем частями, пока не примем всю строку.
+// Принятые паллеты сразу попадают в товарный запас 8.1 (product_stock, UPDATE) —
+// в ячейку приёмки документа; отмена паллеты снимает приёмку и остаток.
+// Акты расхождений формируются ТОЛЬКО при закрытии документа (shared/ReceiptClose.php):
+// статус «Закрыто» (всё принято по документу) либо «Закрыто с отклонением».
+// Шаги API: docs[?gate=], doc_by_code, start, receiving_cells, ean, unclaimed,
+// pallet_open, sscc_accept, mark, qty, fact, fix[mode=exact|shortage|excess], confirm,
+// pallet_close, pallet_info, pallet_cancel, crossdock, crossdock_move, close,
+// measure_save, state.
 
-const TSD_TOKEN = 'tsd-12345';
 const PRIHOD_START_FROM = ['expected', 'arrived', 'unloading', 'on_stock', 'ready_accept', 'accepting'];
+
+// Общая логика приёмки: позиции-партии, отклонения, закрытие документа и акты.
+// (sku_plan/sku_fact/receipt_scopes/act_upsert/wms_close_receipt и др.)
+require_once __DIR__ . '/../shared/ReceiptClose.php';
 
 function tok_ok(): bool
 {
-    $t = $_GET['token'] ?? $_POST['token'] ?? '';
-    if ($t === '') {
-        $h = $_SERVER['HTTP_X_TSD_TOKEN'] ?? '';
-        if ($h !== '') {
-            $t = $h;
-        } else {
-            $a = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-            if (str_starts_with($a, 'Bearer ')) {
-                $t = substr($a, 7);
-            }
-        }
-    }
-    if ($t !== '' && hash_equals(TSD_TOKEN, (string)$t)) {
+    if (wms_tsd_token_ok()) {
         return true;
     }
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -55,63 +61,383 @@ function j(mixed $d, int $c = 200): void
 function db(): PDO
 {
     // Единая БД поступлений (владелец — 02-postupleniya). См. shared/db.php.
+    // При WMS_DB_DRIVER=pgsql — единая БД wms (db/schema-pg.sql).
     require_once __DIR__ . '/../shared/db.php';
     return wms_receipts_pdo();
 }
 
+function tsd_pallet_ensure(PDO $pdo, int $rid, string $sscc): void
+{
+    $drv = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($drv === 'pgsql') {
+        $pdo->prepare("INSERT INTO tsd_pallets (receipt_id,sscc,status) VALUES (:r,:s,'Заполняется') ON CONFLICT (receipt_id, sscc) DO NOTHING")->execute([':r' => $rid, ':s' => $sscc]);
+    } elseif ($drv === 'mysql') {
+        $pdo->prepare("INSERT IGNORE INTO tsd_pallets (receipt_id,sscc,status) VALUES (:r,:s,'Заполняется')")->execute([':r' => $rid, ':s' => $sscc]);
+    } else {
+        $pdo->prepare("INSERT OR IGNORE INTO tsd_pallets (receipt_id,sscc,status) VALUES (:r,:s,'Заполняется')")->execute([':r' => $rid, ':s' => $sscc]);
+    }
+}
+
 function hist(PDO $pdo, int $rid, $uid, string $action, ?string $field, ?string $old, ?string $new): void
 {
-    $pdo->prepare("INSERT INTO receipt_history (receipt_id,user_id,action,field,old_value,new_value) VALUES (:r,:u,:a,:f,:o,:n)")
-        ->execute([':r' => $rid, ':u' => $uid, ':a' => $action, ':f' => $field, ':o' => $old, ':n' => $new]);
+    // ФИО пользователя — для вкладки «История» в модуле поступлений.
+    $fio = null;
+    if ($uid) {
+        try {
+            $u = $pdo->prepare("SELECT fio FROM users WHERE id=:id");
+            $u->execute([':id' => (int)$uid]);
+            $v = $u->fetchColumn();
+            $fio = ($v === false || $v === null) ? null : (string)$v;
+        } catch (Throwable) {
+        }
+    }
+    $pdo->prepare("INSERT INTO receipt_history (receipt_id,user_id,user_fio,action,field,old_value,new_value) VALUES (:r,:u,:f,:a,:fl,:o,:n)")
+        ->execute([':r' => $rid, ':u' => $uid, ':f' => $fio, ':a' => $action, ':fl' => $field, ':o' => $old, ':n' => $new]);
 }
 
-function sku_plan(PDO $pdo, int $rid, string $sku): float
+/** Нормализовать партию из запроса: null — не указана, '' — без партии, иначе строка. */
+function req_batch(array $body): ?string
 {
-    $s = $pdo->prepare("SELECT COALESCE(SUM(qty),0) FROM receipt_items WHERE receipt_id=:r AND sku=:s");
-    $s->execute([':r' => $rid, ':s' => $sku]);
-    return (float)$s->fetchColumn();
+    if (!array_key_exists('batch', $body) && !array_key_exists('supplier_batch', $body)) {
+        return null;
+    }
+    $v = $body['batch'] ?? $body['supplier_batch'] ?? null;
+    if ($v === null) {
+        return null;
+    }
+    return trim((string)$v);
 }
 
-function sku_fact(PDO $pdo, int $rid, string $sku): float
+/** INSERT в receipt_operations с партией; на старых БД без колонки — без нее. */
+function op_insert(PDO $pdo, int $rid, string $sku, ?string $batch, string $status, $uid, ?string $pallet, float $qty, ?string $reason = null, int $noSerial = 0, ?string $rejectReason = null): void
 {
-    $s = $pdo->prepare("SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=:r AND sku=:s AND accept_status='Принято'");
-    $s->execute([':r' => $rid, ':s' => $sku]);
-    return (float)$s->fetchColumn();
+    $b = $batch ?? '';
+    try {
+        $pdo->prepare("INSERT INTO receipt_operations (receipt_id,sku,supplier_batch,accept_status,accept_date,receiver_id,pallet,sku_qty,qty,reason,no_serial,reject_reason) VALUES (:r,:s,:b,:st,datetime('now'),:u,:p,1,:q,:o,:ns,:rr)")
+            ->execute([':r' => $rid, ':s' => $sku, ':b' => $b, ':st' => $status, ':u' => $uid, ':p' => $pallet, ':q' => $qty, ':o' => $reason,
+                ':ns' => $noSerial ? 1 : 0, ':rr' => ($rejectReason !== null && $rejectReason !== '') ? $rejectReason : null]);
+        return;
+    } catch (Throwable) {
+    }
+    try {
+        $pdo->prepare("INSERT INTO receipt_operations (receipt_id,sku,supplier_batch,accept_status,accept_date,receiver_id,pallet,sku_qty,qty,reason,no_serial) VALUES (:r,:s,:b,:st,datetime('now'),:u,:p,1,:q,:o,:ns)")
+            ->execute([':r' => $rid, ':s' => $sku, ':b' => $b, ':st' => $status, ':u' => $uid, ':p' => $pallet, ':q' => $qty, ':o' => $reason,
+                ':ns' => $noSerial ? 1 : 0]);
+        return;
+    } catch (Throwable) {
+    }
+    $pdo->prepare("INSERT INTO receipt_operations (receipt_id,sku,accept_status,accept_date,receiver_id,pallet,sku_qty,qty,reason) VALUES (:r,:s,:st,datetime('now'),:u,:p,1,:q,:o)")
+        ->execute([':r' => $rid, ':s' => $sku, ':st' => $status, ':u' => $uid, ':p' => $pallet, ':q' => $qty, ':o' => $reason]);
 }
 
 /**
- * Позиции с излишком (fact > plan), не подтвержденным пересчетом
- * (нет акта излишка). Не заявленные строки не считаем излишком.
- * @return string[] sku
+ * Подключение к номенклатуре (карточки товаров, флаги сканирования с/н).
+ * Кэшируется: подключение к БД создаётся один раз на запрос.
  */
-function unconfirmed_excess(PDO $pdo, int $rid): array
+function nom_db(): PDO
+{
+    static $pdo = null;
+    if ($pdo === null) {
+        require_once __DIR__ . '/../shared/db.php';
+        $pdo = wms_nomenclature_pdo();
+    }
+    return $pdo;
+}
+
+/**
+ * Эффективные флаги позиции: сканирование с/н на входе и контроль даты производства.
+ * Наследование: override артикула NULL -> глобальный флаг клиента (counterparties).
+ * @return array{sku:string,in:int,out:int,prod_date:int,contractor_id:?int,inherited_in:bool,inherited_out:bool}
+ */
+function sku_flags(PDO $pdo, string $sku): array
 {
     try {
-        $st = $pdo->prepare(
-            "SELECT i.sku,
-                    COALESCE((SELECT SUM(o.qty) FROM receipt_operations o WHERE o.receipt_id = i.receipt_id AND o.sku = i.sku AND o.accept_status = 'Принято'), 0) AS fact,
-                    COALESCE(SUM(i.qty), 0) AS plan
-             FROM receipt_items i
-             WHERE i.receipt_id = :r AND COALESCE(i.line_status, 'ok') != 'unclaimed'
-             GROUP BY i.sku"
+        require_once __DIR__ . '/../shared/Counterparties.php';
+        return WmsCounterparties::productFlags(nom_db(), $sku);
+    } catch (Throwable) {
+        return ['sku' => $sku, 'in' => 0, 'out' => 0, 'prod_date' => 0,
+            'contractor_id' => null, 'inherited_in' => true, 'inherited_out' => true];
+    }
+}
+
+/**
+ * Глобальный флаг клиента на уровне документа (поступление от клиента/поставщика).
+ * Основной источник — артикул; флаг документа — дополнение.
+ * @return array{in:int,out:int,contractor_id:?int,name:?string}
+ */
+function doc_client_flags(PDO $pdo, int $rid): array
+{
+    $out = ['in' => 0, 'out' => 0, 'contractor_id' => null, 'name' => null];
+    try {
+        $h = $pdo->prepare("SELECT contractor_id FROM receipts WHERE id=:id");
+        $h->execute([':id' => $rid]);
+        $cid = $h->fetchColumn();
+        if ($cid === false || $cid === null || (int)$cid <= 0) {
+            return $out;
+        }
+        $cid = (int)$cid;
+        $out['contractor_id'] = $cid;
+        require_once __DIR__ . '/../shared/Counterparties.php';
+        $cp = WmsCounterparties::find($pdo, $cid);
+        if (!$cp) {
+            // Клиент заведён в старом справочнике contractors — ищем по названию.
+            try {
+                $c = $pdo->prepare("SELECT name FROM contractors WHERE id=:id");
+                $c->execute([':id' => $cid]);
+                $nm = $c->fetchColumn();
+                if ($nm !== false && $nm !== null) {
+                    $cp = WmsCounterparties::findByName($pdo, (string)$nm);
+                    $out['name'] = (string)$nm;
+                }
+            } catch (Throwable) {
+            }
+        } else {
+            $out['name'] = (string)($cp['name'] ?? '');
+        }
+        if ($cp) {
+            $f = WmsCounterparties::serialFlags($pdo, $cid);
+            $out['in'] = (int)$f['in'];
+            $out['out'] = (int)$f['out'];
+        }
+    } catch (Throwable) {
+    }
+    return $out;
+}
+
+/**
+ * Итоговое решение по позиции: нужны ли серийные номера и дата производства.
+ * Основной источник — артикул (override + глобальный флаг клиента).
+ * Флаг клиента на уровне документа подключается, только если артикул
+ * не привязан к клиенту (тогда клиента документа — единственный источник).
+ * @return array{in:int,prod_date:int,src:string,contractor:?int,doc_in:int}
+ */
+function pos_requirements(PDO $pdo, int $rid, string $sku): array
+{
+    $flags = sku_flags($pdo, $sku);
+    $doc = doc_client_flags($pdo, $rid);
+    $in = (int)$flags['in'];
+    $src = 'article';
+    if ($in === 0 && !$flags['contractor_id'] && (int)$doc['in'] === 1) {
+        $in = 1;
+        $src = 'document';
+    }
+    return ['in' => $in, 'prod_date' => (int)$flags['prod_date'], 'src' => $src,
+        'contractor' => $flags['contractor_id'], 'doc_in' => (int)$doc['in'],
+        'doc_name' => $doc['name']];
+}
+
+/**
+ * Требуется ли по позиции сканирование Честного знака (лёгкая промышленность).
+ * Источник — группа товара в строке приёмки и/или chz_group карточки номенклатуры.
+ */
+function pos_chz_required(PDO $pdo, int $rid, string $sku): bool
+{
+    $itemGroup = null;
+    try {
+        $g = $pdo->prepare("SELECT prod_group FROM receipt_items WHERE receipt_id=:r AND sku=:s LIMIT 1");
+        $g->execute([':r' => $rid, ':s' => $sku]);
+        $v = $g->fetchColumn();
+        $itemGroup = ($v === false || $v === null || trim((string)$v) === '') ? null : (string)$v;
+    } catch (Throwable) {
+    }
+    $measure = null;
+    try {
+        require_once __DIR__ . '/../shared/CsvUpload.php';
+        $measure = csv_upload_measure(wms_nomenclature_pdo(), $sku, $pdo);
+    } catch (Throwable) {
+    }
+    return function_exists('csv_upload_chz_required')
+        && csv_upload_chz_required($itemGroup, $measure['chz_group'] ?? null);
+}
+
+/** Список серийных номеров из тела запроса (массив или строка через запятую). */
+function req_serials(array $body): array
+{
+    $raw = $body['serials'] ?? ($body['serial_numbers'] ?? null);
+    if ($raw === null) {
+        return [];
+    }
+    if (is_string($raw)) {
+        $raw = preg_split('/[\s,;]+/', $raw, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    }
+    if (!is_array($raw)) {
+        return [];
+    }
+    $out = [];
+    foreach ($raw as $s) {
+        $s = trim((string)$s);
+        if ($s === '' || in_array($s, $out, true)) {
+            continue;
+        }
+        $out[] = $s;
+    }
+    return $out;
+}
+
+/** Дата в формате YYYY-MM-DD; пустая строка — если не задана. */
+function norm_date(mixed $v): string
+{
+    $s = trim((string)($v ?? ''));
+    if ($s === '') {
+        return '';
+    }
+    if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $s, $m)) {
+        return $m[1] . '-' . $m[2] . '-' . $m[3];
+    }
+    return '';
+}
+
+/**
+ * Сохранить дату производства по позиции документа (receipt_items.prod_date).
+ */
+function save_prod_date(PDO $pdo, int $rid, string $sku, ?string $batch, string $prodDate, $uid): void
+{
+    if ($prodDate === '' || $sku === '') {
+        return;
+    }
+    $sql = "UPDATE receipt_items SET prod_date=:d WHERE receipt_id=:r AND sku=:s";
+    $p = [':d' => $prodDate, ':r' => $rid, ':s' => $sku];
+    if ($batch !== null) {
+        $sql .= " AND COALESCE(supplier_batch,'')=:b";
+        $p[':b'] = (string)$batch;
+    }
+    try {
+        $pdo->prepare($sql)->execute($p);
+        hist($pdo, $rid, $uid, 'prod_date', 'Дата производства · ' . $sku, '', $prodDate);
+    } catch (Throwable) {
+    }
+}
+
+/**
+ * Записать отсканированные серийные номера приёмки:
+ *   receipt_flags (flag_type='serial': serial_no, sku, pallet, qty)
+ *   + журнал серийных номеров (WmsJournal::logSerial, операция «Приход»).
+ */
+function write_receipt_serials(PDO $pdo, int $rid, string $sku, array $serials, ?string $pallet, $uid, ?string $userFio = null): void
+{
+    if (!$serials) {
+        return;
+    }
+    $itemId = null;
+    try {
+        $st = $pdo->prepare("SELECT id FROM receipt_items WHERE receipt_id=:r AND sku=:s ORDER BY id LIMIT 1");
+        $st->execute([':r' => $rid, ':s' => $sku]);
+        $v = $st->fetchColumn();
+        $itemId = ($v !== false && $v !== null) ? (int)$v : null;
+    } catch (Throwable) {
+    }
+    $docNo = '';
+    try {
+        $h = $pdo->prepare("SELECT doc_no FROM receipts WHERE id=:id");
+        $h->execute([':id' => $rid]);
+        $v = $h->fetchColumn();
+        $docNo = ($v === false || $v === null) ? '' : (string)$v;
+    } catch (Throwable) {
+    }
+    $cell = '';
+    try {
+        $h = $pdo->prepare("SELECT gate FROM receipts WHERE id=:id");
+        $h->execute([':id' => $rid]);
+        $v = $h->fetchColumn();
+        $cell = ($v === false || $v === null) ? '' : (string)$v;
+    } catch (Throwable) {
+    }
+    if ($userFio === null || $userFio === '') {
+        $userFio = '';
+        try {
+            if ($uid) {
+                $u = $pdo->prepare("SELECT fio FROM users WHERE id=:id");
+                $u->execute([':id' => (int)$uid]);
+                $v = $u->fetchColumn();
+                $userFio = ($v === false || $v === null) ? '' : (string)$v;
+            }
+        } catch (Throwable) {
+        }
+    }
+    $ins = null;
+    try {
+        $ins = $pdo->prepare(
+            "INSERT INTO receipt_flags (receipt_id,item_id,flag_type,serial_no,sku,pallet,qty,status,flag_date,created_at)
+             VALUES (:r,:i,'serial',:s,:sku,:pal,1,'годный',datetime('now'),datetime('now'))"
         );
-        $st->execute([':r' => $rid]);
-        $over = [];
-        foreach ($st->fetchAll() as $row) {
-            if (round((float)$row['fact'] - (float)$row['plan'], 3) > 0) {
-                $over[] = $row['sku'];
+    } catch (Throwable) {
+        $ins = null;
+    }
+    foreach ($serials as $sn) {
+        if ($ins) {
+            try {
+                $ins->execute([':r' => $rid, ':i' => $itemId, ':s' => $sn, ':sku' => $sku,
+                    ':pal' => ($pallet !== null && $pallet !== '') ? $pallet : null]);
+            } catch (Throwable) {
             }
         }
-        if (!$over) {
-            return [];
+        try {
+            require_once __DIR__ . '/../shared/Journal.php';
+            WmsJournal::logSerial($pdo, [
+                'serial_no' => $sn,
+                'sku' => $sku,
+                'op_type' => 'Приход',
+                'receipt_doc_no' => $docNo,
+                'pallet' => $pallet,
+                'qty' => 1,
+                'cell' => $cell,
+                'user_id' => $uid,
+                'user_fio' => $userFio,
+            ]);
+        } catch (Throwable) {
         }
-        $in = implode(',', array_fill(0, count($over), '?'));
-        $a = $pdo->prepare("SELECT DISTINCT sku FROM tsd_act_rasx WHERE receipt_id = ? AND type = 'излишек' AND sku IN ($in)");
-        $a->execute([$rid, ...$over]);
-        $confirmed = $a->fetchAll(PDO::FETCH_COLUMN);
-        return array_values(array_diff($over, $confirmed));
+    }
+}
+
+
+/**
+ * Ячейки приёмки (ворота) — из ТОЙ ЖЕ таблицы ячеек хранения (storage_cells),
+ * зона «Приёмка» (receiving). Приёмка принимает только эти ячейки.
+ */
+function receiving_cells(): array
+{
+    try {
+        return wms_receiving_cells(wms_storage_pdo());
     } catch (Throwable) {
         return [];
+    }
+}
+
+/**
+ * Проверка ячейки приёмки (ворота). Возвращает канонический код ячейки
+ * или null, если такой ячейки нет (пустое значение — не проверяем).
+ */
+function receiving_cell_code(string $code): ?string
+{
+    $code = trim($code);
+    if ($code === '') {
+        return null;
+    }
+    $cells = receiving_cells();
+    if (!$cells) {
+        return $code; // справочник недоступен — принимаем как есть
+    }
+    foreach ($cells as $c) {
+        if (strcasecmp($c, $code) === 0) {
+            return $c;
+        }
+    }
+    return null;
+}
+
+/**
+ * Синхронизация паллеты в товарный запас (модуль 8.1, product_stock).
+ * Остаток обновляется (UPDATE) по факту приёмки — в ячейке приёмки документа.
+ */
+function sync_pallet_stock(PDO $pdo, int $rid, string $sku, string $pallet, $uid): void
+{
+    if (trim($sku) === '') {
+        return;
+    }
+    try {
+        require_once __DIR__ . '/../shared/StockSync.php';
+        wms_sync_pallet_stock($pdo, wms_nomenclature_pdo(), $rid, $sku, $pallet, $uid, 'ТСД');
+    } catch (Throwable $e) {
     }
 }
 
@@ -149,7 +475,10 @@ if ($action === 'docs') {
                     (SELECT COALESCE(SUM(qty),0) FROM receipt_items WHERE receipt_id=r.id) AS plan_qty,
                     (SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=r.id AND accept_status='Принято') AS fact_qty
              FROM receipts r LEFT JOIN warehouses w ON w.id=r.warehouse_id LEFT JOIN contractors sup ON sup.id=r.supplier_id
-             WHERE r.status IN ($in) AND r.gate = :g ORDER BY r.plan_delivery_date IS NULL, r.plan_delivery_date ASC, r.id DESC LIMIT 100"
+             WHERE r.status IN ($in) AND r.gate = :g
+               AND (SELECT COALESCE(SUM(qty),0) FROM receipt_items WHERE receipt_id=r.id)
+                 > (SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=r.id AND accept_status='Принято')
+             ORDER BY r.plan_delivery_date IS NULL, r.plan_delivery_date ASC, r.id DESC LIMIT 100"
         );
         $st->execute([':g' => $gate]);
         $rows = $st->fetchAll();
@@ -159,7 +488,10 @@ if ($action === 'docs') {
                     (SELECT COALESCE(SUM(qty),0) FROM receipt_items WHERE receipt_id=r.id) AS plan_qty,
                     (SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=r.id AND accept_status='Принято') AS fact_qty
              FROM receipts r LEFT JOIN warehouses w ON w.id=r.warehouse_id LEFT JOIN contractors sup ON sup.id=r.supplier_id
-             WHERE r.status IN ($in) ORDER BY r.plan_delivery_date IS NULL, r.plan_delivery_date ASC, r.id DESC LIMIT 100"
+             WHERE r.status IN ($in)
+               AND (SELECT COALESCE(SUM(qty),0) FROM receipt_items WHERE receipt_id=r.id)
+                 > (SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=r.id AND accept_status='Принято')
+             ORDER BY r.plan_delivery_date IS NULL, r.plan_delivery_date ASC, r.id DESC LIMIT 100"
         )->fetchAll();
     }
     foreach ($rows as &$r) {
@@ -182,7 +514,10 @@ if ($action === 'doc_by_code') {
                 (SELECT COALESCE(SUM(qty),0) FROM receipt_items WHERE receipt_id=r.id) AS plan_qty,
                 (SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=r.id AND accept_status='Принято') AS fact_qty
          FROM receipts r LEFT JOIN warehouses w ON w.id=r.warehouse_id LEFT JOIN contractors sup ON sup.id=r.supplier_id
-         WHERE r.status IN ($in) AND (r.doc_no = :c OR r.external_no = :c) LIMIT 1"
+         WHERE r.status IN ($in) AND (r.doc_no = :c OR r.external_no = :c)
+           AND (SELECT COALESCE(SUM(qty),0) FROM receipt_items WHERE receipt_id=r.id)
+             > (SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=r.id AND accept_status='Принято')
+         LIMIT 1"
     );
     $s->execute([':c' => $code]);
     $doc = $s->fetch();
@@ -192,7 +527,10 @@ if ($action === 'doc_by_code') {
                     (SELECT COALESCE(SUM(qty),0) FROM receipt_items WHERE receipt_id=r.id) AS plan_qty,
                     (SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=r.id AND accept_status='Принято') AS fact_qty
              FROM receipts r LEFT JOIN warehouses w ON w.id=r.warehouse_id LEFT JOIN contractors sup ON sup.id=r.supplier_id
-             WHERE r.status IN ($in) AND (r.doc_no LIKE :q OR r.external_no LIKE :q) LIMIT 1"
+             WHERE r.status IN ($in) AND (r.doc_no LIKE :q OR r.external_no LIKE :q)
+               AND (SELECT COALESCE(SUM(qty),0) FROM receipt_items WHERE receipt_id=r.id)
+                 > (SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=r.id AND accept_status='Принято')
+             LIMIT 1"
         );
         $l->execute([':q' => '%' . $code . '%']);
         $doc = $l->fetch();
@@ -206,7 +544,38 @@ if ($action === 'doc_by_code') {
     j(['found' => true, 'doc' => $doc]);
 }
 
-// Начало приёмки: ячейка ворот + статус «В работе» (шаг 1 схемы)
+// Ячейки приёмки (ворота) — для подсказки и проверки ввода на ТСД.
+if ($action === 'receiving_cells') {
+    $cells = receiving_cells();
+    j(['cells' => $cells, 'count' => count($cells)]);
+}
+
+// Начало приёмки: ячейка ворот (она же ячейка хранения) + статус «В работе» (шаг 1 схемы)
+/**
+ * Гард записи по документу приёмки: операции факта (позиции, марки, паллеты,
+ * количества) допустимы, пока документ в конвейере приёмки. Закрытый или
+ * архивный документ принимать нельзя — иначе факт меняется ПОСЛЕ того, как
+ * сформированы акты расхождений.
+ * @return array{ id:int, doc_no:string, status:string }
+ */
+function prihod_check_open(PDO $pdo, int $rid): array
+{
+    if ($rid <= 0) {
+        // Некорректный/отсутствующий receipt_id — это 422, его выдаст сам обработчик.
+        return [];
+    }
+    $st = $pdo->prepare("SELECT id, doc_no, status FROM receipts WHERE id=:id");
+    $st->execute([':id' => $rid]);
+    $head = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$head) {
+        j(['error' => 'Документ не найден'], 404);
+    }
+    if (!in_array((string)$head['status'], PRIHOD_START_FROM, true)) {
+        j(['error' => 'Документ в статусе «' . $head['status'] . '» — приёмка закрыта, запись невозможна'], 409);
+    }
+    return $head;
+}
+
 if ($action === 'start' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
     $gate = trim((string)($body['gate'] ?? ''));
@@ -220,17 +589,30 @@ if ($action === 'start' && $method === 'POST') {
     if (!in_array($head['status'], PRIHOD_START_FROM, true)) {
         j(['error' => 'Документ в статусе ' . $head['status'] . ' — приёмка запрещена'], 409);
     }
+    // Ворота = ячейка приёмки. Проверяем по таблице ячеек хранения (зона «Приёмка»).
+    $cells = receiving_cells();
+    if ($gate !== '' && $cells) {
+        $code = receiving_cell_code($gate);
+        if ($code === null) {
+            j(['error' => 'Ячейка приёмки не найдена: ' . $gate
+                . '. Доступны ячейки приёмки: ' . implode(', ', $cells), 'cells' => $cells], 422);
+        }
+        $gate = $code;
+    }
     $pdo->beginTransaction();
     try {
         $pdo->prepare("UPDATE receipts SET gate=COALESCE(NULLIF(:g,''),gate), status='accepting', accept_date=COALESCE(accept_date,datetime('now')) WHERE id=:id")
             ->execute([':g' => $gate, ':id' => $rid]);
         hist($pdo, $rid, $uid, 'status', 'Статус', $head['status'], 'accepting');
+        if ($gate !== '') {
+            hist($pdo, $rid, $uid, 'gate', 'Ячейка приёмки', '', $gate);
+        }
         $pdo->commit();
     } catch (Throwable $e) {
         $pdo->rollBack();
         j(['error' => $e->getMessage()], 500);
     }
-    j(['ok' => true, 'status' => 'accepting']);
+    j(['ok' => true, 'status' => 'accepting', 'gate' => $gate]);
 }
 
 // Сканирование штрихкода товара (EAN-13) -> карточка или «не числится»
@@ -240,18 +622,31 @@ if ($action === 'ean') {
     if ($rid <= 0 || $ean === '') {
         j(['error' => 'нужны receipt_id и ean'], 422);
     }
-    $s = $pdo->prepare("SELECT id, line_no, code, sku, name, unit, qty, qty_fact, line_status FROM receipt_items WHERE receipt_id=:r AND (code=:e OR sku=:e) LIMIT 1");
-    $s->execute([':r' => $rid, ':e' => $ean]);
-    $item = $s->fetch();
+    try {
+        $s = $pdo->prepare("SELECT id, line_no, code, sku, name, unit, qty, qty_fact, line_status, supplier_batch FROM receipt_items WHERE receipt_id=:r AND (code=:e OR sku=:e) LIMIT 1");
+        $s->execute([':r' => $rid, ':e' => $ean]);
+        $item = $s->fetch();
+    } catch (Throwable) {
+        $s = $pdo->prepare("SELECT id, line_no, code, sku, name, unit, qty, qty_fact, line_status FROM receipt_items WHERE receipt_id=:r AND (code=:e OR sku=:e) LIMIT 1");
+        $s->execute([':r' => $rid, ':e' => $ean]);
+        $item = $s->fetch();
+    }
     if (!$item) {
-        $l = $pdo->prepare("SELECT id, line_no, code, sku, name, unit, qty, qty_fact, line_status FROM receipt_items WHERE receipt_id=:r AND (code LIKE :q OR sku LIKE :q) LIMIT 1");
-        $l->execute([':r' => $rid, ':q' => '%' . $ean . '%']);
-        $item = $l->fetch();
+        try {
+            $l = $pdo->prepare("SELECT id, line_no, code, sku, name, unit, qty, qty_fact, line_status, supplier_batch FROM receipt_items WHERE receipt_id=:r AND (code LIKE :q OR sku LIKE :q) LIMIT 1");
+            $l->execute([':r' => $rid, ':q' => '%' . $ean . '%']);
+            $item = $l->fetch();
+        } catch (Throwable) {
+            $l = $pdo->prepare("SELECT id, line_no, code, sku, name, unit, qty, qty_fact, line_status FROM receipt_items WHERE receipt_id=:r AND (code LIKE :q OR sku LIKE :q) LIMIT 1");
+            $l->execute([':r' => $rid, ':q' => '%' . $ean . '%']);
+            $item = $l->fetch();
+        }
     }
     if (!$item) {
         j(['found' => false]);
     }
     $item['fact'] = sku_fact($pdo, $rid, $item['sku']);
+    $batches = sku_batches($pdo, $rid, $item['sku']);
     // Обмеры из номенклатуры: новый товар (need_measure) — требовать ввод на ТСД,
     // существующий — показать замеры для подтверждения.
     // Группа «Легкая промышленность» (из позиции или номенклатуры) — требовать сканирование ЧЗ.
@@ -273,12 +668,217 @@ if ($action === 'ean') {
     if (function_exists('csv_upload_chz_required')) {
         $chzRequired = csv_upload_chz_required($itemGroup, $measure['chz_group'] ?? null);
     }
-    j(['found' => true, 'item' => $item, 'measure' => $measure, 'chz_required' => $chzRequired]);
+    // Эффективные флаги позиции: сканирование с/н на входе + контроль даты производства.
+    $req = pos_requirements($pdo, $rid, (string)$item['sku']);
+    j(['found' => true, 'item' => $item, 'batches' => $batches, 'measure' => $measure, 'chz_required' => $chzRequired,
+        'flags' => [
+            'serial_in' => (int)$req['in'],
+            'serial_src' => (string)$req['src'],
+            'prod_date' => (int)$req['prod_date'],
+            'doc_serial_in' => (int)$req['doc_in'],
+            'client' => $req['doc_name'],
+        ]]);
+}
+
+// --- Состояние позиции на форме ТСД: с/н, признак «без с/н», причина, дата производства ---
+if ($action === 'item_state') {
+    $rid = (int)($_GET['receipt_id'] ?? 0);
+    $sku = trim((string)($_GET['sku'] ?? ''));
+    $batch = array_key_exists('batch', $_GET) ? trim((string)($_GET['batch'] ?? '')) : null;
+    if ($rid <= 0 || $sku === '') {
+        j(['error' => 'нужны receipt_id и sku'], 422);
+    }
+    $flags = sku_flags($pdo, $sku);
+    $req = pos_requirements($pdo, $rid, $sku);
+    // Уже отсканированные по документу серийные номера позиции.
+    $serials = [];
+    try {
+        $st = $pdo->prepare(
+            "SELECT serial_no FROM receipt_flags
+              WHERE receipt_id=:r AND sku=:s AND flag_type='serial' AND serial_no IS NOT NULL ORDER BY id"
+        );
+        $st->execute([':r' => $rid, ':s' => $sku]);
+        $serials = array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN));
+    } catch (Throwable) {
+    }
+    // Приёмка без с/н и причина отбраковки по строке.
+    $noSerial = 0;
+    $rejectReason = '';
+    try {
+        $st = $pdo->prepare(
+            "SELECT no_serial, reject_reason FROM receipt_operations
+              WHERE receipt_id=:r AND sku=:s ORDER BY id DESC"
+        );
+        $st->execute([':r' => $rid, ':s' => $sku]);
+        foreach ($st->fetchAll() as $row) {
+            if ((int)($row['no_serial'] ?? 0) === 1) {
+                $noSerial = 1;
+            }
+            if ($rejectReason === '' && trim((string)($row['reject_reason'] ?? '')) !== '') {
+                $rejectReason = trim((string)$row['reject_reason']);
+            }
+        }
+    } catch (Throwable) {
+    }
+    // Дата производства позиции.
+    $prodDate = '';
+    try {
+        $sql = "SELECT prod_date FROM receipt_items WHERE receipt_id=:r AND sku=:s";
+        $p = [':r' => $rid, ':s' => $sku];
+        if ($batch !== null) {
+            $sql .= " AND COALESCE(supplier_batch,'')=:b";
+            $p[':b'] = (string)$batch;
+        }
+        $st = $pdo->prepare($sql . " ORDER BY id LIMIT 1");
+        $st->execute($p);
+        $v = $st->fetchColumn();
+        $prodDate = ($v === false || $v === null) ? '' : substr((string)$v, 0, 10);
+    } catch (Throwable) {
+    }
+    $docFlags = doc_client_flags($pdo, $rid);
+    j(['sku' => $sku, 'serial_in' => (int)$req['in'], 'prod_date_required' => (int)$req['prod_date'],
+        'doc_serial_in' => (int)$req['doc_in'], 'serials' => $serials, 'scanned' => count($serials),
+        'no_serial' => $noSerial, 'reject_reason' => $rejectReason, 'prod_date' => $prodDate]);
+}
+
+// --- Проверка серийного номера перед добавлением в позицию (дубли) ---
+if ($action === 'serial_check') {
+    $rid = (int)($_GET['receipt_id'] ?? 0);
+    $sku = trim((string)($_GET['sku'] ?? ''));
+    $serial = trim((string)($_GET['serial'] ?? ''));
+    if ($rid <= 0 || $sku === '' || $serial === '') {
+        j(['error' => 'нужны receipt_id, sku и serial'], 422);
+    }
+    $d = $pdo->prepare(
+        "SELECT id FROM receipt_flags
+          WHERE receipt_id=:r AND flag_type='serial' AND serial_no=:s LIMIT 1"
+    );
+    $d->execute([':r' => $rid, ':s' => $serial]);
+    if ($d->fetch()) {
+        j(['error' => 'Серийный номер уже отсканирован: ' . $serial], 409);
+    }
+    j(['ok' => true, 'serial' => $serial]);
+}
+
+// --- Строки документа с признаками: с/н, приёмка без с/н, причина отбраковки ---
+if ($action === 'lines') {
+    $rid = (int)($_GET['receipt_id'] ?? 0);
+    if ($rid <= 0) {
+        j(['error' => 'нужен receipt_id'], 422);
+    }
+    $st = $pdo->prepare(
+        "SELECT i.id, i.line_no, i.sku, i.name, i.unit, i.qty AS plan_qty, i.prod_date,
+                COALESCE(i.supplier_batch,'') AS batch, i.line_status
+           FROM receipt_items i WHERE i.receipt_id=:r ORDER BY i.line_no, i.id"
+    );
+    $st->execute([':r' => $rid]);
+    $rows = $st->fetchAll();
+    $skus = [];
+    foreach ($rows as $r) {
+        $skus[(string)$r['sku']] = true;
+    }
+    $flagsMap = [];
+    try {
+        require_once __DIR__ . '/../shared/Counterparties.php';
+        $flagsMap = WmsCounterparties::productFlagsBatch(nom_db(), array_keys($skus));
+    } catch (Throwable) {
+    }
+    $docFlags = doc_client_flags($pdo, $rid);
+    foreach ($rows as &$r) {
+        $sku = (string)$r['sku'];
+        $f = $flagsMap[$sku] ?? ['in' => 0, 'prod_date' => 0, 'contractor_id' => null];
+        $needSer = (int)($f['in'] ?? 0);
+        if ($needSer === 0 && !($f['contractor_id'] ?? null) && (int)$docFlags['in'] === 1) {
+            $needSer = 1;
+        }
+        $r['fact_qty'] = 0.0;
+        $r['serials'] = [];
+        $r['no_serial'] = 0;
+        $r['reject_reason'] = '';
+        try {
+            $r['fact_qty'] = sku_fact($pdo, $rid, $sku, (string)$r['batch'] !== '' ? (string)$r['batch'] : null);
+        } catch (Throwable) {
+        }
+        try {
+            $q = $pdo->prepare(
+                "SELECT serial_no FROM receipt_flags
+                  WHERE receipt_id=:r AND sku=:s AND flag_type='serial' AND serial_no IS NOT NULL ORDER BY id"
+            );
+            $q->execute([':r' => $rid, ':s' => $sku]);
+            $r['serials'] = array_map('strval', $q->fetchAll(PDO::FETCH_COLUMN));
+        } catch (Throwable) {
+        }
+        try {
+            $q = $pdo->prepare(
+                "SELECT no_serial, reject_reason FROM receipt_operations
+                  WHERE receipt_id=:r AND sku=:s ORDER BY id DESC"
+            );
+            $q->execute([':r' => $rid, ':s' => $sku]);
+            foreach ($q->fetchAll() as $op) {
+                if ((int)($op['no_serial'] ?? 0) === 1) {
+                    $r['no_serial'] = 1;
+                }
+                if ($r['reject_reason'] === '' && trim((string)($op['reject_reason'] ?? '')) !== '') {
+                    $r['reject_reason'] = trim((string)$op['reject_reason']);
+                }
+            }
+        } catch (Throwable) {
+        }
+        $r['serial_in'] = $needSer;
+        $r['prod_date_required'] = (int)($f['prod_date'] ?? 0);
+        $r['scanned'] = count($r['serials']);
+    }
+    unset($r);
+    j(['rows' => $rows]);
+}
+
+// --- Сохранение реквизитов позиции: дата производства и причина отбраковки ---
+if ($action === 'item_meta' && $method === 'POST') {
+    $rid = (int)($body['receipt_id'] ?? 0);
+    prihod_check_open($pdo, $rid);
+    $sku = trim((string)($body['sku'] ?? ''));
+    $uid = (int)($body['user_id'] ?? 0) ?: null;
+    $batch = req_batch($body);
+    if ($rid <= 0 || $sku === '') {
+        j(['error' => 'нужны receipt_id и sku'], 422);
+    }
+    $out = ['ok' => true];
+    if (array_key_exists('prod_date', $body)) {
+        $pd = norm_date($body['prod_date']);
+        save_prod_date($pdo, $rid, $sku, $batch, $pd, $uid);
+        $out['prod_date'] = $pd;
+        // Дата производства — и в остаток по паллетам позиции.
+        try {
+            $q = $pdo->prepare(
+                "SELECT DISTINCT pallet FROM receipt_operations
+                  WHERE receipt_id=:r AND sku=:s AND accept_status='Принято' AND pallet IS NOT NULL AND pallet<>''"
+            );
+            $q->execute([':r' => $rid, ':s' => $sku]);
+            foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $pal) {
+                sync_pallet_stock($pdo, $rid, $sku, (string)$pal, $uid);
+            }
+        } catch (Throwable) {
+        }
+    }
+    if (array_key_exists('reject_reason', $body)) {
+        $rr = trim((string)($body['reject_reason'] ?? ''));
+        try {
+            $pdo->prepare(
+                "UPDATE receipt_operations SET reject_reason=:r WHERE receipt_id=:rid AND sku=:s"
+            )->execute([':r' => ($rr !== '' ? $rr : null), ':rid' => $rid, ':s' => $sku]);
+        } catch (Throwable) {
+        }
+        hist($pdo, $rid, $uid, 'reject_reason', 'Причина отбраковки · ' . $sku, '', $rr);
+        $out['reject_reason'] = $rr;
+    }
+    j($out);
 }
 
 // «Не заявлен»: оформить строку (шаг 3) + статус строки
 if ($action === 'unclaimed' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
+                // Документ должен быть открыт для приёмки (закрытый — не принимаем).
+                prihod_check_open($pdo, $rid);
     $ean = trim((string)($body['ean'] ?? ''));
     $uid = (int)($body['user_id'] ?? 0) ?: null;
     if ($rid <= 0 || $ean === '') {
@@ -304,6 +904,8 @@ if ($action === 'unclaimed' && $method === 'POST') {
 // Тарное место: открыть паллету (шаг 4-5: INSERT pallet ... status Заполняется)
 if ($action === 'pallet_open' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
+                // Документ должен быть открыт для приёмки (закрытый — не принимаем).
+                prihod_check_open($pdo, $rid);
     $sscc = trim((string)($body['sscc'] ?? ''));
     if ($rid <= 0 || $sscc === '') {
         j(['error' => 'нужны receipt_id и sscc'], 422);
@@ -317,48 +919,138 @@ if ($action === 'pallet_open' && $method === 'POST') {
     j(['ok' => true, 'pallet' => $p->fetch()]);
 }
 
-// Приём всей вложенности по SSCC без вскрытия (шаг 5): items=[{sku,qty}]
+// Приём всей вложенности по SSCC без вскрытия (шаг 5): items=[{sku,qty,batch?}]
 if ($action === 'sscc_accept' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
+                // Документ должен быть открыт для приёмки (закрытый — не принимаем).
+                prihod_check_open($pdo, $rid);
     $sscc = trim((string)($body['sscc'] ?? ''));
     $items = (array)($body['items'] ?? []);
     $uid = (int)($body['user_id'] ?? 0) ?: null;
     if ($rid <= 0 || $sscc === '' || !$items) {
         j(['error' => 'нужны receipt_id, sscc и items [{sku,qty}]'], 422);
     }
+    // Проверка паллеты: если такой SSCC уже есть в товарном запасе — ошибка.
+    try {
+        require_once __DIR__ . '/../shared/db.php';
+        $npdo = wms_nomenclature_pdo();
+        $chk = $npdo->prepare("SELECT COUNT(*) FROM product_stock WHERE TRIM(pallet) = :p");
+        $chk->execute([':p' => $sscc]);
+        $pc = (int)$chk->fetchColumn();
+        if ($pc > 0) {
+            j(['error' => 'Паллета не пустая, используйте другую', 'pallet_busy' => true, 'pallet' => $sscc], 409);
+        }
+    } catch (Throwable) {
+    }
+    // Проверка превышения по документу (как при ручном вводе количества):
+    // лишнее — принимаем заявленную часть, а излишек уходит в отдельную ветку.
+    $excess = null;
+    foreach ($items as $it) {
+        $q = (float)($it['qty'] ?? 0);
+        $sku = (string)($it['sku'] ?? '');
+        if ($q <= 0 || $sku === '') {
+            continue;
+        }
+        $b = isset($it['batch']) || isset($it['supplier_batch']) ? trim((string)($it['batch'] ?? $it['supplier_batch'] ?? '')) : '';
+        $sb = scope_bounds($pdo, $rid, $sku, $b);
+        if (isset($sb['need_batch'])) {
+            continue;
+        }
+        $plan = (float)$sb['plan'];
+        $fact = (float)$sb['fact'];
+        $rest = round($plan - $fact, 3);
+        if ($plan > 0 && $rest >= 0 && round($q - $rest, 3) > 0) {
+            $excess = [
+                'error' => 'Введено неправильное количество: по документу ожидалось '
+                    . round(max(0, $rest), 3) . ' шт, введено ' . $q . ' шт'
+                    . ($sb['batch'] !== '' ? ' (партия ' . $sb['batch'] . ')' : ''),
+                'need_excess' => true, 'excess' => true, 'sku' => $sku,
+                'plan' => $plan, 'fact' => $fact, 'remaining' => round(max(0, $rest), 3),
+                'entered' => $q, 'total' => round($fact + $q, 3), 'batch' => $sb['batch'],
+                'batch_mode' => !empty($sb['batch_mode']),
+            ];
+            break;
+        }
+    }
+    $allowExcess = (int)($body['allow_excess'] ?? 0) === 1;
+    if ($excess && !$allowExcess) {
+        // Не принимаем частично: сначала оператор подтверждает излишек.
+        j($excess, 409);
+    }
     $pdo->beginTransaction();
     try {
-        $pdo->prepare("INSERT OR IGNORE INTO tsd_pallets (receipt_id,sscc,status) VALUES (:r,:s,'Заполняется')")->execute([':r' => $rid, ':s' => $sscc]);
-        $ins = $pdo->prepare("INSERT INTO receipt_operations (receipt_id,sku,accept_status,accept_date,receiver_id,pallet,sku_qty,qty) VALUES (:r,:sku,'Принято',datetime('now'),:u,:p,1,:q)");
+        tsd_pallet_ensure($pdo, $rid, $sscc);
         foreach ($items as $it) {
             $q = (float)($it['qty'] ?? 0);
             if ($q <= 0 || empty($it['sku'])) {
                 continue;
             }
-            $ins->execute([':r' => $rid, ':sku' => (string)$it['sku'], ':u' => $uid, ':p' => $sscc, ':q' => $q]);
+            $b = isset($it['batch']) || isset($it['supplier_batch']) ? trim((string)($it['batch'] ?? $it['supplier_batch'] ?? '')) : '';
+            $sku = (string)$it['sku'];
+            // Излишек подтверждён оператором — принимаем введённое количество.
+            if ($q > 0) {
+                op_insert($pdo, $rid, $sku, $b, 'Принято', $uid, $sscc, $q);
+            }
         }
         hist($pdo, $rid, $uid, 'sscc', 'SSCC приём', null, $sscc);
+        if ($excess) {
+            $exSku = (string)($excess['sku'] ?? '');
+            $exBatch = (string)($excess['batch'] ?? '');
+            $exMode = !empty($excess['batch_mode']);
+            set_deviation($pdo, $rid, $exSku, $exBatch, $exMode, 'excess');
+            hist($pdo, $rid, $uid, 'excess', 'Отклонение · ' . $exSku,
+                (string)($excess['plan'] ?? ''), (string)($excess['total'] ?? '') . ' (излишек)');
+        }
         $pdo->commit();
     } catch (Throwable $e) {
         $pdo->rollBack();
         j(['error' => $e->getMessage()], 500);
     }
-    j(['ok' => true, 'progress' => refresh_head($pdo, $rid)]);
+    if ($excess) {
+        try {
+            $add = round(max(0, (float)($excess['entered'] ?? 0) - (float)($excess['remaining'] ?? 0)), 3);
+            $pdo->prepare("UPDATE receipts SET excess_qty = COALESCE(excess_qty,0) + :ex, has_diff=1 WHERE id=:id")
+                ->execute([':ex' => $add, ':id' => $rid]);
+        } catch (Throwable) {
+        }
+    }
+    // Товарный запас 8.1: принятые паллеты в ячейке приёмки (UPDATE остатка).
+    foreach ($items as $it) {
+        if (empty($it['sku'])) {
+            continue;
+        }
+        sync_pallet_stock($pdo, $rid, (string)$it['sku'], $sscc, $uid);
+    }
+    j(['ok' => true, 'progress' => refresh_head($pdo, $rid),
+        'excess' => (bool)$excess, 'plan' => $excess['plan'] ?? null,
+        'fact' => $excess['total'] ?? null]);
 }
 
-// Марка DataMatrix (шаги 6-9): quality=good|unreadable|defect + reason
+// Марка DataMatrix (шаги 6-9): quality=good|unreadable|defect + reason + batch (партия поставщика)
 if ($action === 'mark' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
+                // Документ должен быть открыт для приёмки (закрытый — не принимаем).
+                prihod_check_open($pdo, $rid);
     $sku = trim((string)($body['sku'] ?? ''));
     $mark = trim((string)($body['mark'] ?? ''));
     $quality = (string)($body['quality'] ?? 'good');
     $reason = trim((string)($body['reason'] ?? ''));
     $uid = (int)($body['user_id'] ?? 0) ?: null;
+    $batch = req_batch($body);
     if ($rid <= 0 || $sku === '' || $mark === '') {
         j(['error' => 'нужны receipt_id, sku и mark'], 422);
     }
     if (!in_array($quality, ['good', 'unreadable', 'defect'], true)) {
         j(['error' => 'quality: good|unreadable|defect'], 422);
+    }
+    // Партия: если по позиции их несколько — требуем выбор
+    $bl = sku_batches($pdo, $rid, $sku);
+    $known = array_column($bl, 'batch');
+    if (count($known) > 1 && ($batch === null || !in_array($batch, $known, true))) {
+        j(['error' => 'Выбери партию поставщика', 'need_batch' => true, 'batches' => $bl], 422);
+    }
+    if ($batch === null) {
+        $batch = count($known) === 1 ? (string)$known[0] : '';
     }
     $d = $pdo->prepare("SELECT id FROM receipt_flags WHERE receipt_id=:r AND marking_code=:m LIMIT 1");
     $d->execute([':r' => $rid, ':m' => $mark]);
@@ -414,8 +1106,7 @@ if ($action === 'mark' && $method === 'POST') {
             // Нечитаемая: отделить от брака, отложить
             $pdo->prepare("INSERT INTO receipt_flags (receipt_id,item_id,flag_type,marking_code,sku,status,reason,flag_date) VALUES (:r,:i,'marking',:m,:s,'нечитаема','нечитаемая марка',datetime('now'))")
                 ->execute([':r' => $rid, ':i' => $itemId, ':m' => $mark, ':s' => $sku]);
-            $pdo->prepare("INSERT INTO receipt_operations (receipt_id,sku,accept_status,accept_date,receiver_id,qty,reason) VALUES (:r,:s,'Принято',datetime('now'),:u,1,'нечитаемая марка (отложена)')")
-                ->execute([':r' => $rid, ':s' => $sku, ':u' => $uid]);
+            op_insert($pdo, $rid, $sku, $batch, 'Принято', $uid, null, 1, 'нечитаемая марка (отложена)');
         } else {
             // Брак маркированного (шаг 7)
             if ($reason === '') {
@@ -423,11 +1114,10 @@ if ($action === 'mark' && $method === 'POST') {
             }
             $pdo->prepare("INSERT INTO receipt_flags (receipt_id,item_id,flag_type,marking_code,sku,status,reason,flag_date) VALUES (:r,:i,'marking',:m,:s,'брак',:o,datetime('now'))")
                 ->execute([':r' => $rid, ':i' => $itemId, ':m' => $mark, ':s' => $sku, ':o' => $reason]);
-            $pdo->prepare("INSERT INTO receipt_operations (receipt_id,sku,accept_status,accept_date,receiver_id,qty,reason) VALUES (:r,:s,'Брак',datetime('now'),:u,1,:o)")
-                ->execute([':r' => $rid, ':s' => $sku, ':u' => $uid, ':o' => $reason]);
-            $pdo->prepare("INSERT INTO tsd_act_rasx (receipt_id,sku,type,qty_diff) VALUES (:r,:s,'брак',1)")->execute([':r' => $rid, ':s' => $sku]);
+            op_insert($pdo, $rid, $sku, $batch, 'Брак', $uid, null, 1, $reason);
+            // Акт о браке формируется только при закрытии документа (shared/ReceiptClose.php).
         }
-        hist($pdo, $rid, $uid, 'mark', 'Марка ' . $quality, $mark, $sku);
+        hist($pdo, $rid, $uid, 'mark', 'Марка ' . $quality . ($batch !== '' ? ' · партия ' . $batch : ''), $mark, $sku);
         $pdo->commit();
     } catch (Throwable $e) {
         $pdo->rollBack();
@@ -436,29 +1126,109 @@ if ($action === 'mark' && $method === 'POST') {
     j(['ok' => true, 'progress' => refresh_head($pdo, $rid)]);
 }
 
-// Ручной ввод количества немаркированного (шаг 8) + качество товара
+// Ручной ввод количества немаркированного (шаг 8) + качество товара + партия.
+// Если количество больше, чем осталось по документу (по выбранной партии) —
+// НЕ записываем сразу: отвечаем 409 с excess=true, ТСД показывает уведомление
+// «принято X / в документе Y» и уходит в ветку фиксации излишков.
+//
+// Серийные номера (новое требование): если по позиции включено сканирование
+// с/н на входе — после количества оператор ЦИКЛИЧНО сканирует с/н, затем паллету.
+// Тело запроса может нести:
+//   serials[]      — отсканированные серийные номера (должно быть = qty);
+//   no_serial=1    — приёмка без с/н (оператор ввёл «000»); тогда обязательна
+//                    reject_reason — причина отбраковки по строке;
+//   reject_reason  — комментарий по строке (причина отбраковки);
+//   prod_date      — дата производства (обязательна при control_prod_date=1).
 if ($action === 'qty' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
+                // Документ должен быть открыт для приёмки (закрытый — не принимаем).
+                prihod_check_open($pdo, $rid);
     $sku = trim((string)($body['sku'] ?? ''));
     $qty = (float)($body['qty'] ?? 0);
     $quality = (string)($body['quality'] ?? 'good');
     $reason = trim((string)($body['reason'] ?? ''));
     $pallet = trim((string)($body['pallet'] ?? '')) ?: null;
     $uid = (int)($body['user_id'] ?? 0) ?: null;
+    $batch = req_batch($body);
+    $serials = req_serials($body);
+    $noSerial = (int)($body['no_serial'] ?? 0) ? 1 : 0;
+    $allowExcess = (int)($body['allow_excess'] ?? 0) === 1;
+    $rejectReason = trim((string)($body['reject_reason'] ?? ''));
+    $prodDate = norm_date($body['prod_date'] ?? '');
     if ($rid <= 0 || $sku === '' || $qty <= 0) {
         j(['error' => 'нужны receipt_id, sku и qty>0'], 422);
     }
-    if ($quality === 'defect') {
+    // Проверка паллеты: если такой SSCC уже есть в товарном запасе (любом приходе),
+    // не разрешаем принимать на ту же паллету — операция без с/н недопустима.
+    if ($pallet !== null && $pallet !== '') {
+        try {
+            require_once __DIR__ . '/../shared/db.php';
+            $npdo = wms_nomenclature_pdo();
+            $chk = $npdo->prepare("SELECT COUNT(*) FROM product_stock WHERE TRIM(pallet) = :p");
+            $chk->execute([':p' => $pallet]);
+            $pc = (int)$chk->fetchColumn();
+            if ($pc > 0) {
+                j(['error' => 'Паллета не пустая, используйте другую', 'pallet_busy' => true, 'pallet' => $pallet], 409);
+            }
+        } catch (Throwable) {
+        }
+    }
+    // Эффективные флаги позиции (override артикула + глобальный флаг клиента).
+    $req = pos_requirements($pdo, $rid, $sku);
+    $needSerial = ((int)$req['in'] === 1);
+    $isDefect = ($quality === 'defect');
+    // Дата производства: у позиции с контролем — обязательна.
+    if ((int)$req['prod_date'] === 1 && $prodDate === '' && !$isDefect) {
+        j(['error' => 'Укажите дату производства', 'need_prod_date' => true, 'sku' => $sku], 422);
+    }
+    // Серийные номера: сверка количества, дублей и режима «приёмка без с/н».
+    if ($noSerial) {
+        if ($serials) {
+            j(['error' => 'Приёмка без с/н: серийные номера указаны. Оставь только режим «000» или убери с/н'], 422);
+        }
+        if ($rejectReason === '') {
+            j(['error' => 'Укажите причину отбраковки (приёмка без с/н)', 'need_reject_reason' => true, 'sku' => $sku], 422);
+        }
+    } elseif ($serials) {
+        $need = (int)ceil($qty);
+        if (count($serials) !== $need) {
+            j(['error' => 'Отсканировано ' . count($serials) . ' из ' . $need . ' серийных номеров',
+                'scanned' => count($serials), 'need' => $need], 422);
+        }
+        // Дубль серийника в документе — повторное сканирование не допускаем.
+        foreach ($serials as $sn) {
+            $d = $pdo->prepare(
+                "SELECT id FROM receipt_flags
+                  WHERE receipt_id=:r AND flag_type='serial' AND serial_no=:s LIMIT 1"
+            );
+            $d->execute([':r' => $rid, ':s' => $sn]);
+            if ($d->fetch()) {
+                j(['error' => 'Серийный номер уже отсканирован: ' . $sn], 409);
+            }
+        }
+    } elseif ($needSerial && !$isDefect) {
+        // По позиции включено сканирование с/н — без них приёмка невозможна.
+        j(['error' => 'Отсканируй серийные номера по позиции или выбери «Приёмка без с/н»',
+            'need_serials' => true, 'qty' => $qty, 'sku' => $sku], 422);
+    }
+    $bl = sku_batches($pdo, $rid, $sku);
+    $known = array_column($bl, 'batch');
+    if (count($known) > 1 && ($batch === null || !in_array($batch, $known, true))) {
+        j(['error' => 'Выбери партию поставщика', 'need_batch' => true, 'batches' => $bl], 422);
+    }
+    if ($batch === null) {
+        $batch = count($known) === 1 ? (string)$known[0] : '';
+    }
+    if ($isDefect) {
         // Шаг 6: брак немаркированного (бой / мятая упаковка)
         if ($reason === '') {
             j(['error' => 'Укажи причину брака: бой / мятая упаковка'], 422);
         }
         $pdo->beginTransaction();
         try {
-            $pdo->prepare("INSERT INTO receipt_operations (receipt_id,sku,accept_status,accept_date,receiver_id,pallet,sku_qty,qty,reason) VALUES (:r,:s,'Брак',datetime('now'),:u,:p,1,:q,:o)")
-                ->execute([':r' => $rid, ':s' => $sku, ':u' => $uid, ':p' => $pallet, ':q' => $qty, ':o' => $reason]);
-            $pdo->prepare("INSERT INTO tsd_act_rasx (receipt_id,sku,type,qty_diff) VALUES (:r,:s,'брак',:q)")->execute([':r' => $rid, ':s' => $sku, ':q' => $qty]);
-            hist($pdo, $rid, $uid, 'defect', 'Брак', $sku, $reason . ' x' . $qty);
+            op_insert($pdo, $rid, $sku, $batch, 'Брак', $uid, $pallet, $qty, $reason);
+            // Акт о браке формируется только при закрытии документа (shared/ReceiptClose.php).
+            hist($pdo, $rid, $uid, 'defect', 'Брак' . ($batch !== '' ? ' · партия ' . $batch : ''), $sku, $reason . ' x' . $qty);
             $pdo->commit();
         } catch (Throwable $e) {
             $pdo->rollBack();
@@ -466,123 +1236,414 @@ if ($action === 'qty' && $method === 'POST') {
         }
         j(['ok' => true, 'progress' => refresh_head($pdo, $rid)]);
     }
+    // Проверка превышения по документу (по выбранной партии).
+    $sb = scope_bounds($pdo, $rid, $sku, $batch === '' ? '' : (string)$batch);
+    if (isset($sb['need_batch'])) {
+        j(['error' => 'Выбери партию поставщика', 'need_batch' => true, 'batches' => $sb['batches']], 422);
+    }
+    $plan = (float)$sb['plan'];
+    $fact = (float)$sb['fact'];
+    $rest = round($plan - $fact, 3);
+    $over = $plan > 0 && $rest >= 0 && round($qty - $rest, 3) > 0;
+    if ($over && !$allowExcess) {
+        // Количество больше заявленного: НЕ принимаем частично, а возвращаем
+        // оператору предупреждение. Подтверждение — отдельным действием
+        // «Принять с излишком» (allow_excess=1).
+        $total = round($fact + $qty, 3);
+        j([
+            'error' => 'Введено неправильное количество: по документу ожидалось '
+                . round(max(0, $rest), 3) . ' шт, введено ' . $qty . ' шт'
+                . ($sb['batch'] !== '' ? ' (партия ' . $sb['batch'] . ')' : ''),
+            'need_excess' => true, 'excess' => true,
+            'plan' => $plan, 'fact' => $fact, 'remaining' => round(max(0, $rest), 3),
+            'entered' => $qty, 'total' => $total, 'batch' => $sb['batch'],
+        ], 409);
+    }
+    $batchMode = !empty($sb['batch_mode']);
+    $batchNorm = (string)($sb['batch'] ?? $batch);
+    $newFact = round($fact + $qty, 3);
     $pdo->beginTransaction();
     try {
-        $pdo->prepare("INSERT INTO receipt_operations (receipt_id,sku,accept_status,accept_date,receiver_id,pallet,sku_qty,qty) VALUES (:r,:s,'Принято',datetime('now'),:u,:p,1,:q)")
-            ->execute([':r' => $rid, ':s' => $sku, ':u' => $uid, ':p' => $pallet, ':q' => $qty]);
-        hist($pdo, $rid, $uid, 'qty', 'Кол-во', $sku, 'x' . $qty);
+        // Приёмка без с/н: в позицию пишем признак no_serial и причину отбраковки.
+        op_insert($pdo, $rid, $sku, $batch, 'Принято', $uid, $pallet, $qty, null, $noSerial,
+            $rejectReason !== '' ? $rejectReason : null);
+        // Серийные номера: receipt_flags + журнал серийных номеров («Приход»).
+        write_receipt_serials($pdo, $rid, $sku, $serials, $pallet, $uid);
+        // Дата производства партии — в позицию документа.
+        if ($prodDate !== '') {
+            save_prod_date($pdo, $rid, $sku, $batch, $prodDate, $uid);
+        }
+        // Излишек подтверждён оператором — фиксируем отклонение в строке.
+        set_deviation($pdo, $rid, $sku, $batchNorm, $batchMode, $over ? 'excess' : '');
+        // Факт в позиции документа (колонка «Отклонение» в модуле поступлений).
+        apply_qty_fact($pdo, $rid, $sku, $batchNorm, $batchMode, $plan, $newFact);
+        hist($pdo, $rid, $uid, 'qty', 'Кол-во' . ($batch !== '' ? ' · партия ' . $batch : ''), $sku, 'x' . $qty
+            . ($serials ? (' · с/н ' . count($serials)) : '') . ($noSerial ? ' · без с/н' : ''));
+        if ($over) {
+            hist($pdo, $rid, $uid, 'excess', 'Отклонение · ' . $sku . ($batch !== '' ? ' · партия ' . $batch : ''),
+                (string)$plan, (string)$newFact . ' (излишек +' . round($qty - max(0, $rest), 3) . ')');
+        }
         $pdo->commit();
     } catch (Throwable $e) {
         $pdo->rollBack();
         j(['error' => $e->getMessage()], 500);
     }
-    j(['ok' => true, 'progress' => refresh_head($pdo, $rid)]);
+    // Товарный запас 8.1: паллета встаёт в ячейку приёмки (UPDATE остатка).
+    // Журнал склада пишется внутри wms_sync_pallet_stock («приход»).
+    sync_pallet_stock($pdo, $rid, $sku, (string)$pallet, $uid);
+    if ($over) {
+        // Столбец «Отклонение» в реестре поступлений виден сразу после
+        // подтверждённого излишка (при закрытии документ пересчитает сумму).
+        try {
+            $add = round(max(0, $qty - max(0, $rest)), 3);
+            $pdo->prepare(
+                "UPDATE receipts SET excess_qty = COALESCE(excess_qty,0) + :ex, has_diff = 1 WHERE id = :id"
+            )->execute([':ex' => $add, ':id' => $rid]);
+        } catch (Throwable) {
+        }
+    }
+    j(['ok' => true, 'progress' => refresh_head($pdo, $rid),
+        'no_serial' => $noSerial, 'serials' => count($serials),
+        'reject_reason' => $rejectReason, 'prod_date' => $prodDate,
+        'excess' => $over, 'plan' => $plan, 'fact' => $newFact]);
 }
 
-// Сверка факт vs документ (ромб схемы): shortage|exact|excess
+// Принять весь приход: остатки всех позиций принимаются в полном объёме,
+// без номеров паллет. Исключения — позиции со сканированием с/н и ЧЗ:
+// их нельзя принимать «оптом», они возвращаются в список для ручной приёмки.
+if ($action === 'accept_all' && $method === 'POST') {
+    $rid = (int)($body['receipt_id'] ?? 0);
+    $uid = (int)($body['user_id'] ?? 0) ?: null;
+    $fio = trim((string)($body['user_fio'] ?? '')) !== '' ? trim((string)$body['user_fio']) : 'ТСД';
+    if ($rid <= 0) {
+        j(['error' => 'нужен receipt_id'], 422);
+    }
+    prihod_check_open($pdo, $rid);
+    try {
+        $items = $pdo->prepare(
+            "SELECT sku, MAX(name) AS name FROM receipt_items
+              WHERE receipt_id=:r GROUP BY sku ORDER BY MIN(line_no), MIN(id)"
+        );
+        $items->execute([':r' => $rid]);
+        $skuRows = $items->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        j(['error' => $e->getMessage()], 500);
+    }
+    $accepted = [];
+    $skipped = [];
+    foreach ($skuRows as $row) {
+        $sku = trim((string)($row['sku'] ?? ''));
+        if ($sku === '') {
+            continue;
+        }
+        $req = pos_requirements($pdo, $rid, $sku);
+        if ((int)$req['in'] === 1) {
+            $skipped[] = ['sku' => $sku, 'reason' => 'требуется сканирование серийных номеров'];
+            continue;
+        }
+        if (pos_chz_required($pdo, $rid, $sku)) {
+            $skipped[] = ['sku' => $sku, 'reason' => 'требуется сканирование Честного знака'];
+            continue;
+        }
+        $needProdDate = (int)$req['prod_date'] === 1;
+        $batches = sku_batches($pdo, $rid, $sku);
+        $multi = count($batches) > 1;
+        $scopes = $multi ? $batches : [scope_bounds($pdo, $rid, $sku, null)];
+        foreach ($scopes as $b) {
+            $batch = (string)($b['batch'] ?? '');
+            $plan = (float)($b['plan'] ?? 0);
+            $fact = (float)($b['fact'] ?? 0);
+            $rest = round($plan - $fact, 3);
+            if ($rest <= 0.0001) {
+                continue;
+            }
+            if ($needProdDate) {
+                try {
+                    $q = $pdo->prepare(
+                        "SELECT COUNT(*) FROM receipt_items WHERE receipt_id=:r AND sku=:s
+                           AND COALESCE(supplier_batch,'')=:b AND prod_date IS NOT NULL AND prod_date<>''"
+                    );
+                    $q->execute([':r' => $rid, ':s' => $sku, ':b' => $batch]);
+                    if ((int)$q->fetchColumn() === 0) {
+                        $skipped[] = ['sku' => $sku, 'reason' => 'не указана дата производства'];
+                        continue;
+                    }
+                } catch (Throwable) {
+                }
+            }
+            $pdo->beginTransaction();
+            try {
+                op_insert($pdo, $rid, $sku, $batch, 'Принято', $uid, null, $rest);
+                apply_qty_fact($pdo, $rid, $sku, $batch, $multi, $plan, round($fact + $rest, 3));
+                set_deviation($pdo, $rid, $sku, $batch, $multi, '');
+                hist($pdo, $rid, $uid, 'qty',
+                    'Кол-во' . ($batch !== '' ? ' · партия ' . $batch : ''),
+                    $sku, 'x' . $rest . ' · принять весь приход (без паллеты)');
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                $skipped[] = ['sku' => $sku, 'reason' => $e->getMessage()];
+                continue;
+            }
+            // Товарный запас + журнал склада: строка без номера паллеты.
+            sync_pallet_stock($pdo, $rid, $sku, '', $uid);
+            $accepted[] = ['sku' => $sku, 'batch' => $batch, 'qty' => $rest];
+        }
+    }
+    $remaining = 0.0;
+    foreach (receipt_scopes($pdo, $rid) as $s) {
+        if (empty($s['closed'])) {
+            $remaining = round($remaining + max(0, (float)($s['remaining'] ?? 0)), 3);
+        }
+    }
+    j(['ok' => true, 'accepted' => $accepted, 'skipped' => $skipped,
+        'remaining' => $remaining, 'progress' => refresh_head($pdo, $rid)]);
+}
+
+// Проверка паллеты: существует ли такой SSCC в товарном запасе (product_stock).
+if ($action === 'pallet_check' && $method === 'POST') {
+    $rid = (int)($body['receipt_id'] ?? 0);
+    $pallet = trim((string)($body['pallet'] ?? ''));
+    if ($rid <= 0 || $pallet === '') {
+        j(['error' => 'нужны receipt_id и pallet'], 422);
+    }
+    try {
+        require_once __DIR__ . '/../shared/db.php';
+        $npdo = wms_nomenclature_pdo();
+        $chk = $npdo->prepare("SELECT COUNT(*) FROM product_stock WHERE TRIM(pallet) = :p");
+        $chk->execute([':p' => $pallet]);
+        $pc = (int)$chk->fetchColumn();
+        j(['pallet_busy' => $pc > 0, 'pallet' => $pallet, 'count' => $pc]);
+    } catch (Throwable $e) {
+        j(['error' => $e->getMessage()], 500);
+    }
+}
+
+// Сверка факт vs документ (ромб схемы): shortage|exact|excess (+ партии).
+// Если передана партия (batch) — сверка идет ПО ПАРТИИ, а не по всему SKU.
+// Иначе это и есть причина ложной «недостачи»: приняли одну партию из трех,
+// а факт 4873 сравнивали с планом 14616.
 if ($action === 'fact') {
     $rid = (int)($_GET['receipt_id'] ?? $body['receipt_id'] ?? 0);
     $sku = trim((string)($_GET['sku'] ?? $body['sku'] ?? ''));
+    $qBatch = array_key_exists('batch', $_GET) || array_key_exists('supplier_batch', $_GET)
+        ? trim((string)($_GET['batch'] ?? $_GET['supplier_batch'] ?? ''))
+        : (array_key_exists('batch', $body) || array_key_exists('supplier_batch', $body) ? req_batch($body) : null);
     if ($rid <= 0 || $sku === '') {
         j(['error' => 'нужны receipt_id и sku'], 422);
     }
     $plan = sku_plan($pdo, $rid, $sku);
     $fact = sku_fact($pdo, $rid, $sku);
     $dev = round($fact - $plan, 3);
-    j(['sku' => $sku, 'plan' => $plan, 'fact' => $fact, 'dev' => $dev,
-        'state' => $dev > 0 ? 'excess' : ($dev < 0 ? 'shortage' : 'exact')]);
+    $batches = sku_batches($pdo, $rid, $sku);
+    $out = ['sku' => $sku, 'plan' => $plan, 'fact' => $fact, 'dev' => $dev,
+        'state' => $dev > 0 ? 'excess' : ($dev < 0 ? 'shortage' : 'exact'),
+        'remaining' => round(max(0, $plan - $fact), 3),
+        'batches' => $batches];
+    if ($qBatch !== null) {
+        $bp = 0.0;
+        $bf = 0.0;
+        $found = false;
+        foreach ($batches as $bRow) {
+            if ((string)$bRow['batch'] === (string)$qBatch) {
+                $bp = (float)$bRow['plan'];
+                $bf = (float)$bRow['fact'];
+                $found = true;
+                break;
+            }
+        }
+        if (!$found && count($batches) === 1) {
+            $bp = (float)$batches[0]['plan'];
+            $bf = (float)$batches[0]['fact'];
+        }
+        $bdev = round($bf - $bp, 3);
+        $out['batch'] = $qBatch;
+        $out['batch_plan'] = $bp;
+        $out['batch_fact'] = $bf;
+        $out['batch_dev'] = $bdev;
+        $out['batch_remaining'] = round(max(0, $bp - $bf), 3);
+        $out['batch_state'] = $bdev > 0 ? 'excess' : ($bdev < 0 ? 'shortage' : 'exact');
+    }
+    j($out);
 }
 
-// Фиксация факта (шаг 10): UPDATE line qty_fact + INSERT ostatok; акт при расхождении (шаг 11)
+/** Строка позиции оформлена как «не заявлен»? */
+// Фиксация факта по позиции/партии (шаг 10-11).
+// mode: exact | shortage (фиксация недостачи) | excess (фиксация излишков).
+// Частичная приёмка (принято 10 из 100) недостачей НЕ считается — позиция просто
+// не закрыта, принимаем дальше (по SSCC), пока не примем всё по строке.
+// Недостачу и излишки фиксирует оператор явно: цифра 2 — недостача, цифра 3 — излишки.
+// Живой факт лежит в receipt_operations (шаги qty/sscc_accept/mark) —
+// отдельного INSERT в остаток не нужно: единый источник — receipt_operations,
+// оприходование в product_stock (8.1) — через close → StockSync.
 if ($action === 'fix' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
+                // Документ должен быть открыт для приёмки (закрытый — не принимаем).
+                prihod_check_open($pdo, $rid);
     $sku = trim((string)($body['sku'] ?? ''));
     $pallet = trim((string)($body['pallet'] ?? '')) ?: null;
     $uid = (int)($body['user_id'] ?? 0) ?: null;
+    $mode = (string)($body['mode'] ?? 'exact');
     if ($rid <= 0 || $sku === '') {
         j(['error' => 'нужны receipt_id и sku'], 422);
     }
-    $plan = sku_plan($pdo, $rid, $sku);
-    $fact = sku_fact($pdo, $rid, $sku);
-    $dev = round($fact - $plan, 3);
-    // Излишек без пересчета не фиксируем: требуем вбить количество после пересчета.
-    $recount = array_key_exists('recount_qty', $body) ? (float)$body['recount_qty'] : null;
-    if ($dev > 0 && $recount === null) {
-        j(['error' => 'Излишек: пересчитай товар и вбей количество для подтверждения',
-            'need_recount' => true, 'plan' => $plan, 'fact' => $fact], 422);
+    if (!in_array($mode, ['exact', 'shortage', 'excess'], true)) {
+        j(['error' => 'mode: exact|shortage|excess'], 422);
     }
+    $batch = req_batch($body);
+    // Границы позиции: по партии, если партий несколько (иначе по всему SKU).
+    $sb = scope_bounds($pdo, $rid, $sku, $batch);
+    if (isset($sb['need_batch'])) {
+        j(['error' => 'Выбери партию поставщика', 'need_batch' => true, 'batches' => $sb['batches']], 422);
+    }
+    $plan = (float)$sb['plan'];
+    $fact = (float)$sb['fact'];
+    $batchNorm = (string)$sb['batch'];
+    $batchMode = (bool)$sb['batch_mode'];
+    $dev = round($fact - $plan, 3);
+    $batches = $sb['batches'];
+
+    // --- Ветка «излишки»: подтверждённое количество после пересчёта.
+    // Указывать можно сколько угодно раз — акт обновляется, а не дублируется.
+    if ($mode === 'excess') {
+        $total = null;
+        if (array_key_exists('total_qty', $body)) {
+            $total = (float)$body['total_qty'];
+        } elseif (array_key_exists('recount_qty', $body)) {
+            $total = (float)$body['recount_qty'];
+        }
+        if ($total === null) {
+            j(['error' => 'Излишек: пересчитай товар и вбей количество для подтверждения',
+                'need_recount' => true, 'plan' => $plan, 'fact' => $fact], 422);
+        }
+        if ($total <= 0) {
+            j(['error' => 'Количество после пересчета должно быть > 0'], 422);
+        }
+        // Излишек фиксируем только по строке, принятой по документу:
+        // пока принято меньше заявленного — это не излишек, а недобор.
+        if (round($total - $plan, 3) > 0 && round($fact - $plan, 3) < 0) {
+            j(['error' => 'Сначала прими заявленное количество по строке: принято ' . $fact
+                . ', по документу ' . $plan
+                . ($batchNorm !== '' ? ' (партия ' . $batchNorm . ')' : ''),
+                'need_accept' => true, 'plan' => $plan, 'fact' => $fact], 422);
+        }
+        $delta = round($total - $fact, 3);
+        $pdo->beginTransaction();
+        try {
+            if ($delta != 0) {
+                op_insert($pdo, $rid, $sku, $batchNorm, 'Принято', $uid, $pallet, $delta, 'излишек: подтверждено пересчётом');
+            }
+            $fact = $total;
+            $dev = round($fact - $plan, 3);
+            // Отметка решения оператора. Акт об излишке формируется при закрытии документа.
+            set_deviation($pdo, $rid, $sku, $batchNorm, $batchMode, $dev > 0 ? 'excess' : '');
+            apply_qty_fact($pdo, $rid, $sku, $batchNorm, $batchMode, $plan, $fact);
+            hist($pdo, $rid, $uid, 'excess', 'Излишек ' . $sku . ($batchNorm !== '' ? ' · партия ' . $batchNorm : ''), (string)$plan, (string)$fact);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            j(['error' => $e->getMessage()], 500);
+        }
+        j(['ok' => true, 'mode' => 'excess', 'plan' => $plan, 'fact' => $fact, 'dev' => $dev,
+            'state' => $dev > 0 ? 'excess' : ($dev < 0 ? 'shortage' : 'exact'),
+            'batch' => $batchNorm, 'progress' => refresh_head($pdo, $rid),
+            'batches' => sku_batches($pdo, $rid, $sku)]);
+    }
+
+    // --- Ветка «недостача»: явная фиксация оператором.
+    if ($mode === 'shortage') {
+        if ($dev >= 0) {
+            j(['error' => 'Недостачи нет: принято ' . $fact . ' из ' . $plan
+                . ($batchNorm !== '' ? ' (партия ' . $batchNorm . ')' : '')], 422);
+        }
+        $pdo->beginTransaction();
+        try {
+            // Отметка решения оператора. Акт о недостаче формируется при закрытии документа.
+            set_deviation($pdo, $rid, $sku, $batchNorm, $batchMode, 'shortage');
+            apply_qty_fact($pdo, $rid, $sku, $batchNorm, $batchMode, $plan, $fact);
+            hist($pdo, $rid, $uid, 'shortage', 'Недостача ' . $sku . ($batchNorm !== '' ? ' · партия ' . $batchNorm : ''), (string)$plan, (string)$fact);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            j(['error' => $e->getMessage()], 500);
+        }
+        j(['ok' => true, 'mode' => 'shortage', 'plan' => $plan, 'fact' => $fact, 'dev' => $dev,
+            'state' => 'shortage', 'batch' => $batchNorm, 'progress' => refresh_head($pdo, $rid),
+            'batches' => sku_batches($pdo, $rid, $sku)]);
+    }
+
+    // --- Обычная фиксация (позиция принята в полном объёме).
     $pdo->beginTransaction();
     try {
-        if ($recount !== null) {
-            if ($recount <= 0) {
-                throw new RuntimeException('Количество после пересчета должно быть > 0');
-            }
-            $corr = round($recount - $fact, 3);
-            if ($corr != 0) {
-                $pdo->prepare("INSERT INTO receipt_operations (receipt_id,sku,accept_status,accept_date,receiver_id,pallet,sku_qty,qty,reason) VALUES (:r,:s,'Принято',datetime('now'),:u,:p,1,:q,'пересчет: подтверждение количества')")
-                    ->execute([':r' => $rid, ':s' => $sku, ':u' => $uid, ':p' => $pallet, ':q' => $corr]);
-            }
-            $fact = $recount;
-            $dev = round($fact - $plan, 3);
-        }
-        if ($plan > 0) {
-            $rows = $pdo->prepare("SELECT id, qty FROM receipt_items WHERE receipt_id=:r AND sku=:s");
-            $rows->execute([':r' => $rid, ':s' => $sku]);
-            $up = $pdo->prepare("UPDATE receipt_items SET qty_fact=:f WHERE id=:id");
-            foreach ($rows->fetchAll() as $rw) {
-                $up->execute([':f' => round($fact * ((float)$rw['qty'] / $plan), 3), ':id' => $rw['id']]);
-            }
-        } else {
-            $pdo->prepare("UPDATE receipt_items SET qty_fact=:f WHERE receipt_id=:r AND sku=:s")->execute([':f' => $fact, ':r' => $rid, ':s' => $sku]);
-        }
-        $pdo->prepare("INSERT INTO tsd_stock (receipt_id,sku,pallet,qty) VALUES (:r,:s,:p,:q)")
-            ->execute([':r' => $rid, ':s' => $sku, ':p' => $pallet, ':q' => $fact]);
-        $type = null;
-        if ($dev < 0) {
-            $type = 'недостача';
-        } elseif ($dev > 0) {
-            $isUn = $pdo->prepare("SELECT COUNT(*) FROM receipt_items WHERE receipt_id=:r AND sku=:s AND line_status='unclaimed'");
-            $isUn->execute([':r' => $rid, ':s' => $sku]);
-            $type = ((int)$isUn->fetchColumn() > 0) ? 'не_заявлен' : 'излишек';
-        }
-        if ($type !== null) {
-            $pdo->prepare("INSERT INTO tsd_act_rasx (receipt_id,sku,type,qty_diff) VALUES (:r,:s,:t,:d)")
-                ->execute([':r' => $rid, ':s' => $sku, ':t' => $type, ':d' => $dev]);
-        }
-        hist($pdo, $rid, $uid, 'fix', 'Факт ' . $sku, (string)$plan, (string)$fact);
+        apply_qty_fact($pdo, $rid, $sku, $batchNorm, $batchMode, $plan, $fact);
+        hist($pdo, $rid, $uid, 'fix', 'Факт ' . $sku . ($batchNorm !== '' ? ' · партия ' . $batchNorm : ''), (string)$plan, (string)$fact);
         $pdo->commit();
     } catch (Throwable $e) {
         $pdo->rollBack();
         j(['error' => $e->getMessage()], 500);
     }
-    j(['ok' => true, 'plan' => $plan, 'fact' => $fact, 'dev' => $dev,
+    $resp = ['ok' => true, 'mode' => 'exact', 'plan' => $plan, 'fact' => $fact, 'dev' => $dev,
         'state' => $dev > 0 ? 'excess' : ($dev < 0 ? 'shortage' : 'exact'),
-        'progress' => refresh_head($pdo, $rid)]);
+        'progress' => refresh_head($pdo, $rid),
+        'batches' => sku_batches($pdo, $rid, $sku)];
+    // Расхождение не закрыто — подсказываем, в какую ветку уйти оператору.
+    if ($dev < 0) {
+        $resp['need_fix'] = 'shortage';
+    } elseif ($dev > 0) {
+        $resp['need_fix'] = 'excess';
+    }
+    if ($batchMode) {
+        $resp['batch'] = $batchNorm;
+        $resp['batch_plan'] = $plan;
+        $resp['batch_fact'] = $fact;
+        $resp['batch_dev'] = $dev;
+        $resp['batch_state'] = $resp['state'];
+        $tot = ['plan' => sku_plan($pdo, $rid, $sku), 'fact' => sku_fact($pdo, $rid, $sku)];
+        $resp['total_plan'] = $tot['plan'];
+        $resp['total_fact'] = $tot['fact'];
+    }
+    j($resp);
 }
 
-// Подтверждение позиции (шаг 11/38)
+// Подтверждение позиции (шаг 11/38). В партионном режиме подтверждаем
+// ТОЛЬКО строки текущей партии, иначе первая же партия «подтвердила» бы весь SKU.
 if ($action === 'confirm' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
+                // Документ должен быть открыт для приёмки (закрытый — не принимаем).
+                prihod_check_open($pdo, $rid);
     $sku = trim((string)($body['sku'] ?? ''));
     $uid = (int)($body['user_id'] ?? 0) ?: null;
     if ($rid <= 0 || $sku === '') {
         j(['error' => 'нужны receipt_id и sku'], 422);
     }
-    $pdo->prepare("UPDATE receipt_items SET line_status='confirmed' WHERE receipt_id=:r AND sku=:s AND line_status IN ('ok','unclaimed')")
-        ->execute([':r' => $rid, ':s' => $sku]);
-    hist($pdo, $rid, $uid, 'confirm', 'Позиция', $sku, 'подтверждена');
+    $batch = req_batch($body);
+    if ($batch !== null) {
+        $pdo->prepare("UPDATE receipt_items SET line_status='confirmed' WHERE receipt_id=:r AND sku=:s AND COALESCE(supplier_batch,'')=:b AND line_status IN ('ok','unclaimed')")
+            ->execute([':r' => $rid, ':s' => $sku, ':b' => (string)$batch]);
+        hist($pdo, $rid, $uid, 'confirm', 'Позиция · партия ' . $batch, $sku, 'подтверждена');
+    } else {
+        $pdo->prepare("UPDATE receipt_items SET line_status='confirmed' WHERE receipt_id=:r AND sku=:s AND line_status IN ('ok','unclaimed')")
+            ->execute([':r' => $rid, ':s' => $sku]);
+        hist($pdo, $rid, $uid, 'confirm', 'Позиция', $sku, 'подтверждена');
+    }
     j(['ok' => true]);
 }
 
 // Закрытие тарного места (шаг 12): UPDATE pallet Закрыта + итоги
 if ($action === 'pallet_close' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
+                // Документ должен быть открыт для приёмки (закрытый — не принимаем).
+                prihod_check_open($pdo, $rid);
     $sscc = trim((string)($body['sscc'] ?? ''));
     $weight = (float)($body['weight'] ?? 0);
     if ($rid <= 0 || $sscc === '') {
         j(['error' => 'нужны receipt_id и sscc'], 422);
     }
-    $t = $pdo->prepare("SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=:r AND pallet=:s");
+    // Только ПРИНЯТОЕ: брак и отменённые операции не входят в qty_total паллеты
+    // (иначе tsd/info.php потом вечно показывает «расходится с фактом»).
+    $t = $pdo->prepare("SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=:r AND pallet=:s AND accept_status='Принято'");
     $t->execute([':r' => $rid, ':s' => $sscc]);
     $total = (float)$t->fetchColumn();
     $pdo->prepare("UPDATE tsd_pallets SET status='Закрыта', qty_total=:q, weight=:w, closed_at=datetime('now') WHERE receipt_id=:r AND sscc=:s")
@@ -590,9 +1651,129 @@ if ($action === 'pallet_close' && $method === 'POST') {
     j(['ok' => true, 'qty_total' => $total]);
 }
 
+// Состав принятого паллета (для экрана отмены): что и по каким партиям принято.
+if ($action === 'pallet_info') {
+    $rid = (int)($_GET['receipt_id'] ?? 0);
+    $sscc = trim((string)($_GET['sscc'] ?? ''));
+    if ($rid <= 0 || $sscc === '') {
+        j(['error' => 'нужны receipt_id и sscc'], 422);
+    }
+    $st = $pdo->prepare(
+        "SELECT sku, COALESCE(supplier_batch,'') AS batch, COALESCE(SUM(qty),0) AS qty, COUNT(*) AS ops
+         FROM receipt_operations
+         WHERE receipt_id=:r AND pallet=:s AND accept_status='Принято'
+         GROUP BY sku, COALESCE(supplier_batch,'') ORDER BY sku, batch"
+    );
+    $st->execute([':r' => $rid, ':s' => $sscc]);
+    $rows = $st->fetchAll();
+    $batches = [];
+    foreach ($rows as $r) {
+        $batches[(string)$r['batch']] = true;
+    }
+    j(['sscc' => $sscc, 'rows' => $rows, 'batches' => array_keys($batches),
+        'total' => array_sum(array_map(fn($r) => (float)$r['qty'], $rows))]);
+}
+
+// Отмена принятого паллета: снимаем приёмку (по паллете, по партии — если указана).
+if ($action === 'pallet_cancel' && $method === 'POST') {
+    $rid = (int)($body['receipt_id'] ?? 0);
+    $sscc = trim((string)($body['sscc'] ?? ''));
+    $batch = req_batch($body);
+    $uid = (int)($body['user_id'] ?? 0) ?: null;
+    if ($rid <= 0 || $sscc === '') {
+        j(['error' => 'нужны receipt_id и sscc'], 422);
+    }
+    $hs = $pdo->prepare("SELECT status FROM receipts WHERE id=:id");
+    $hs->execute([':id' => $rid]);
+    $head = $hs->fetch();
+    if (!$head) {
+        j(['error' => 'Документ не найден'], 404);
+    }
+    if (!in_array((string)$head['status'], PRIHOD_START_FROM, true)) {
+        j(['error' => 'Документ в статусе «' . $head['status'] . '» — приёмка закрыта, отмена невозможна'], 409);
+    }
+    // Что именно снимаем: по партии (если указана) или всё, что принято по паллете.
+    $sql = "SELECT id, sku, COALESCE(supplier_batch,'') AS batch, qty FROM receipt_operations
+            WHERE receipt_id=:r AND pallet=:s AND accept_status='Принято'";
+    $p = [':r' => $rid, ':s' => $sscc];
+    if ($batch !== null && $batch !== '') {
+        $sql .= " AND COALESCE(supplier_batch,'')=:b";
+        $p[':b'] = (string)$batch;
+    }
+    $st = $pdo->prepare($sql);
+    $st->execute($p);
+    $ops = $st->fetchAll();
+    if (!$ops) {
+        j(['error' => $batch !== null && $batch !== ''
+            ? 'По паллете ' . $sscc . ' партия ' . $batch . ' не принята'
+            : 'Паллета ' . $sscc . ' в приёмке не найдена'], 404);
+    }
+    $total = 0.0;
+    $skus = [];
+    $batches = [];
+    foreach ($ops as $o) {
+        $total += (float)$o['qty'];
+        $skus[(string)$o['sku']] = true;
+        $batches[(string)$o['batch']] = true;
+    }
+    $pdo->beginTransaction();
+    try {
+        $ids = array_map(fn($o) => (int)$o['id'], $ops);
+        // Плейсхолдеры вместо склейки: $sscc приходит из тела запроса.
+        $ph = [];
+        foreach ($ids as $k => $id) {
+            $ph[':id' . $k] = $id;
+        }
+        $in = implode(',', array_keys($ph));
+        // Операции помечаем отменёнными (сохраняем след в журнале операций).
+        // Конкатенация строки — переносимая: MySQL требует CONCAT(), SQLite/PG — оператор ||.
+        $drv = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $reasonExpr = $drv === 'mysql'
+            ? "CONCAT(COALESCE(reason,''), ' · отмена паллеты ', :rsn)"
+            : "(COALESCE(reason,'') || ' · отмена паллеты ' || :rsn)";
+        $pdo->prepare("UPDATE receipt_operations SET accept_status='Отменено', reason=$reasonExpr WHERE id IN ($in)")
+            ->execute($ph + [':rsn' => $sscc]);
+        // Пересчитываем факт и снимаем отметки о решении оператора по затронутым позициям.
+        foreach (array_keys($skus) as $sku) {
+            foreach (array_keys($batches) as $b) {
+                $sb = scope_bounds($pdo, $rid, (string)$sku, (string)$b);
+                if (isset($sb['need_batch'])) {
+                    continue;
+                }
+                $f = (float)$sb['fact'];
+                $pl = (float)$sb['plan'];
+                apply_qty_fact($pdo, $rid, (string)$sku, (string)$sb['batch'], (bool)$sb['batch_mode'], $pl, $f);
+                set_deviation($pdo, $rid, (string)$sku, (string)$sb['batch'], (bool)$sb['batch_mode'], '');
+            }
+        }
+        // Паллета: если принятого по ней не осталось — помечаем отменённой.
+        $left = $pdo->prepare("SELECT COALESCE(SUM(qty),0) FROM receipt_operations WHERE receipt_id=:r AND pallet=:s AND accept_status='Принято'");
+        $left->execute([':r' => $rid, ':s' => $sscc]);
+        $rest = (float)$left->fetchColumn();
+        $pdo->prepare("UPDATE tsd_pallets SET status=:st, qty_total=:q WHERE receipt_id=:r AND sscc=:s")
+            ->execute([':st' => ($rest > 0 ? 'Заполняется' : 'Отменена'), ':q' => $rest, ':r' => $rid, ':s' => $sscc]);
+        hist($pdo, $rid, $uid, 'pallet_cancel', 'Отмена паллеты ' . $sscc
+            . ($batch !== null && $batch !== '' ? ' · партия ' . $batch : ''),
+            'принято ' . $total . ' шт', 'снято ' . $total . ' шт');
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        j(['error' => $e->getMessage()], 500);
+    }
+    // Товарный запас 8.1: остаток паллеты приводим к факту (UPDATE).
+    foreach (array_keys($skus) as $sku) {
+        sync_pallet_stock($pdo, $rid, (string)$sku, $sscc, $uid);
+    }
+    j(['ok' => true, 'sscc' => $sscc, 'cancelled_qty' => round($total, 3),
+        'batch' => ($batch !== null ? $batch : ''), 'rest' => $rest,
+        'progress' => refresh_head($pdo, $rid)]);
+}
+
 // Кросс-док: создать строку (gate_id, doc_id) + sscc kd (шаг 2)
 if ($action === 'crossdock' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
+                // Документ должен быть открыт для приёмки (закрытый — не принимаем).
+                prihod_check_open($pdo, $rid);
     $gate = trim((string)($body['gate_id'] ?? $body['gate'] ?? ''));
     $sscc = trim((string)($body['sscc'] ?? '')) ?: null;
     if ($rid <= 0) {
@@ -606,40 +1787,65 @@ if ($action === 'crossdock' && $method === 'POST') {
 // Кросс-док: переместить в зону отгрузки (шаг 13)
 if ($action === 'crossdock_move' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
+                // Документ должен быть открыт для приёмки (закрытый — не принимаем).
+    prihod_check_open($pdo, $rid);
+    $sscc = trim((string)($body['sscc'] ?? ''));
+    $cdId = (int)($body['crossdock_id'] ?? 0);
     if ($rid <= 0) {
         j(['error' => 'нужен receipt_id'], 422);
     }
-    $pdo->prepare("UPDATE tsd_crossdock SET status='в зоне отгрузки' WHERE receipt_id=:r AND status != 'в зоне отгрузки'")->execute([':r' => $rid]);
-    j(['ok' => true]);
+    // Переносим ТОЛЬКО указанную паллету. Раньше запрос двигал в зону отгрузки
+    // ВСЕ кросс-док-строки документа разом — одна отсканированная паллета
+    // помечала отгруженными все остальные.
+    $sql = "UPDATE tsd_crossdock SET status='в зоне отгрузки' WHERE receipt_id=:r AND status <> 'в зоне отгрузки'";
+    $p = [':r' => $rid];
+    if ($cdId > 0) {
+        $sql .= ' AND id = :id';
+        $p[':id'] = $cdId;
+    } elseif ($sscc !== '') {
+        $sql .= ' AND sscc = :s';
+        $p[':s'] = $sscc;
+    }
+    $st = $pdo->prepare($sql);
+    $st->execute($p);
+    $moved = $st->rowCount();
+    $left = (int)$pdo->query("SELECT COUNT(*) FROM tsd_crossdock WHERE receipt_id=" . $rid . " AND status <> 'в зоне отгрузки'")->fetchColumn();
+    j(['ok' => true, 'moved' => $moved, 'left' => $left,
+        'sscc' => $sscc !== '' ? $sscc : null]);
 }
 
-// Закрытие документа + акт (шаг 14): статус «Закрыт» (=ready_place), ts_end, печать акта
+// Закрытие документа + формирование актов (шаг 14).
+// Акты расхождений формируются ТОЛЬКО здесь — при закрытии документа.
+// Статус: «Закрыто» (по всем строкам полученное = заявленному) либо
+// «Закрыто с отклонением» (есть излишки или недостача).
+// Закрыть можно, когда все строки приняты (fact = plan) либо приняты с излишками,
+// подтверждёнными пересчётом. Незафиксированная недостача закрытию мешает:
+// сначала оператор фиксирует недостачу (цифра 2 на форме «Приёмка»).
 if ($action === 'close' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
     $uid = (int)($body['user_id'] ?? 0) ?: null;
-    $h = $pdo->prepare("SELECT status FROM receipts WHERE id=:id");
+    $h = $pdo->prepare("SELECT status, comment FROM receipts WHERE id=:id");
     $h->execute([':id' => $rid]);
     $head = $h->fetch();
     if (!$head) {
         j(['error' => 'Документ не найден'], 404);
     }
-    $acts = $pdo->prepare("SELECT sku, type, qty_diff, created_at FROM tsd_act_rasx WHERE receipt_id=:r ORDER BY id");
-    $acts->execute([':r' => $rid]);
-    $actRows = $acts->fetchAll();
     // Просто так закрыть нельзя: излишки без пересчета-подтверждения блокируют закрытие.
-    $bad = unconfirmed_excess($pdo, $rid);
-    if ($bad) {
-        j(['error' => 'Нельзя закрыть: подтверди излишек пересчетом по позициям: ' . implode(', ', $bad)], 409);
-    }
-    $pdo->beginTransaction();
+    // Недостача: закрывать позицию можно только после явной фиксации оператором.
+    // Проверки и закрытие — единой функцией (так же, как в реестре поступлений).
+    // --- Формируем акты расхождений и закрываем документ (только при закрытии) ---
     try {
-        $pdo->prepare("UPDATE receipts SET status='ready_place', accept_date=COALESCE(accept_date,datetime('now')) WHERE id=:id")->execute([':id' => $rid]);
-        hist($pdo, $rid, $uid, 'status', 'Статус', $head['status'], 'ready_place');
-        $pdo->commit();
+        $closed = wms_close_receipt_guarded($pdo, $rid, $uid, 'ТСД');
     } catch (Throwable $e) {
-        $pdo->rollBack();
-        j(['error' => $e->getMessage()], 500);
+        $msg = $e->getMessage();
+        $code = str_starts_with($msg, 'Нельзя закрыть') ? 409 : 500;
+        j(['error' => $msg], $code);
     }
+    $status = $closed['status'];
+    $excessQty = $closed['excess_qty'];
+    $shortQty = $closed['shortage_qty'];
+    $devText = $closed['deviation'];
+    $actRows = $closed['act'];
     // Проброс факта в Номенклатуру (products.qty / stock / movements). Идемпотентно.
     $stock = null;
     try {
@@ -649,7 +1855,10 @@ if ($action === 'close' && $method === 'POST') {
     } catch (Throwable $e) {
         $stock = ['synced' => false, 'error' => $e->getMessage()];
     }
-    j(['ok' => true, 'status' => 'ready_place', 'act' => $actRows, 'progress' => refresh_head($pdo, $rid), 'stock' => $stock]);
+    j(['ok' => true, 'status' => $status, 'status_label' => $closed['status_label'],
+        'excess_qty' => $excessQty, 'shortage_qty' => $shortQty, 'deviation' => $devText,
+        'act' => $actRows, 'acts' => $closed['acts'],
+        'progress' => refresh_head($pdo, $rid), 'stock' => $stock]);
 }
 
 // Обмеры товара с ТСД (новый товар из CSV-прихода): сохранить габариты + снять флаг need_measure
@@ -671,7 +1880,10 @@ if ($action === 'measure_save' && $method === 'POST') {
     }
 }
 
-// Состояние документа для мастера (прогресс, паллеты, акты)
+// Состояние документа для мастера (прогресс, паллеты, акты).
+// fact теперь считается ПО ПАРТИИ строки (supplier_batch), а не по всему SKU:
+// иначе 3 строки-партии одного SKU получали одинаковый общий факт и остаток
+// считался неверно (0 вместо 2×4872).
 if ($action === 'state') {
     $rid = (int)($_GET['receipt_id'] ?? 0);
     $h = $pdo->prepare("SELECT r.*, sup.name AS supplier, w.name AS warehouse FROM receipts r LEFT JOIN contractors sup ON sup.id=r.supplier_id LEFT JOIN warehouses w ON w.id=r.warehouse_id WHERE r.id=:id");
@@ -680,15 +1892,28 @@ if ($action === 'state') {
     if (!$head) {
         j(['error' => 'Документ не найден'], 404);
     }
-    $items = $pdo->prepare("SELECT i.*, COALESCE((SELECT SUM(o.qty) FROM receipt_operations o WHERE o.receipt_id=i.receipt_id AND o.sku=i.sku AND o.accept_status='Принято'),0) AS fact FROM receipt_items i WHERE i.receipt_id=:id ORDER BY i.line_no, i.id");
+    $items = $pdo->prepare("SELECT i.* FROM receipt_items i WHERE i.receipt_id=:id ORDER BY i.line_no, i.id");
     $items->execute([':id' => $rid]);
+    $itemRows = $items->fetchAll();
+    foreach ($itemRows as &$ir) {
+        $b = isset($ir['supplier_batch']) ? trim((string)$ir['supplier_batch']) : '';
+        try {
+            $ir['fact'] = sku_fact($pdo, $rid, (string)$ir['sku'], $b);
+        } catch (Throwable) {
+            $ir['fact'] = 0;
+        }
+    }
+    unset($ir);
     $pal = $pdo->prepare("SELECT * FROM tsd_pallets WHERE receipt_id=:id ORDER BY id");
     $pal->execute([':id' => $rid]);
     $acts = $pdo->prepare("SELECT * FROM tsd_act_rasx WHERE receipt_id=:id ORDER BY id");
     $acts->execute([':id' => $rid]);
     $cd = $pdo->prepare("SELECT * FROM tsd_crossdock WHERE receipt_id=:id ORDER BY id");
     $cd->execute([':id' => $rid]);
-    j(['head' => $head, 'items' => $items->fetchAll(), 'pallets' => $pal->fetchAll(), 'acts' => $acts->fetchAll(), 'crossdock' => $cd->fetchAll(), 'progress' => refresh_head($pdo, $rid)]);
+    // Позиции по партиям: план/факт/остаток/состояние — мастеру и форме «Приёмка».
+    $scopes = receipt_scopes($pdo, $rid);
+    j(['head' => $head, 'items' => $itemRows, 'pallets' => $pal->fetchAll(), 'acts' => $acts->fetchAll(),
+        'crossdock' => $cd->fetchAll(), 'scopes' => $scopes, 'progress' => refresh_head($pdo, $rid)]);
 }
 
 j(['error' => 'unknown action'], 404);

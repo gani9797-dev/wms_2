@@ -3,14 +3,46 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/CellStatus.php';
 require_once __DIR__ . '/CellFilter.php';
+require_once __DIR__ . '/CellPlacement.php';
+require_once __DIR__ . '/../shared/pg.php';
 
 // Репозиторий реестра "Ячейки хранения". PDO, MySQL + SQLite (демо).
 // Заполненность считается на лету: qty / capacity.
 // Вместимость 0 = безразмерная ячейка (без лимита): fill_pct = 0, признак is_unlimited = true.
+// Статус «Робот. Настройка тар» (robot_tare): робот настраивает тару по СЕКЦИИ
+// (warehouse_id + building + row_no). Если хотя бы в одной ячейке секции снята
+// галка «Разрешено несколько типов паллет» или «Разрешено хранить разные товары» —
+// вся секция пропускается роботом (robot_tare = 'skip').
 
 final class CellRepository
 {
+    /** @var array<string,array{label:string,comment:string}>|null кэш секций с проблемными ячейками */
+    private ?array $robotSections = null;
+    private ?array $zoneNames = null;
+
     public function __construct(private PDO $pdo) {}
+
+    /** Название зоны из справочника storage_zones (для кастомных кодов). */
+    private function zoneName(?string $code): string
+    {
+        $code = trim((string)$code);
+        if ($code === '') {
+            return '';
+        }
+        if ($this->zoneNames === null) {
+            $this->zoneNames = [];
+            try {
+                foreach ($this->pdo->query("SELECT code, name FROM storage_zones") as $z) {
+                    $c = trim((string)($z['code'] ?? ''));
+                    if ($c !== '') {
+                        $this->zoneNames[strtolower($c)] = trim((string)($z['name'] ?? $c));
+                    }
+                }
+            } catch (Throwable) {
+            }
+        }
+        return $this->zoneNames[strtolower($code)] ?? CellStatus::zoneLabel($code);
+    }
 
     public static function fillPct(float $qty, float $capacity): int
     {
@@ -33,8 +65,19 @@ final class CellRepository
         $total = (int)$cnt->fetchColumn();
 
         $offset = ($f->page - 1) * $f->perPage;
-        $sortMap = ['code' => 'c.code', 'qty' => 'c.qty', 'capacity' => 'c.capacity', 'id' => 'c.id'];
-        $orderBy = ($sortMap[$f->sort] ?? 'c.code') . ' ' . $f->dir;
+        // Сортировка по любому столбцу реестра (А→Я / Я→А).
+        $sortMap = [
+            'code' => ['c.code', 't'], 'qty' => ['c.qty', 'n'], 'capacity' => ['c.capacity', 'n'],
+            'id' => ['c.id', 'n'], 'zone' => ['c.zone', 't'], 'cell_type' => ['c.cell_type', 't'],
+            'beam' => ['c.beam_width', 'n'], 'height' => ['c.cell_height_mm', 'n'],
+            'pallet_types' => ['c.allowed_pallet_types', 't'], 'category' => ['c.category', 't'],
+            'status' => ['c.status', 't'],
+            'fill' => ['(CASE WHEN c.capacity > 0 THEN c.qty * 100.0 / c.capacity ELSE 0 END)', 'n'],
+            'reserved' => ['c.reserved_qty', 'n'], 'stock' => ['c.qty', 'n'],
+            'pallets' => ['c.pallet_count', 'n'], 'temp' => ['c.temp_from', 'n'],
+            'lock' => ['c.is_locked', 'n'],
+        ];
+        $orderBy = wms_order_by($this->pdo, $f->sort, $f->dir, $sortMap, 'c.code');
 
         $sql = "SELECT c.*, w.name AS warehouse FROM storage_cells c
                 LEFT JOIN warehouses w ON w.id = c.warehouse_id
@@ -47,9 +90,12 @@ final class CellRepository
         $st->bindValue(':off', $offset, PDO::PARAM_INT);
         $st->execute();
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        $zones = $this->pickZonesByCell(array_map(fn($r) => (int)$r['id'], $rows));
         foreach ($rows as &$r) {
             $this->decorate($r);
+            $this->decoratePickZones($r, $zones);
         }
+        unset($r);
 
         $from = $total === 0 ? 0 : $offset + 1;
         $to = min($offset + $f->perPage, $total);
@@ -69,6 +115,8 @@ final class CellRepository
             return null;
         }
         $this->decorate($row);
+        $zones = $this->pickZonesByCell([(int)$row['id']]);
+        $this->decoratePickZones($row, $zones);
         return $row;
     }
 
@@ -88,7 +136,52 @@ final class CellRepository
             return null;
         }
         $this->decorate($row);
+        $zones = $this->pickZonesByCell([(int)$row['id']]);
+        $this->decoratePickZones($row, $zones);
         return $row;
+    }
+
+    /**
+     * Зоны отбора ячеек (дополнительные): [cell_id => ['manual','driver']].
+     * У ячейки может быть несколько зон отбора.
+     * @param int[] $cellIds
+     */
+    public function pickZonesByCell(array $cellIds): array
+    {
+        $out = [];
+        $cellIds = array_values(array_filter(array_map('intval', $cellIds)));
+        if (!$cellIds) {
+            return $out;
+        }
+        try {
+            $in = implode(',', $cellIds);
+            $rows = $this->pdo->query("SELECT cell_id, zone FROM storage_cell_zones WHERE cell_id IN ($in) ORDER BY id")
+                ->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $cid = (int)($r['cell_id'] ?? 0);
+                $z = (string)($r['zone'] ?? '');
+                if ($cid <= 0 || $z === '') {
+                    continue;
+                }
+                if (!isset($out[$cid])) {
+                    $out[$cid] = [];
+                }
+                if (!in_array($z, $out[$cid], true)) {
+                    $out[$cid][] = $z;
+                }
+            }
+        } catch (Throwable) {
+        }
+        return $out;
+    }
+
+    private function decoratePickZones(array &$r, array $zones): void
+    {
+        $list = $zones[(int)($r['id'] ?? 0)] ?? [];
+        $r['pick_zones'] = $list;
+        $r['pick_zones_label'] = $list
+            ? implode(', ', array_map(fn($z) => CellStatus::pickZoneLabel($z), $list))
+            : '—';
     }
 
     // Вкладка "Содержимое": позиции в ячейке.
@@ -130,7 +223,7 @@ final class CellRepository
     private function decorate(array &$r): void
     {
         $r['status_label'] = CellStatus::label((string)($r['status'] ?? 'free'));
-        $r['zone_label'] = CellStatus::zoneLabel($r['zone'] ?? null);
+        $r['zone_label'] = $this->zoneName($r['zone'] ?? null);
         $r['type_label'] = CellStatus::typeLabel($r['cell_type'] ?? null);
         $r['fill_pct'] = self::fillPct((float)($r['qty'] ?? 0), (float)($r['capacity'] ?? 0));
         $r['is_unlimited'] = ((float)($r['capacity'] ?? 0)) <= 0;
@@ -144,6 +237,87 @@ final class CellRepository
         $r['pallet_type_label'] = self::palletTypeLabel($r['pallet_type'] ?? null);
         $r['height_label'] = isset($r['cell_height_mm']) && $r['cell_height_mm'] !== null && (int)$r['cell_height_mm'] > 0
             ? ((int)$r['cell_height_mm'] . ' мм') : '—';
+        $this->decorateRobotTare($r);
+    }
+
+    /**
+     * Статус секции для робота (настройка тары): 'ok' | 'skip'.
+     * Секция = warehouse_id + building + row_no (Ряд + Секция = вертикаль).
+     * Ячейки зоны receiving (ворота) и архивные в расчёт секции не входят.
+     */
+    private function decorateRobotTare(array &$r): void
+    {
+        $r['robot_tare'] = 'ok';
+        $r['robot_tare_comment'] = '';
+        $key = CellPlacement::sectionKey($r);
+        $bad = $this->problemSections()[$key] ?? null;
+        if ($bad !== null) {
+            $r['robot_tare'] = 'skip';
+            $r['robot_tare_comment'] = (string)($bad['comment'] ?? '');
+            return;
+        }
+        $label = self::sectionLabel($r);
+        $r['robot_tare_comment'] = $label !== ''
+            ? 'Секция ' . $label . ' настроена: робот может настроить тару'
+            : 'Секция настроена: робот может настроить тару';
+    }
+
+    /** Название секции: корпус-ряд (например A-01). */
+    public static function sectionLabel(array $r): string
+    {
+        $b = trim((string)($r['building'] ?? ''));
+        $s = trim((string)($r['row_no'] ?? ''));
+        if ($b !== '' && $s !== '') {
+            return $b . '-' . $s;
+        }
+        return $b !== '' ? $b : $s;
+    }
+
+    /**
+     * Секции с проблемными ячейками: робот по настройке тары их пропускает.
+     * Проблемная ячейка: снят флаг «Разрешено несколько типов паллет»
+     * или «Разрешено хранить разные товары в одной ячейке».
+     * @return array<string,array{label:string,comment:string}> ключ секции => данные
+     */
+    public function problemSections(): array
+    {
+        if ($this->robotSections !== null) {
+            return $this->robotSections;
+        }
+        $out = [];
+        try {
+            $rows = $this->pdo->query(
+                "SELECT id, code, warehouse_id, building, row_no, allow_multi_pallet_types, allow_mixed_goods
+                   FROM storage_cells
+                  WHERE is_archived = 0 AND (zone IS NULL OR zone <> 'receiving')
+                    AND (COALESCE(allow_multi_pallet_types, 1) = 0 OR COALESCE(allow_mixed_goods, 1) = 0)
+                  ORDER BY code ASC"
+            )->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $key = CellPlacement::sectionKey($r);
+                if (isset($out[$key])) {
+                    continue; // комментарий — по первой проблемной ячейке секции
+                }
+                $label = self::sectionLabel($r);
+                $flags = [];
+                if ((int)($r['allow_mixed_goods'] ?? 1) === 0) {
+                    $flags[] = 'Разные товары';
+                }
+                if ((int)($r['allow_multi_pallet_types'] ?? 1) === 0) {
+                    $flags[] = 'Несколько типов паллет';
+                }
+                $flagTxt = count($flags) === 1
+                    ? 'снят флаг «' . $flags[0] . '»'
+                    : 'сняты флаги «' . implode('» и «', $flags) . '»';
+                $out[$key] = [
+                    'label' => $label,
+                    'comment' => 'Секция ' . ($label !== '' ? $label : 'без номера') . ' пропускается: у ячейки '
+                        . ($r['code'] ?? '') . ' ' . $flagTxt,
+                ];
+            }
+        } catch (Throwable) {
+        }
+        return $this->robotSections = $out;
     }
 
     public static function palletTypesLabel(mixed $v): string
@@ -198,6 +372,11 @@ final class CellRepository
             $w[] = 'c.zone = :zone';
             $p[':zone'] = $f->zone;
         }
+        // Доп. зона отбора (ручной отбор / отбор водителем) — у ячейки может быть несколько зон.
+        if ($f->pickZone) {
+            $w[] = 'EXISTS (SELECT 1 FROM storage_cell_zones cz WHERE cz.cell_id = c.id AND cz.zone = :pzone)';
+            $p[':pzone'] = $f->pickZone;
+        }
         if ($f->cellType) {
             $w[] = 'c.cell_type = :ct';
             $p[':ct'] = $f->cellType;
@@ -238,6 +417,17 @@ final class CellRepository
             $w[] = 'c.is_locked = 1';
         } elseif ($f->locked === 'no') {
             $w[] = 'c.is_locked = 0';
+        }
+        // Настройки ячейки: разные товары / несколько типов паллет.
+        if ($f->mixedGoods === 'yes') {
+            $w[] = 'COALESCE(c.allow_mixed_goods, 1) = 1';
+        } elseif ($f->mixedGoods === 'no') {
+            $w[] = 'COALESCE(c.allow_mixed_goods, 1) = 0';
+        }
+        if ($f->multiPallet === 'yes') {
+            $w[] = 'COALESCE(c.allow_multi_pallet_types, 1) = 1';
+        } elseif ($f->multiPallet === 'no') {
+            $w[] = 'COALESCE(c.allow_multi_pallet_types, 1) = 0';
         }
         if ($f->hasGoods === 'yes') {
             $w[] = 'c.qty > 0';

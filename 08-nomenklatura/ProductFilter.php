@@ -43,6 +43,9 @@ final class ProductFilter
     public ?int $flagCheck = null;
     public ?int $flagPack = null;
     public ?int $flagReplenish = null;
+    public ?int $flagScanIn = null;      // Сканирование с/н на входе
+    public ?int $flagScanOut = null;     // Сканирование с/н на выходе
+    public ?int $flagProdDate = null;    // Контроль даты производства
     public ?int $hasImage = null;
 
     public int $page = 1;
@@ -94,10 +97,13 @@ final class ProductFilter
         $f->flagDanger = $getFlag('is_danger'); $f->flagPartial = $getFlag('allow_partial');
         $f->flagCheck = $getFlag('need_check'); $f->flagPack = $getFlag('need_pack');
         $f->flagReplenish = $getFlag('auto_replenish');
+        $f->flagScanIn = $getFlag('scan_serial_in'); $f->flagScanOut = $getFlag('scan_serial_out');
+        $f->flagProdDate = $getFlag('control_prod_date');
         $f->hasImage = $getFlag('has_image');
         $f->page = max(1, (int)($q['page'] ?? 1));
         $f->perPage = min(200, max(5, (int)($q['per_page'] ?? 24)));
-        $allowed = ['sku', 'code', 'name', 'qty', 'created_at', 'updated_at', 'id'];
+        $allowed = ['sku', 'code', 'name', 'qty', 'created_at', 'updated_at', 'id',
+            'unit', 'category', 'reserved', 'status', 'barcode'];
         if (isset($q['sort']) && in_array($q['sort'], $allowed, true)) $f->sort = $q['sort'];
         if (isset($q['dir']) && strtoupper((string)$q['dir']) === 'DESC') $f->dir = 'DESC';
         return $f;
@@ -117,7 +123,8 @@ final class ProductFilter
             $this->tempNumFrom, $this->tempNumTo, $this->markFrom, $this->markTo,
             $this->chzGroup, $this->storage, $this->pick, $this->placement, $this->maxExpFrom, $this->maxExpTo,
             $this->flagBatch, $this->flagExpiry, $this->flagSerial, $this->flagChz, $this->flagDanger,
-            $this->flagPartial, $this->flagCheck, $this->flagPack, $this->flagReplenish, $this->hasImage,
+            $this->flagPartial, $this->flagCheck, $this->flagPack, $this->flagReplenish,
+            $this->flagScanIn, $this->flagScanOut, $this->flagProdDate, $this->hasImage,
         ] as $v) {
             if ($v !== null && $v !== '' && $v !== []) $n++;
         }

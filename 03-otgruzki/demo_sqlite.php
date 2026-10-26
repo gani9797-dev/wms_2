@@ -11,17 +11,20 @@ require_once __DIR__ . '/ShipmentFilter.php';
 require_once __DIR__ . '/ShipmentRepository.php';
 require_once __DIR__ . '/ShipmentService.php';
 require_once __DIR__ . '/../shared/CsvUpload.php';
+require_once __DIR__ . '/../shared/ShipmentExcel.php';
+require_once __DIR__ . '/../shared/db.php';
+require_once __DIR__ . '/../shared/Counterparties.php';
 
-$dbFile = __DIR__ . '/wms_demo.sqlite';
-$pdo = new PDO('sqlite:' . $dbFile, null, null, [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-]);
+$dbFile = wms_shipments_db_file();
+$pdo = wms_shipments_pdo();
+$isSqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
 
 // --- Схема SQLite (упрощенная, для демо; прод — schema.sql на MySQL) ---
+// Только SQLite: в PostgreSQL схема создаётся из db/schema-pg.sql, сиды — миграцией.
+if ($isSqlite):
 $pdo->exec("CREATE TABLE IF NOT EXISTS warehouses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
 $pdo->exec("CREATE TABLE IF NOT EXISTS contractors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
-$pdo->exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, fio TEXT NOT NULL, role TEXT DEFAULT 'storekeeper')");
+// users — единый справочник сотрудников (shared/wms_users.sqlite), подключён в shared/db.php.
 $pdo->exec("CREATE TABLE IF NOT EXISTS client_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, doc_no TEXT NOT NULL UNIQUE, contractor_id INTEGER, consignee TEXT, address TEXT, phone TEXT, status TEXT DEFAULT 'created', warehouse_id INTEGER, total REAL DEFAULT 0, comment TEXT, created_at TEXT DEFAULT (datetime('now')))");
 $pdo->exec("CREATE TABLE IF NOT EXISTS client_order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт', qty REAL NOT NULL, prod_date TEXT)");
 $pdo->exec("CREATE INDEX IF NOT EXISTS idx_coi_order ON client_order_items(order_id)");
@@ -41,6 +44,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS shipments (
   has_diff INTEGER DEFAULT 0, readiness INTEGER DEFAULT 0,
   recommended_pick TEXT, launched_pick TEXT, need_check INTEGER DEFAULT 0, need_pack INTEGER DEFAULT 0,
   is_kgt INTEGER DEFAULT 0, is_danger INTEGER DEFAULT 0, serial_scan INTEGER DEFAULT 0, marking_scan INTEGER DEFAULT 0,
+  is_crossdock INTEGER DEFAULT 0,
   ttn TEXT, responsible_id INTEGER, is_posted INTEGER DEFAULT 0, comment TEXT,
   created_by INTEGER, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))");
 $pdo->exec("CREATE TABLE IF NOT EXISTS shipment_items (
@@ -73,6 +77,19 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS shipment_flags (
   flag_type TEXT NOT NULL, serial_no TEXT, marking_code TEXT, aggregation TEXT, stock_left INTEGER,
   created_at TEXT DEFAULT (datetime('now')))");
 $pdo->exec("CREATE TABLE IF NOT EXISTS tsd_picks (id INTEGER PRIMARY KEY AUTOINCREMENT, shipment_id INTEGER NOT NULL, sku TEXT NOT NULL, qty REAL NOT NULL DEFAULT 1, user_id INTEGER, sscc TEXT, created_at TEXT DEFAULT (datetime('now')))");
+// Реестр марок честного знака по отгрузке: expected -> accepted -> circulated.
+$pdo->exec("CREATE TABLE IF NOT EXISTS shipment_marks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, shipment_id INTEGER NOT NULL, sku TEXT NOT NULL,
+  marking_code TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'expected', accepted_at TEXT,
+  created_at TEXT DEFAULT (datetime('now')))");
+$pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_shipment_mark ON shipment_marks(shipment_id, marking_code)");
+// Лог операций сортировки отгрузки (ТСД): только идентификаторы.
+$pdo->exec("CREATE TABLE IF NOT EXISTS shipment_sort_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, shipment_id INTEGER NOT NULL, pallet_id TEXT,
+  pallet_created_at TEXT, user_id INTEGER, item_id INTEGER, serial_no TEXT, marking_code TEXT,
+  qty REAL NOT NULL DEFAULT 1, operation TEXT NOT NULL DEFAULT 'sort', reason TEXT,
+  created_at TEXT DEFAULT (datetime('now')))");
+$pdo->exec("CREATE INDEX IF NOT EXISTS idx_ssl_shipment ON shipment_sort_log(shipment_id)");
 
 // Миграция старой демо-БД: добавить колонки, если их нет
 $ensure = function (string $table, string $col, string $ddl) use ($pdo) {
@@ -102,6 +119,7 @@ foreach ([
     ['shipments', 'check_start', 'check_start TEXT'],
     ['shipments', 'sku_count', 'sku_count INTEGER DEFAULT 0'],
     ['shipments', 'qty_total', 'qty_total REAL DEFAULT 0'],
+    ['shipments', 'is_crossdock', 'is_crossdock INTEGER DEFAULT 0'],
     ['shipment_items', 'code', 'code TEXT'],
     ['shipment_items', 'order_id', 'order_id INTEGER'],
     ['shipment_items', 'check_label', 'check_label TEXT'],
@@ -118,7 +136,7 @@ foreach ([
 if ((int)$pdo->query("SELECT COUNT(*) FROM shipments")->fetchColumn() === 0) {
     $pdo->exec("INSERT INTO warehouses (id,name) VALUES (1,'Основной склад'),(2,'Холодильный склад'),(3,'Склад А'),(4,'Склад Б')");
     $pdo->exec("INSERT INTO contractors (id,name) VALUES (1,'ООО \"Ромашка\"'),(2,'ИП Савинов М.Г.'),(3,'ООО «СпортОпт»'),(4,'ИП Петров А.С.')");
-    $pdo->exec("INSERT INTO users (id,fio,role) VALUES (1,'Иванов И.И.','Администратор'),(2,'Петров А.С.','Кладовщик'),(3,'Сидоров К.В.','Кладовщик'),(4,'Козлов Д.Н.','Менеджер'),(5,'Морозов А.Л.','Водитель'),(6,'Мишин Максим','Кладовщик')");
+    // Сотрудники — в общей базе (shared/wms_users.sqlite), сиды там.
     // Заказы TML* из макета вкладки Заказы (9)
     $orders = [
         [1, 'TML317889621', 1, 'Почта России', 'г. Москва, ул. Примерная, 1', '+7 (900) 000-00-01', 'created', 1, 25400],
@@ -196,6 +214,7 @@ if ((int)$pdo->query("SELECT COUNT(*) FROM shipments")->fetchColumn() === 0) {
     // История
     $pdo->exec("INSERT INTO shipment_history (shipment_id,user_id,user_fio,position,action,field,old_value,new_value,old_status,new_status) VALUES ($sid,1,'Ивантеев Михаил','Менеджер','create','Статус','Черновик','Создан','draft','created')");
 }
+endif;
 
 $repo = new ShipmentRepository($pdo);
 $service = new ShipmentService($pdo);
@@ -238,6 +257,33 @@ if ($action === 'list') {
     echo json_encode($repo->history((int)($_GET['id'] ?? 0)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 } elseif ($action === 'flags') {
     echo json_encode($repo->flags((int)($_GET['id'] ?? 0)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+} elseif ($action === 'marks') {
+    // Реестр марок честного знака по отгрузке (загружается файлом на документ).
+    try {
+        $st = $pdo->prepare("SELECT id, sku, marking_code, prod_date, status, accepted_at FROM shipment_marks WHERE shipment_id=:id ORDER BY id");
+        $st->execute([':id' => (int)($_GET['id'] ?? 0)]);
+        echo json_encode($st->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    } catch (Throwable $e) {
+        http_response_code(400);
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
+} elseif ($action === 'sort_log') {
+    // Лог операций сортировки по отгрузке (ТСД).
+    try {
+        $st = $pdo->prepare(
+            'SELECT l.id, l.pallet_id, l.pallet_created_at, l.user_id, u.fio AS user_fio, l.item_id,
+                    i.sku AS item_sku, l.serial_no, l.marking_code, l.qty, l.operation, l.reason, l.created_at
+             FROM shipment_sort_log l
+             LEFT JOIN users u ON u.id = l.user_id
+             LEFT JOIN shipment_items i ON i.id = l.item_id
+             WHERE l.shipment_id=:id ORDER BY l.id DESC LIMIT 300'
+        );
+        $st->execute([':id' => (int)($_GET['id'] ?? 0)]);
+        echo json_encode($st->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    } catch (Throwable $e) {
+        http_response_code(400);
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
 } elseif ($action === 'candidates') {
     echo json_encode($repo->pickCandidates($_GET), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 } elseif ($action === 'store' && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -252,6 +298,25 @@ if ($action === 'list') {
         $st->execute([':no' => $no, ':c' => (int)$b['contractor_id'], ':w' => (int)$b['warehouse_id'], ':p' => $b['plan_shipment_date'] ?? null, ':csg' => $b['consignee'] ?? null, ':veh' => $b['vehicle'] ?? null, ':gate' => $b['gate'] ?? null, ':lt' => $b['loading_type'] ?? null, ':pri' => $b['priority'] ?? 'normal']);
         http_response_code(201);
         echo json_encode(['id' => (int)$pdo->lastInsertId(), 'doc_no' => $no], JSON_UNESCAPED_UNICODE);
+    }
+} elseif ($action === 'copy' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // ПКМ «Копировать»: новый черновик с теми же позициями и нарядами.
+    // Раньше кнопка в UI дёргала action=store с жёстко зашитыми
+    // contractor_id=1 / warehouse_id=1 — получался пустой документ не у того
+    // контрагента. Эндпоинт отсутствовал, а ShipmentService::copy() был мёртвым кодом.
+    $sid = (int)($_GET['id'] ?? 0);
+    if ($sid <= 0) {
+        http_response_code(422);
+        echo json_encode(['error' => 'нужен id отгрузки'], JSON_UNESCAPED_UNICODE);
+    } else {
+        try {
+            $nid = $service->copy($sid, 1);
+            http_response_code(201);
+            echo json_encode(['id' => $nid], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
     }
 } elseif ($action === 'form' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $b = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -268,6 +333,16 @@ if ($action === 'list') {
     try {
         $to = ShipmentStatus::from($b['to'] ?? '');
         $service->changeStatus((int)($_GET['id'] ?? 0), $to, 1);
+        echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(400);
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
+} elseif ($action === 'flag' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Флаги документа (галки в карточке): кроссдок, серийники, маркировка ЧЗ...
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    try {
+        $service->setFlag((int)($_GET['id'] ?? 0), (string)($b['field'] ?? ''), (int)($b['value'] ?? 0), 1);
         echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(400);
@@ -298,8 +373,8 @@ if ($action === 'list') {
         require_once __DIR__ . '/../shared/db.php';
         $taskPdos = wms_tasks_pdos();
         if (!$taskPdos) {
-            // fallback: локальный tasks рядом (если shared/db недоступен)
-            $fallback = [__DIR__ . '/../07-zadaniya/wms_tasks.sqlite', __DIR__ . '/../tasks/wms_tasks.sqlite'];
+            // fallback: каноническая БД заданий (если wms_tasks_pdos пуст)
+            $fallback = [wms_tasks_db_file()];
             foreach ($fallback as $f) {
                 if (is_file($f)) {
                     $taskPdos[] = new PDO('sqlite:' . $f, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
@@ -316,6 +391,69 @@ if ($action === 'list') {
         http_response_code(400);
         echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
     }
+} elseif ($action === 'reserve_info' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    // ПКМ «Ручное резервирование»: строки отгрузки (требуется / в резерве / остаток).
+    $sid = (int)($_GET['shipment_id'] ?? $_GET['id'] ?? 0);
+    try {
+        require_once __DIR__ . '/../shared/PickIssue.php';
+        require_once __DIR__ . '/../shared/db.php';
+        $taskPdos = wms_tasks_pdos();
+        if (!$taskPdos) {
+            throw new RuntimeException('БД заданий недоступна');
+        }
+        $nom = wms_nomenclature_pdo();
+        $storage = wms_storage_pdo();
+        $lines = wms_pick_reserve_lines($pdo, $nom, $storage, $taskPdos[0], $sid);
+        $docNo = (string)$pdo->query('SELECT doc_no FROM shipments WHERE id=' . $sid)->fetchColumn();
+        echo json_encode([
+            'ok' => true, 'shipment_id' => $sid, 'doc_no' => $docNo,
+            'lines' => $lines,
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(400);
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
+} elseif ($action === 'reserve_candidates' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    // ПКМ «Ручное резервирование»: товарный запас по позиции (ячейки/паллеты).
+    $sid = (int)($_GET['shipment_id'] ?? $_GET['id'] ?? 0);
+    $sku = trim((string)($_GET['sku'] ?? ''));
+    try {
+        require_once __DIR__ . '/../shared/PickIssue.php';
+        require_once __DIR__ . '/../shared/db.php';
+        $taskPdos = wms_tasks_pdos();
+        if (!$taskPdos) {
+            throw new RuntimeException('БД заданий недоступна');
+        }
+        if ($sku === '') {
+            throw new RuntimeException('Не указан артикул позиции');
+        }
+        $nom = wms_nomenclature_pdo();
+        $storage = wms_storage_pdo();
+        $res = wms_pick_reserve_candidates($pdo, $nom, $storage, $taskPdos[0], $sid, $sku);
+        echo json_encode(['ok' => true] + $res, JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(400);
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
+} elseif ($action === 'reserve_manual' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // ПКМ «Ручное резервирование»: запись резерва по выбранным ячейкам/паллетам.
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    $sid = (int)($b['shipment_id'] ?? ($_GET['shipment_id'] ?? 0));
+    try {
+        require_once __DIR__ . '/../shared/PickIssue.php';
+        require_once __DIR__ . '/../shared/db.php';
+        $taskPdos = wms_tasks_pdos();
+        if (!$taskPdos) {
+            throw new RuntimeException('БД заданий недоступна');
+        }
+        $nom = wms_nomenclature_pdo();
+        $storage = wms_storage_pdo();
+        $res = wms_pick_reserve_manual($pdo, $nom, $storage, $taskPdos[0], $sid, (array)($b['items'] ?? []), 1);
+        echo json_encode($res, JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(400);
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
 } elseif ($action === 'release_pick' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $b = json_decode(file_get_contents('php://input'), true) ?? [];
     try {
@@ -323,8 +461,8 @@ if ($action === 'list') {
         require_once __DIR__ . '/../shared/db.php';
         $taskPdos = wms_tasks_pdos();
         if (!$taskPdos) {
-            // fallback: локальный tasks рядом (если shared/db недоступен)
-            $fallback = [__DIR__ . '/../07-zadaniya/wms_tasks.sqlite', __DIR__ . '/../tasks/wms_tasks.sqlite'];
+            // fallback: каноническая БД заданий (если wms_tasks_pdos пуст)
+            $fallback = [wms_tasks_db_file()];
             foreach ($fallback as $f) {
                 if (is_file($f)) {
                     $taskPdos[] = new PDO('sqlite:' . $f, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
@@ -372,14 +510,56 @@ if ($action === 'list') {
         http_response_code(400);
         echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
     }
+} elseif ($action === 'refs') {
+    // Справочники для форм: контрагенты и склады.
+    echo json_encode([
+        'contractors' => $pdo->query("SELECT id, name FROM contractors ORDER BY name")->fetchAll(),
+        'warehouses' => $pdo->query("SELECT id, name FROM warehouses ORDER BY id")->fetchAll(),
+    ], JSON_UNESCAPED_UNICODE);
+} elseif ($action === 'csv_shipment' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Загрузка отгрузки (кнопка «Загрузить данные»): CSV или Excel-заявка (.xlsx).
+    // Контрагент — из колонки «Контрагент» либо из шапки заявки (нового добавляем в справочник).
+    try {
+        $parsed = shipment_upload_parse_file($_FILES['file'] ?? []);
+        if (!$parsed['rows']) {
+            http_response_code(422);
+            echo json_encode(['error' => implode('; ', $parsed['errors']) ?: 'Нет корректных строк'], JSON_UNESCAPED_UNICODE);
+        } else {
+            try {
+                $nom = wms_nomenclature_pdo();
+            } catch (Throwable) {
+                $nom = null;
+            }
+            $hdr = $parsed['header'] ?? [];
+            // Контрагент — из файла (шапка/колонка) либо явно переданный contractor_id.
+            $contractorId = (int)($_POST['contractor_id'] ?? 0);
+            $cc = ['id' => $contractorId, 'name' => '', 'created' => false];
+            if ($contractorId <= 0) {
+                $cc = csv_upload_resolve_contractor($pdo, (string)($hdr['contractor'] ?? ''));
+                $contractorId = $cc['id'];
+            }
+            $r = csv_upload_import_shipment($pdo, $nom, $parsed['rows'],
+                $contractorId, (int)($_POST['warehouse_id'] ?? 0), 1,
+                (string)($_FILES['file']['name'] ?? 'upload.csv'), $hdr);
+            // Грузополучатель из отгрузки автоматически попадает в справочник (тип «грузополучатель»).
+            WmsCounterparties::ensure($pdo, (string)($hdr['consignee'] ?? ''), 'consignee');
+            $r += ['contractor' => $cc['name'], 'contractor_new' => $cc['created'],
+                'format' => ($parsed['format'] ?? '')];
+            http_response_code(201);
+            echo json_encode($r + ['row_errors' => $parsed['errors']], JSON_UNESCAPED_UNICODE);
+        }
+    } catch (Throwable $e) {
+        http_response_code(400);
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
 } elseif ($action === 'csv_orders' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    // CSV-загрузка расхода как наряда: multipart file + warehouse_id.
-    // Контрагент — из колонки «Контрагент» файла (нового добавляем в справочник).
+    // Загрузка расхода как наряда: CSV или Excel-заявка (.xlsx).
+    // Контрагент — из колонки «Контрагент» файла либо из шапки заявки (нового добавляем в справочник).
     // Номер наряда — случайный внутренний or_XXXXXX, один файл = один наряд.
     // Зеркалим во вторую базу отгрузок, чтобы наряд был виден в обоих реестрах.
     try {
         require_once __DIR__ . '/../shared/db.php';
-        $parsed = csv_upload_parse($_FILES['file'] ?? [], csv_upload_shipment_spec());
+        $parsed = shipment_upload_parse_file($_FILES['file'] ?? []);
         if (!$parsed['rows']) {
             http_response_code(422);
             echo json_encode(['error' => implode('; ', $parsed['errors']) ?: 'Нет корректных строк'], JSON_UNESCAPED_UNICODE);
@@ -395,7 +575,10 @@ if ($action === 'list') {
             $cc = csv_upload_resolve_contractor($pdo, (string)($hdr['contractor'] ?? ''));
             $orderNo = csv_upload_next_order_no($pdo);
             $r = csv_upload_import_orders($pdo, $nom, $parsed['rows'], $cc['id'], $wh, 1, $fname, $orderNo, $hdr);
-            $r += ['contractor' => $cc['name'], 'contractor_new' => $cc['created']];
+            // Грузополучатель из отгрузки автоматически попадает в справочник (тип «грузополучатель»).
+            WmsCounterparties::ensure($pdo, (string)($hdr['consignee'] ?? ''), 'consignee');
+            $r += ['contractor' => $cc['name'], 'contractor_new' => $cc['created'],
+                'format' => ($parsed['format'] ?? '')];
             // Отгрузка из наряда формируется автоматически — вручную не нужно.
             $ship = [];
             try {
@@ -403,6 +586,7 @@ if ($action === 'list') {
                     'warehouse_id' => $wh,
                     'consignee' => ($hdr['consignee'] ?? '') !== '' ? $hdr['consignee'] : null,
                     'delivery_type' => ($hdr['ship_type'] ?? '') !== '' ? $hdr['ship_type'] : null,
+                    'plan_shipment_date' => ($hdr['plan_date'] ?? '') !== '' ? $hdr['plan_date'] : null,
                     'comment' => 'Авто: наряд ' . $orderNo,
                 ], 1);
                 csv_upload_apply_shipment_header($pdo, $formId, $hdr);
@@ -410,31 +594,10 @@ if ($action === 'list') {
                     'shipment_no' => (string)$pdo->query('SELECT doc_no FROM shipments WHERE id=' . $formId)->fetchColumn()];
             } catch (Throwable) {
             }
-            try {
-                $mirrorFile = __DIR__ . '/../shipments/wms_demo.sqlite';
-                if (is_file($mirrorFile)) {
-                    $mpdo = new PDO('sqlite:' . $mirrorFile, null, null, [
-                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    ]);
-                    $mcc = csv_upload_resolve_contractor($mpdo, (string)($hdr['contractor'] ?? ''));
-                    $mr = csv_upload_import_orders($mpdo, $nom, $parsed['rows'], $mcc['id'], $wh, 1, $fname, $orderNo, $hdr);
-                    try {
-                        $mform = new ShipmentService($mpdo);
-                        $mfid = $mform->formFromOrders([$mr['id']], [
-                            'warehouse_id' => $wh,
-                            'consignee' => ($hdr['consignee'] ?? '') !== '' ? $hdr['consignee'] : null,
-                            'delivery_type' => ($hdr['ship_type'] ?? '') !== '' ? $hdr['ship_type'] : null,
-                            'comment' => 'Авто: наряд ' . $orderNo,
-                        ], 1);
-                        csv_upload_apply_shipment_header($mpdo, $mfid, $hdr);
-                    } catch (Throwable) {
-                    }
-                }
-            } catch (Throwable) {
-            }
+            // Зеркало удалено: единая БД отгрузок (wms_shipments_pdo) — писать дважды больше не нужно.
             http_response_code(201);
-            echo json_encode($r + ['row_errors' => $parsed['errors']] + $ship, JSON_UNESCAPED_UNICODE);
+            $flags = JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR;
+            echo json_encode($r + ['row_errors' => $parsed['errors']] + $ship, $flags);
         }
     } catch (Throwable $e) {
         http_response_code(400);
@@ -479,6 +642,24 @@ if ($action === 'list') {
     try {
         $res = $service->disband((int)($_GET['id'] ?? 0), 1);
         echo json_encode(['ok' => true] + $res, JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(400);
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
+} elseif ($action === 'csv_marks' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Файл марок ЧЗ на отгрузку (реестр для сортировки): multipart file + shipment_id.
+    try {
+        $parsed = csv_upload_parse_marks($_FILES['file'] ?? []);
+        if (!$parsed['rows']) {
+            http_response_code(422);
+            echo json_encode(['error' => implode('; ', $parsed['errors']) ?: 'Нет корректных строк'], JSON_UNESCAPED_UNICODE);
+        } else {
+            $r = csv_upload_import_shipment_marks($pdo, (int)($_POST['shipment_id'] ?? 0), $parsed['rows'], 1,
+                (string)($_FILES['file']['name'] ?? 'marks.csv'));
+            $r['row_errors'] = array_merge($parsed['errors'], $r['row_errors']);
+            http_response_code(201);
+            echo json_encode($r, JSON_UNESCAPED_UNICODE);
+        }
     } catch (Throwable $e) {
         http_response_code(400);
         echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

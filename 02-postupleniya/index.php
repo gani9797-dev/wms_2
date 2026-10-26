@@ -69,20 +69,25 @@ if ($action === 'list') {
 } elseif ($action === 'csv_receipt' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json; charset=utf-8');
     require_once __DIR__ . '/../shared/CsvUpload.php';
+    require_once __DIR__ . '/../shared/ReceiptExcel.php';
+    require_once __DIR__ . '/../shared/Counterparties.php';
     try {
-        $parsed = csv_upload_parse($_FILES['file'] ?? [], csv_upload_receipt_spec());
+        $parsed = receipt_upload_parse_file($_FILES['file'] ?? []);
         if (!$parsed['rows']) {
             http_response_code(422);
             echo json_encode(['error' => implode('; ', $parsed['errors']) ?: 'Нет корректных строк'], JSON_UNESCAPED_UNICODE);
         } else {
             // В проде поступления и номенклатура живут в одной БД wms.
-            // Поставщик — из колонки «Поставщик» файла (нового добавляем в справочник).
+            // Поставщик — из колонки «Поставщик» либо из шапки заявки (нового добавляем в справочник).
             $hdr = $parsed['header'] ?? [];
             $sup = csv_upload_resolve_contractor($pdo, (string)($hdr['supplier'] ?? ''));
             $r = csv_upload_import_receipt($pdo, $pdo, $parsed['rows'],
                 $sup['id'], (int)($_POST['warehouse_id'] ?? 0), 1,
-                (string)($_FILES['file']['name'] ?? 'upload.csv'));
-            $r += ['supplier' => $sup['name'], 'supplier_new' => $sup['created']];
+                (string)($_FILES['file']['name'] ?? 'upload'), $hdr);
+            // Новый контрагент из прихода автоматически попадает в справочник (тип «клиент»).
+            WmsCounterparties::ensure($pdo, (string)$sup['name'], 'client');
+            $r += ['supplier' => $sup['name'], 'supplier_new' => $sup['created'],
+                'external_no' => ($hdr['external_no'] ?? ''), 'format' => ($parsed['format'] ?? '')];
             http_response_code(201);
             echo json_encode($r + ['row_errors' => $parsed['errors']], JSON_UNESCAPED_UNICODE);
         }

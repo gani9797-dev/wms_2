@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3.1 Заказы — TiMLog</title>
+<title>3.1 Р—Р°РєР°Р·С‹ вЂ” TiMLog</title>
 <style>
 :root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7}
 *{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);display:flex}
@@ -23,7 +23,7 @@ code{background:#F4F0FB;padding:2px 6px;border-radius:6px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:10px;color:#2C313C;border-bottom:1px solid #F0F0F0;white-space:nowrap}
 td{padding:10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
-tr:hover td{background:#fafaff;cursor:pointer}
+tr.sel{background:#F8F6FC}tr:hover td{background:#fafaff}a.num{cursor:pointer}
 a.num{color:var(--vio);font-weight:700;text-decoration:none}
 .st{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;background:#F0F6FF;color:#1D61D2;border:1px solid #A3C2F0}
 .pager{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;color:var(--mut);font-size:13px}
@@ -81,68 +81,69 @@ body.navhide main{max-width:none}
 </style>
 <style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
 <body>
-<button id="navshowbtn" title="Показать меню">▶</button>
-<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp open" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a on" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<button id="navshowbtn" title="РџРѕРєР°Р·Р°С‚СЊ РјРµРЅСЋ">в–¶</button>
+<aside><button id="navhidebtn" title="РЎРєСЂС‹С‚СЊ РјРµРЅСЋ">в—Ђ&nbsp;РЎРєСЂС‹С‚СЊ РјРµРЅСЋ</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">рџЏ  0 Р”Р°С€Р±РѕСЂРґ</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">рџљ› 1 Р РµРµСЃС‚СЂ РїСЂРёР±С‹С‚РёСЏ РўРЎ</a><span class="caret" title="Р Р°СЃРєСЂС‹С‚СЊ">в–ё</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 РЎРїСЂР°РІРѕС‡РЅРёРє РўРЎ</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 РљР°СЂС‚Р° РІРѕСЂРѕС‚</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">рџ“Ґ 2 РџРѕСЃС‚СѓРїР»РµРЅРёСЏ</a><span class="caret" title="Р Р°СЃРєСЂС‹С‚СЊ">в–ё</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 РџСЂРёРµРј РїРѕСЃС‚СѓРїР»РµРЅРёР№</a></div></div><div class="grp open" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">рџ“¤ 3 РћС‚РіСЂСѓР·РєРё</a><span class="caret" title="Р Р°СЃРєСЂС‹С‚СЊ">в–ё</span></div><div class="sub"><a class="mi sub-a on" href="../03.1-zakazy/app.html">3.1 Р—Р°РєР°Р·С‹</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 РЈРїР°РєРѕРІРєР° Р·Р°РєР°Р·РѕРІ</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 РџСЂРѕРІРµСЂРєР° Р·Р°РєР°Р·РѕРІ</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">рџ“¦ 4 Р’РЅСѓС‚СЂРёСЃРєР»Р°РґСЃРєРёРµ РѕРїРµСЂР°С†РёРё</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">рџ—„пёЏ 5 РЇС‡РµР№РєРё С…СЂР°РЅРµРЅРёСЏ</a><span class="caret" title="Р Р°СЃРєСЂС‹С‚СЊ">в–ё</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 РљР°СЂС‚Р° СЃРєР»Р°РґР° 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">рџ“‹ 6 РРЅРІРµРЅС‚Р°СЂРёР·Р°С†РёСЏ</a><a class="mi" href="../07-zadaniya/app.html">рџ“ќ 7 Р—Р°РґР°РЅРёСЏ</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">рџ“Ѓ 8 РќРѕРјРµРЅРєР»Р°С‚СѓСЂР°</a><span class="caret" title="Р Р°СЃРєСЂС‹С‚СЊ">в–ё</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 РўРѕРІР°СЂРЅС‹Р№ Р·Р°РїР°СЃ</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">рџ‘Ґ 9 РљРѕРЅС‚СЂР°РіРµРЅС‚С‹ Рё РіСЂСѓР·РѕРїРѕР»СѓС‡Р°С‚РµР»Рё</a><span class="caret" title="Р Р°СЃРєСЂС‹С‚СЊ">в–ё</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Р‘РёР»Р»РёРЅРі</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">рџ‘¤ 10 РЎРѕС‚СЂСѓРґРЅРёРєРё</a><span class="caret" title="Р Р°СЃРєСЂС‹С‚СЊ">в–ё</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 РќР°С‡РёСЃР»РµРЅРёСЏ KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 РџСЂРѕСЃРјРѕС‚СЂ СЃРґРµР»РєРё</a></div></div><a class="mi" href="../11-otchety/app.html">рџ“Љ 11 РћС‚С‡РµС‚С‹</a><a class="mi" href="../12-uvedomleniya/app.html">рџ”€ 12 РЈРІРµРґРѕРјР»РµРЅРёСЏ</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">вљ™пёЏ 13 РќР°СЃС‚СЂРѕР№РєРё</a><span class="caret" title="Р Р°СЃРєСЂС‹С‚СЊ">в–ё</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 РђРІС‚РѕС„РѕСЂРјРёСЂРѕРІР°РЅРёРµ РЅР°РєР»Р°РґРЅС‹С…</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 РђРІС‚РѕС„РѕСЂРјРёСЂРѕРІР°РЅРёРµ СЃС‡РµС‚РѕРІ</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 РџРµС‡Р°С‚СЊ Р»РёРЅРµР№РєРё</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 РќР°СЃС‚СЂРѕР№РєР° KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a><a class="mi" href="../tsd/app.html">рџ“± РўРЎР”</a></nav></aside>
 <main>
-<div class="top"><h1>3.1 Заказы</h1><div class="user"><button id="bellbtn" title="Уведомления">🔔<span id="bellbadge">0</span></button><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span></div></div>
+<div class="top"><h1>3.1 Р—Р°РєР°Р·С‹</h1><div class="user"><button id="bellbtn" title="РЈРІРµРґРѕРјР»РµРЅРёСЏ">рџ””<span id="bellbadge">0</span></button><span class="ava">РР</span><span>РРІР°РЅРѕРІ Р.Р.<br><small style="color:var(--mut)">РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ</small></span></div></div>
 <div class="bar">
-<input id="q" type="text" placeholder="Поиск по номеру заказа, грузополучателю...">
-<button class="btn pri" id="mk">+ Сформировать отгрузку</button>
+<input id="q" type="text" placeholder="РџРѕРёСЃРє РїРѕ РЅРѕРјРµСЂСѓ Р·Р°РєР°Р·Р°, РіСЂСѓР·РѕРїРѕР»СѓС‡Р°С‚РµР»СЋ...">
+<button class="btn pri" id="mk">+ РЎС„РѕСЂРјРёСЂРѕРІР°С‚СЊ РѕС‚РіСЂСѓР·РєСѓ</button>
 </div>
 <div class="card" style="overflow:auto">
-<table><thead><tr><th><input type="checkbox" id="chall"></th><th>№ заказа</th><th>Дата</th><th>Грузополучатель</th><th>Склад</th><th>Статус</th><th>Строк</th><th>Штук</th><th>Отгрузка</th><th>⋮ <span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
-<tbody id="rows"><tr><td colspan="10">Загрузка...</td></tr></tbody></table>
-<div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
+<table data-sort-mode="server"><thead><tr><th><input type="checkbox" id="chall"></th><th data-sort="doc_no">в„– Р·Р°РєР°Р·Р°</th><th data-sort="created_at">Р”Р°С‚Р°</th><th data-sort="consignee">Р“СЂСѓР·РѕРїРѕР»СѓС‡Р°С‚РµР»СЊ</th><th data-sort="warehouse">РЎРєР»Р°Рґ</th><th data-sort="status">РЎС‚Р°С‚СѓСЃ</th><th data-sort="lines">РЎС‚СЂРѕРє</th><th data-sort="qty">РЁС‚СѓРє</th><th data-sort="shipments">РћС‚РіСЂСѓР·РєР°</th><th>в‹® <span id="colset" class="gear" title="РќР°СЃС‚СЂРѕР№РєР° СЃС‚РѕР»Р±С†РѕРІ">вљ™пёЏ</span></th></tr></thead>
+<tbody id="rows"><tr><td colspan="10">Р—Р°РіСЂСѓР·РєР°...</td></tr></tbody></table>
+<div class="pager"><div><span id="info">вЂ”</span> &nbsp; РЎС‚СЂРѕРє РЅР° СЃС‚СЂР°РЅРёС†Рµ:
 <select id="pp"><option>5</option><option selected>20</option><option>50</option></select></div>
 <div class="pg" id="pg"></div></div>
 </div>
 </main>
 
-<div class="drawer" id="dr"><button class="btn" onclick="dr.classList.remove('open')">✕</button>
-<h2 id="dh">Заказ</h2>
+<div class="drawer" id="dr"><button class="btn" onclick="dr.classList.remove('open')">вњ•</button>
+<h2 id="dh">Р—Р°РєР°Р·</h2>
 <div id="db">...</div>
-<div style="display:flex;gap:10px;margin:10px 0"><button class="btn pri" id="dform">Сформировать отгрузку</button><button class="btn" onclick="dr.classList.remove('open')">Закрыть</button></div>
+<div style="display:flex;gap:10px;margin:10px 0"><button class="btn pri" id="dform">РЎС„РѕСЂРјРёСЂРѕРІР°С‚СЊ РѕС‚РіСЂСѓР·РєСѓ</button><button class="btn" onclick="dr.classList.remove('open')">Р—Р°РєСЂС‹С‚СЊ</button></div>
 </div>
 
 <div class="ctx" id="ctx">
-<div data-a="open">Открыть</div><div data-a="form">Сформировать отгрузку</div><div data-a="del">Удалить</div>
+<div data-a="open">РћС‚РєСЂС‹С‚СЊ</div><div data-a="form">РЎС„РѕСЂРјРёСЂРѕРІР°С‚СЊ РѕС‚РіСЂСѓР·РєСѓ</div><div data-a="del">РЈРґР°Р»РёС‚СЊ</div>
 </div>
 
-<div class="modal" id="fw"><div class="mbox"><h3 style="margin-top:0">Формирование отгрузки</h3>
-<div id="finfo" style="font-size:13px;color:#4A4A4A;margin-bottom:6px">—</div>
-<label>Склад *</label><select id="fwh"><option value="">Загрузка...</option></select>
-<label>Плановая дата отгрузки</label><input id="fpsd" type="date">
-<label>Ворота</label><input id="fgate" type="text" placeholder="11">
-<label>ТС</label><input id="fveh" type="text" placeholder="А221ВА77">
-<div style="display:flex;gap:10px;margin-top:12px"><button class="btn" onclick="fw.classList.remove('open')">Отмена</button><button class="btn pri" id="fgo">Сформировать</button></div>
+<div class="modal" id="fw"><div class="mbox"><h3 style="margin-top:0">Р¤РѕСЂРјРёСЂРѕРІР°РЅРёРµ РѕС‚РіСЂСѓР·РєРё</h3>
+<div id="finfo" style="font-size:13px;color:#4A4A4A;margin-bottom:6px">вЂ”</div>
+<label>РЎРєР»Р°Рґ *</label><select id="fwh"><option value="">Р—Р°РіСЂСѓР·РєР°...</option></select>
+<label>РџР»Р°РЅРѕРІР°СЏ РґР°С‚Р° РѕС‚РіСЂСѓР·РєРё</label><input id="fpsd" type="date">
+<label>Р’РѕСЂРѕС‚Р°</label><input id="fgate" type="text" placeholder="11">
+<label>РўРЎ</label><input id="fveh" type="text" placeholder="Рђ221Р’Рђ77">
+<div style="display:flex;gap:10px;margin-top:12px"><button class="btn" onclick="fw.classList.remove('open')">РћС‚РјРµРЅР°</button><button class="btn pri" id="fgo">РЎС„РѕСЂРјРёСЂРѕРІР°С‚СЊ</button></div>
 </div></div>
 <div id="notifpanel">
-<div style="display:flex;justify-content:space-between;align-items:center"><h2>Уведомления</h2><div><a href="#" id="notifset" style="font-size:16px;text-decoration:none" title="Настройка уведомлений">⚙️</a></div></div>
-<div class="ntabs"><span id="nt_all" class="on">Все <b id="nc_all">0</b></span><span id="nt_unread">Непрочитанные <b id="nc_unread">0</b></span><span id="nt_imp">Важные <b id="nc_imp">0</b></span></div>
-<div><a href="#" id="notifreadall" style="font-size:13px">Отметить все как прочитанные</a></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><h2>РЈРІРµРґРѕРјР»РµРЅРёСЏ</h2><div><a href="#" id="notifset" style="font-size:16px;text-decoration:none" title="РќР°СЃС‚СЂРѕР№РєР° СѓРІРµРґРѕРјР»РµРЅРёР№">вљ™пёЏ</a></div></div>
+<div class="ntabs"><span id="nt_all" class="on">Р’СЃРµ <b id="nc_all">0</b></span><span id="nt_unread">РќРµРїСЂРѕС‡РёС‚Р°РЅРЅС‹Рµ <b id="nc_unread">0</b></span><span id="nt_imp">Р’Р°Р¶РЅС‹Рµ <b id="nc_imp">0</b></span><span id="nt_robot">Р РѕР±РѕС‚ <b id="nc_robot">0</b></span></div>
+<div><a href="#" id="notifreadall" style="font-size:13px">РћС‚РјРµС‚РёС‚СЊ РІСЃРµ РєР°Рє РїСЂРѕС‡РёС‚Р°РЅРЅС‹Рµ</a></div>
 <div id="notiflist" style="margin-top:6px"></div>
-<div style="margin-top:8px"><a href="../12-uvedomleniya/app.html" style="font-size:13px">Показать все уведомления</a></div>
+<div style="margin-top:8px"><a href="../12-uvedomleniya/app.html" style="font-size:13px">РџРѕРєР°Р·Р°С‚СЊ РІСЃРµ СѓРІРµРґРѕРјР»РµРЅРёСЏ</a></div>
 </div>
 
-<div class="modal" id="notifmodal"><div class="mbox" style="width:720px;max-width:96vw"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Настройка уведомлений</h3><button class="btn" id="notifmclose">✕</button></div>
-<div class="tabs"><span id="nstab1" class="on">Мои подписки</span><span id="nstab2">○ Каналы и расписание</span></div>
+<div class="modal" id="notifmodal"><div class="mbox" style="width:720px;max-width:96vw"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">РќР°СЃС‚СЂРѕР№РєР° СѓРІРµРґРѕРјР»РµРЅРёР№</h3><button class="btn" id="notifmclose">вњ•</button></div>
+<div class="tabs"><span id="nstab1" class="on">РњРѕРё РїРѕРґРїРёСЃРєРё</span><span id="nstab2">в—‹ РљР°РЅР°Р»С‹ Рё СЂР°СЃРїРёСЃР°РЅРёРµ</span></div>
 <div id="nspane1">
-<div style="display:flex;justify-content:flex-end;margin:6px 0"><button class="btn pri" id="subadd">+ Добавить подписку</button></div>
-<div style="display:flex;gap:8px;font-size:12px;color:#4A4A4A;font-weight:700;border-bottom:1px solid #E2E8F0;padding-bottom:6px"><div style="flex:1">Что отслеживаем</div><div style="width:170px">Каналы уведомлений</div><div style="width:150px">Условие</div><div style="width:60px">Статус</div></div>
+<div style="display:flex;justify-content:flex-end;margin:6px 0"><button class="btn pri" id="subadd">+ Р”РѕР±Р°РІРёС‚СЊ РїРѕРґРїРёСЃРєСѓ</button></div>
+<div style="display:flex;gap:8px;font-size:12px;color:#4A4A4A;font-weight:700;border-bottom:1px solid #E2E8F0;padding-bottom:6px"><div style="flex:1">Р§С‚Рѕ РѕС‚СЃР»РµР¶РёРІР°РµРј</div><div style="width:170px">РљР°РЅР°Р»С‹ СѓРІРµРґРѕРјР»РµРЅРёР№</div><div style="width:150px">РЈСЃР»РѕРІРёРµ</div><div style="width:60px">РЎС‚Р°С‚СѓСЃ</div></div>
 <div id="subrows"></div>
-<div class="hint">Web / Email / Telegram — предпочтения доставки. Реальная отправка за пределами модуля.</div>
-<div style="display:flex;gap:10px;margin-top:10px;justify-content:flex-end"><button class="btn" id="subreset">Сбросить</button><button class="btn" id="subclose">Закрыть</button></div>
+<div class="hint">Web / Email / Telegram вЂ” РїСЂРµРґРїРѕС‡С‚РµРЅРёСЏ РґРѕСЃС‚Р°РІРєРё. Р РµР°Р»СЊРЅР°СЏ РѕС‚РїСЂР°РІРєР° Р·Р° РїСЂРµРґРµР»Р°РјРё РјРѕРґСѓР»СЏ.</div>
+<div style="display:flex;gap:10px;margin-top:10px;justify-content:flex-end"><button class="btn" id="subreset">РЎР±СЂРѕСЃРёС‚СЊ</button><button class="btn" id="subclose">Р—Р°РєСЂС‹С‚СЊ</button></div>
 </div>
-<div id="nspane2" style="display:none"><p class="hint">Каналы и расписание: Email — ежедневно в 09:00, Telegram — мгновенно, Web — мгновенно. Настройка расписания — в модуле 12.</p></div>
+<div id="nspane2" style="display:none"><p class="hint">РљР°РЅР°Р»С‹ Рё СЂР°СЃРїРёСЃР°РЅРёРµ: Email вЂ” РµР¶РµРґРЅРµРІРЅРѕ РІ 09:00, Telegram вЂ” РјРіРЅРѕРІРµРЅРЅРѕ, Web вЂ” РјРіРЅРѕРІРµРЅРЅРѕ. РќР°СЃС‚СЂРѕР№РєР° СЂР°СЃРїРёСЃР°РЅРёСЏ вЂ” РІ РјРѕРґСѓР»Рµ 12.</p></div>
 </div></div>
 <div id="colpanel">
-<div style="display:flex;justify-content:space-between;align-items:center"><h2>Столбцы таблицы</h2></div>
-<div class="hint" style="margin:6px 0">Свои настройки для каждого пользователя.</div>
+<div style="display:flex;justify-content:space-between;align-items:center"><h2>РЎС‚РѕР»Р±С†С‹ С‚Р°Р±Р»РёС†С‹</h2></div>
+<div class="hint" style="margin:6px 0">РЎРІРѕРё РЅР°СЃС‚СЂРѕР№РєРё РґР»СЏ РєР°Р¶РґРѕРіРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.</div>
 <div id="collist" style="margin:6px 0;max-height:50vh;overflow:auto"></div>
-<div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="colreset">Сбросить</button><button class="btn pri" id="colclose">Готово</button></div>
+<div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="colreset">РЎР±СЂРѕСЃРёС‚СЊ</button><button class="btn pri" id="colclose">Р“РѕС‚РѕРІРѕ</button></div>
 </div>
 <div id="toast"></div>
 
+<script src="../shared/sort.js"></script>
 <script>
 const API='demo_sqlite.php';
 let page=1,perPage=20,lastRows=[],ctxId=null,curId=null,fsel=[];
@@ -151,47 +152,48 @@ const dFmt=s=>(s||'').slice(0,10).split('-').reverse().join('.');
 function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2400)}
 async function load(){const p=new URLSearchParams({action:'list',page,per_page:perPage});
 if($('q').value)p.set('search',$('q').value);
+Sort.params(p);
 const r=await fetch(API+'?'+p);const j=await r.json();lastRows=j.rows||[];
-$('info').textContent=`Показано ${j.from}–${j.to} из ${j.total}`;
+$('info').textContent=`РџРѕРєР°Р·Р°РЅРѕ ${j.from}вЂ“${j.to} РёР· ${j.total}`;
 $('rows').innerHTML=lastRows.map(o=>`<tr data-id="${o.id}"><td><input type="checkbox" data-id="${o.id}"></td>
 <td><a class="num" href="#" data-id="${o.id}">${o.doc_no}</a></td><td>${dFmt(o.created_at)}</td>
 <td>${o.consignee||o.contractor||''}</td><td>${o.warehouse||''}</td>
 <td><span class="st">${o.status||''}</span></td><td>${o.lines??''}</td><td>${o.qty??''}</td>
-<td>${o.shipments?`<a class="num" href="../03-otgruzki/app.html">${o.shipments}</a>`:'—'}</td><td>⋮</td></tr>`).join('')||'<tr><td colspan=10>Ничего не найдено</td></tr>';
+<td>${o.shipments?`<a class="num" href="../03-otgruzki/app.html">${o.shipments}</a>`:'вЂ”'}</td><td>в‹®</td></tr>`).join('')||'<tr><td colspan=10>РќРёС‡РµРіРѕ РЅРµ РЅР°Р№РґРµРЅРѕ</td></tr>';
 if($('chall'))$('chall').checked=false;
 const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
 for(let i=1;i<=Math.min(pages,5);i++)h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`;
 $('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()});
-document.querySelectorAll('#rows tr[data-id]').forEach(tr=>{tr.onclick=e=>{if(e.target.tagName!=='INPUT'&&!(e.target.classList&&e.target.classList.contains('num')))open(+tr.dataset.id)};
+document.querySelectorAll('#rows tr[data-id]').forEach(tr=>{tr.onclick=e=>{if(e.target.tagName==='INPUT'||(e.target.closest&&e.target.closest('a.num')))return;document.querySelectorAll('#rows tr.sel').forEach(x=>x.classList.remove('sel'));tr.classList.add('sel')};
 tr.oncontextmenu=e=>{e.preventDefault();ctxId=+tr.dataset.id;const c=$('ctx');c.style.display='block';c.style.left=e.clientX+'px';c.style.top=e.clientY+'px'}})}
 async function open(id){curId=id;
 const r=await fetch(`${API}?action=show&id=${id}`);const o=await r.json();
 if(o.error){toast(o.error);return}
-$('dh').textContent=`Заказ ${o.doc_no}`;
+$('dh').textContent=`Р—Р°РєР°Р· ${o.doc_no}`;
 const items=o.items||[];
-$('db').innerHTML=`<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><i>Грузополучатель</i><b>${o.consignee||o.contractor||'—'}</b></div>
-<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><i>Склад</i><span>${o.warehouse||'—'}</span></div>
-<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><i>Статус</i><span class="st">${o.status||''}</span></div>
-<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><i>Отгрузки</i><span>${(o.shipments||[]).map(s=>s.doc_no).join(', ')||'—'}</span></div>
-<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><i>Комментарий</i><span>${o.comment||''}</span></div></div>
-<h3>Состав (${items.length})</h3><table class="mini"><tr><th>п/п</th><th>Артикул</th><th>Наименование</th><th>Ед</th><th>Кол-во</th><th>Дата пр-ва</th></tr>`
-+items.map((t,i)=>`<tr><td>${i+1}</td><td>${t.sku}</td><td>${t.name}</td><td>${t.unit||'шт'}</td><td>${t.qty}</td><td>${t.prod_date||''}</td></tr>`).join('')+'</table>';
+$('db').innerHTML=`<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><i>Р“СЂСѓР·РѕРїРѕР»СѓС‡Р°С‚РµР»СЊ</i><b>${o.consignee||o.contractor||'вЂ”'}</b></div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><i>РЎРєР»Р°Рґ</i><span>${o.warehouse||'вЂ”'}</span></div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><i>РЎС‚Р°С‚СѓСЃ</i><span class="st">${o.status||''}</span></div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><i>РћС‚РіСЂСѓР·РєРё</i><span>${(o.shipments||[]).map(s=>s.doc_no).join(', ')||'вЂ”'}</span></div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><i>РљРѕРјРјРµРЅС‚Р°СЂРёР№</i><span>${o.comment||''}</span></div></div>
+<h3>РЎРѕСЃС‚Р°РІ (${items.length})</h3><table class="mini"><tr><th>Рї/Рї</th><th>РђСЂС‚РёРєСѓР»</th><th>РќР°РёРјРµРЅРѕРІР°РЅРёРµ</th><th>Р•Рґ</th><th>РљРѕР»-РІРѕ</th><th>Р”Р°С‚Р° РїСЂ-РІР°</th></tr>`
++items.map((t,i)=>`<tr><td>${i+1}</td><td>${t.sku}</td><td>${t.name}</td><td>${t.unit||'С€С‚'}</td><td>${t.qty}</td><td>${t.prod_date||''}</td></tr>`).join('')+'</table>';
 $('dr').classList.add('open')}
 async function openForm(ids){fsel=(ids||[]).filter(Boolean);
-if(!fsel.length){toast('Выбери заказы (чекбоксы или ПКМ)');return}
+if(!fsel.length){toast('Р’С‹Р±РµСЂРё Р·Р°РєР°Р·С‹ (С‡РµРєР±РѕРєСЃС‹ РёР»Рё РџРљРњ)');return}
 const rows=lastRows.filter(x=>fsel.includes(+x.id));
-$('finfo').innerHTML=`Заказы (${rows.length}):<br>${rows.map(x=>x.doc_no).join('<br>')||fsel.join(', ')}`;
+$('finfo').innerHTML=`Р—Р°РєР°Р·С‹ (${rows.length}):<br>${rows.map(x=>x.doc_no).join('<br>')||fsel.join(', ')}`;
 try{const r=await (await fetch(API+'?action=refs')).json();
-$('fwh').innerHTML='<option value="">Выбери склад</option>'+(r.warehouses||[]).map(w=>`<option value="${w.id}">${w.name}</option>`).join('')}catch(e){$('fwh').innerHTML='<option value="">Ошибка</option>'}
+$('fwh').innerHTML='<option value="">Р’С‹Р±РµСЂРё СЃРєР»Р°Рґ</option>'+(r.warehouses||[]).map(w=>`<option value="${w.id}">${w.name}</option>`).join('')}catch(e){$('fwh').innerHTML='<option value="">РћС€РёР±РєР°</option>'}
 $('fw').classList.add('open')}
 $('fgo').onclick=async()=>{const wh=$('fwh').value;
-if(!wh){toast('Выбери склад');return}
+if(!wh){toast('Р’С‹Р±РµСЂРё СЃРєР»Р°Рґ');return}
 const body={order_ids:fsel,params:{warehouse_id:+wh,plan_shipment_date:$('fpsd').value||null,gate:$('fgate').value||null,vehicle:$('fveh').value||null}};
 const r=await fetch(API+'?action=form',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const j=await r.json();
-if(!r.ok){toast('Ошибка: '+(j.error||''));return}
-$('fw').classList.remove('open');toast('Сформирована отгрузка #'+j.id);load();
-// window.open здесь перекрыт функцией open() карточки — новую вкладку открываем ссылкой.
+if(!r.ok){toast('РћС€РёР±РєР°: '+(j.error||''));return}
+$('fw').classList.remove('open');toast('РЎС„РѕСЂРјРёСЂРѕРІР°РЅР° РѕС‚РіСЂСѓР·РєР° #'+j.id);load();
+// window.open Р·РґРµСЃСЊ РїРµСЂРµРєСЂС‹С‚ С„СѓРЅРєС†РёРµР№ open() РєР°СЂС‚РѕС‡РєРё вЂ” РЅРѕРІСѓСЋ РІРєР»Р°РґРєСѓ РѕС‚РєСЂС‹РІР°РµРј СЃСЃС‹Р»РєРѕР№.
 {const a=document.createElement('a');a.href='../03-otgruzki/app.html';a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove()}};
 function selIds(){const c=[...document.querySelectorAll('#rows input[type=checkbox][data-id]:checked')].map(x=>+x.dataset.id).filter(Boolean);
 if(c.length)return [...new Set(c)];if(ctxId)return [ctxId];if(curId)return [curId];return []}
@@ -204,53 +206,53 @@ if($('notifpanel')&&$('notifpanel').style.display==='block'&&!$('notifpanel').co
 if(e.target.classList&&e.target.classList.contains('num')&&e.target.dataset.id){e.preventDefault();open(+e.target.dataset.id)}});
 $('ctx').onclick=e=>{const a=e.target.dataset.a;if(!a)return;$('ctx').style.display='none';
 if(a==='open')open(ctxId);else if(a==='form')openForm(selIds());else if(a==='del')delOrders(selIds())};
-// --- Удаление заказов через ПКМ (можно несколько через галки) с подтверждением ---
+// --- РЈРґР°Р»РµРЅРёРµ Р·Р°РєР°Р·РѕРІ С‡РµСЂРµР· РџРљРњ (РјРѕР¶РЅРѕ РЅРµСЃРєРѕР»СЊРєРѕ С‡РµСЂРµР· РіР°Р»РєРё) СЃ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµРј ---
 async function delOrders(ids){
  const sel=(ids||[]).filter(Boolean);
- if(!sel.length){toast('Выбери заказы (галка или ПКМ)');return}
+ if(!sel.length){toast('Р’С‹Р±РµСЂРё Р·Р°РєР°Р·С‹ (РіР°Р»РєР° РёР»Рё РџРљРњ)');return}
  const rows=lastRows.filter(x=>sel.includes(+x.id));
  const names=rows.map(x=>x.doc_no).join(', ')||sel.join(', ');
- if(!confirm(`Удалить заказы: ${names}?\nЗаказы, уже включённые в отгрузку, удалены не будут.`))return;
+ if(!confirm(`РЈРґР°Р»РёС‚СЊ Р·Р°РєР°Р·С‹: ${names}?\nР—Р°РєР°Р·С‹, СѓР¶Рµ РІРєР»СЋС‡С‘РЅРЅС‹Рµ РІ РѕС‚РіСЂСѓР·РєСѓ, СѓРґР°Р»РµРЅС‹ РЅРµ Р±СѓРґСѓС‚.`))return;
  try{
   const r=await fetch(API+'?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order_ids:sel})});
   const j=await r.json();
-  if(!r.ok){toast('Ошибка: '+(j.error||''));return}
-  toast(`Удалено: ${(j.deleted||[]).join(', ')}`+((j.errors||[]).length?` · не удалены: ${j.errors.join('; ')}`:''));
+  if(!r.ok){toast('РћС€РёР±РєР°: '+(j.error||''));return}
+  toast(`РЈРґР°Р»РµРЅРѕ: ${(j.deleted||[]).join(', ')}`+((j.errors||[]).length?` В· РЅРµ СѓРґР°Р»РµРЅС‹: ${j.errors.join('; ')}`:''));
   load();
- }catch(err){toast('Ошибка сети')}
+ }catch(err){toast('РћС€РёР±РєР° СЃРµС‚Рё')}
 }
-// --- уведомления: колокол в шапке (общее хранилище — API 08, как в модуле 12) ---
+// --- СѓРІРµРґРѕРјР»РµРЅРёСЏ: РєРѕР»РѕРєРѕР» РІ С€Р°РїРєРµ (РѕР±С‰РµРµ С…СЂР°РЅРёР»РёС‰Рµ вЂ” API 08, РєР°Рє РІ РјРѕРґСѓР»Рµ 12) ---
 const NAPI='../08-nomenklatura/demo_sqlite.php';
 let ntab='all';
-const KIND_META={receipt:{t:'Поступления',i:'📥',bg:'#E0EEFF'},shipment:{t:'Отгрузки',i:'📦',bg:'#DCE6D1'},task:{t:'Задания',i:'📝',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'}};
-const KIND_CONDS={receipt:['Все статусы','Принято','Принято с отклонениями','Отменено'],shipment:['Все статусы','Расхождение, Отменено','Доставлена'],task:['Все статусы','Просрочено','Назначено','Выполнено'],nomenclature:['Все статусы','Любое изменение']};
-function nTime(s){s=String(s||'');return s.length>=16?s.slice(11,16)+' · '+s.slice(8,10)+'.'+s.slice(5,7):s}
+const KIND_META={receipt:{t:'РџРѕСЃС‚СѓРїР»РµРЅРёСЏ',i:'рџ“Ґ',bg:'#E0EEFF'},shipment:{t:'РћС‚РіСЂСѓР·РєРё',i:'рџ“¦',bg:'#DCE6D1'},task:{t:'Р—Р°РґР°РЅРёСЏ',i:'рџ“ќ',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'},robot:{t:'Робот',i:'🤖',bg:'#E8F5E9'}};
+const KIND_CONDS={receipt:['Р’СЃРµ СЃС‚Р°С‚СѓСЃС‹','РџСЂРёРЅСЏС‚Рѕ','РџСЂРёРЅСЏС‚Рѕ СЃ РѕС‚РєР»РѕРЅРµРЅРёСЏРјРё','РћС‚РјРµРЅРµРЅРѕ'],shipment:['Р’СЃРµ СЃС‚Р°С‚СѓСЃС‹','Р Р°СЃС…РѕР¶РґРµРЅРёРµ, РћС‚РјРµРЅРµРЅРѕ','Р”РѕСЃС‚Р°РІР»РµРЅР°'],task:['Р’СЃРµ СЃС‚Р°С‚СѓСЃС‹','РџСЂРѕСЃСЂРѕС‡РµРЅРѕ','РќР°Р·РЅР°С‡РµРЅРѕ','Р’С‹РїРѕР»РЅРµРЅРѕ'],nomenclature:['Р’СЃРµ СЃС‚Р°С‚СѓСЃС‹','Р›СЋР±РѕРµ РёР·РјРµРЅРµРЅРёРµ']};
+function nTime(s){s=String(s||'');return s.length>=16?s.slice(11,16)+' В· '+s.slice(8,10)+'.'+s.slice(5,7):s}
 async function notifCounts(){try{const r=await (await fetch(NAPI+'?action=notif_counts')).json();$('bellbadge').textContent=r.unread||0;$('bellbadge').style.display=r.unread?'flex':'none';$('nc_all').textContent=r.all||0;$('nc_unread').textContent=r.unread||0;$('nc_imp').textContent=r.important||0}catch(e){}}
-async function notifLoad(){try{const r=await (await fetch(`${NAPI}?action=notif_list&tab=${ntab}&limit=20`)).json();const rows=r.rows||[];const c=r.counts||{};$('nc_all').textContent=c.all||0;$('nc_unread').textContent=c.unread||0;$('nc_imp').textContent=c.important||0;$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
-$('notiflist').innerHTML=rows.map(x=>{const m=KIND_META[x.kind]||{t:x.kind,i:'🔔',bg:'#F4F0FB'};return `<div class="ntf ${+x.is_read?'read':''}" data-nid="${x.id}"><div class="ic" style="background:${m.bg}">${m.i}</div><div class="tx"><div class="sub">${m.t}</div><b>${x.title||''}</b><div class="body">${x.body||''}</div></div><div class="tm">${nTime(x.created_at)}</div>${+x.is_read?'':'<div class="dot"></div>'}</div>`}).join('')||'<p class="hint">Нет уведомлений</p>';
+async function notifLoad(){try{const r=await (await fetch(`${NAPI}?action=notif_list&tab=${ntab==='robot'?'all':ntab}&kind=${ntab==='robot'?'robot':''}&limit=20`)).json();const rows=r.rows||[];const c=r.counts||{};$('nc_all').textContent=c.all||0;$('nc_unread').textContent=c.unread||0;$('nc_imp').textContent=c.important||0;$('nc_robot').textContent=c.robot||0;$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
+$('notiflist').innerHTML=rows.map(x=>{const m=KIND_META[x.kind]||{t:x.kind,i:'рџ””',bg:'#F4F0FB'};return `<div class="ntf ${+x.is_read?'read':''}" data-nid="${x.id}"><div class="ic" style="background:${m.bg}">${m.i}</div><div class="tx"><div class="sub">${m.t}</div><b>${x.title||''}</b><div class="body">${x.body||''}</div></div><div class="tm">${nTime(x.created_at)}</div>${+x.is_read?'':'<div class="dot"></div>'}</div>`}).join('')||'<p class="hint">РќРµС‚ СѓРІРµРґРѕРјР»РµРЅРёР№</p>';
 document.querySelectorAll('#notiflist .ntf').forEach(el=>el.onclick=async()=>{const id=+el.dataset.nid;await fetch(NAPI+'?action=notif_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});notifLoad()})}catch(e){}}
-function setNtab(t){ntab=t;[['nt_all','all'],['nt_unread','unread'],['nt_imp','important']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));notifLoad()}
-$('nt_all').onclick=()=>setNtab('all');$('nt_unread').onclick=()=>setNtab('unread');$('nt_imp').onclick=()=>setNtab('important');
+function setNtab(t){ntab=t;[['nt_all','all'],['nt_unread','unread'],['nt_imp','important'],['nt_robot','robot']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));notifLoad()}
+$('nt_all').onclick=()=>setNtab('all');$('nt_unread').onclick=()=>setNtab('unread');$('nt_imp').onclick=()=>setNtab('important');$('nt_robot').onclick=()=>setNtab('robot');
 $('bellbtn').onclick=e=>{e.stopPropagation();const p=$('notifpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px';notifLoad()}};
-$('notifreadall').onclick=async e=>{e.preventDefault();await fetch(NAPI+'?action=notif_read_all',{method:'POST'});notifLoad();toast('Все отмечены как прочитанные')};
+$('notifreadall').onclick=async e=>{e.preventDefault();await fetch(NAPI+'?action=notif_read_all',{method:'POST'});notifLoad();toast('Р’СЃРµ РѕС‚РјРµС‡РµРЅС‹ РєР°Рє РїСЂРѕС‡РёС‚Р°РЅРЅС‹Рµ')};
 $('notifset').onclick=e=>{e.preventDefault();$('notifpanel').style.display='none';$('notifmodal').classList.add('open');subLoad()};
 $('notifmclose').onclick=$('subclose').onclick=()=>$('notifmodal').classList.remove('open');
-$('nstab1').onclick=()=>{$('nstab1').textContent='Мои подписки';$('nstab2').textContent='○ Каналы и расписание';$('nspane1').style.display='block';$('nspane2').style.display='none'};
-$('nstab2').onclick=()=>{$('nstab1').textContent='○ Мои подписки';$('nstab2').textContent='Каналы и расписание';$('nspane1').style.display='none';$('nspane2').style.display='block'};
+$('nstab1').onclick=()=>{$('nstab1').textContent='РњРѕРё РїРѕРґРїРёСЃРєРё';$('nstab2').textContent='в—‹ РљР°РЅР°Р»С‹ Рё СЂР°СЃРїРёСЃР°РЅРёРµ';$('nspane1').style.display='block';$('nspane2').style.display='none'};
+$('nstab2').onclick=()=>{$('nstab1').textContent='в—‹ РњРѕРё РїРѕРґРїРёСЃРєРё';$('nstab2').textContent='РљР°РЅР°Р»С‹ Рё СЂР°СЃРїРёСЃР°РЅРёРµ';$('nspane1').style.display='none';$('nspane2').style.display='block'};
 async function subLoad(){try{const rows=await (await fetch(NAPI+'?action=notif_subs')).json();const byK={};(rows||[]).forEach(r=>byK[r.event_kind]=r);
-$('subrows').innerHTML=Object.keys(KIND_META).map(k=>{const m=KIND_META[k];const s=byK[k]||{ch_web:0,ch_email:0,ch_tg:0,cond_label:'Все статусы',is_on:1};const conds=(KIND_CONDS[k]||['Все статусы']).map(c=>`<option ${c===(s.cond_label||'Все статусы')?'selected':''}>${c}</option>`).join('');
-return `<div class="subrow" data-kind="${k}"><div class="nm"><b>${m.t}</b><span class="hint">${m.i}</span></div><div style="width:170px"><label><input type="checkbox" data-f="ch_web" ${+s.ch_web?'checked':''}> Web</label><label><input type="checkbox" data-f="ch_email" ${+s.ch_email?'checked':''}> Email</label><label><input type="checkbox" data-f="ch_tg" ${+s.ch_tg?'checked':''}> Telegram</label></div><div style="width:150px"><select data-f="cond_label">${conds}</select></div><div style="width:60px"><button class="tgl ${+s.is_on?'on':''}" data-f="is_on" title="Вкл/выкл"></button></div></div>`}).join('');
+$('subrows').innerHTML=Object.keys(KIND_META).map(k=>{const m=KIND_META[k];const s=byK[k]||{ch_web:0,ch_email:0,ch_tg:0,cond_label:'Р’СЃРµ СЃС‚Р°С‚СѓСЃС‹',is_on:1};const conds=(KIND_CONDS[k]||['Р’СЃРµ СЃС‚Р°С‚СѓСЃС‹']).map(c=>`<option ${c===(s.cond_label||'Р’СЃРµ СЃС‚Р°С‚СѓСЃС‹')?'selected':''}>${c}</option>`).join('');
+return `<div class="subrow" data-kind="${k}"><div class="nm"><b>${m.t}</b><span class="hint">${m.i}</span></div><div style="width:170px"><label><input type="checkbox" data-f="ch_web" ${+s.ch_web?'checked':''}> Web</label><label><input type="checkbox" data-f="ch_email" ${+s.ch_email?'checked':''}> Email</label><label><input type="checkbox" data-f="ch_tg" ${+s.ch_tg?'checked':''}> Telegram</label></div><div style="width:150px"><select data-f="cond_label">${conds}</select></div><div style="width:60px"><button class="tgl ${+s.is_on?'on':''}" data-f="is_on" title="Р’РєР»/РІС‹РєР»"></button></div></div>`}).join('');
 document.querySelectorAll('#subrows .subrow input[type=checkbox],#subrows .subrow select').forEach(e=>e.onchange=subSave);
 document.querySelectorAll('#subrows .tgl').forEach(b=>b.onclick=()=>{b.classList.toggle('on');subSave()})}catch(e){}}
-async function subSave(){const rows=[...document.querySelectorAll('#subrows .subrow')];for(const r of rows){const k=r.dataset.kind;const g=f=>r.querySelector(`[data-f="${f}"]`);const body={event_kind:k,ch_web:g('ch_web').checked?1:0,ch_email:g('ch_email').checked?1:0,ch_tg:g('ch_tg').checked?1:0,cond_label:g('cond_label').value,is_on:g('is_on').classList.contains('on')?1:0};await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}toast('Подписки сохранены')}
-$('subadd').onclick=async()=>{const rows=await (await fetch(NAPI+'?action=notif_subs')).json();const has=new Set((rows||[]).map(r=>r.event_kind));const miss=Object.keys(KIND_META).find(k=>!has.has(k));if(!miss){toast('Все типы уже подписаны');return}await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:miss,ch_web:1,ch_email:0,ch_tg:0,cond_label:'Все статусы',is_on:1})});subLoad()};
-$('subreset').onclick=async()=>{const defs=[['receipt',0,0,0,'Все статусы',1],['shipment',0,1,0,'Расхождение, Отменено',1],['task',1,0,1,'Просрочено',1],['nomenclature',0,1,0,'Любое изменение',0]];for(const [k,w,e,t,c,on] of defs)await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:k,ch_web:w,ch_email:e,ch_tg:t,cond_label:c,is_on:on})});subLoad();toast('Сброшено к значениям по схеме')};
+async function subSave(){const rows=[...document.querySelectorAll('#subrows .subrow')];for(const r of rows){const k=r.dataset.kind;const g=f=>r.querySelector(`[data-f="${f}"]`);const body={event_kind:k,ch_web:g('ch_web').checked?1:0,ch_email:g('ch_email').checked?1:0,ch_tg:g('ch_tg').checked?1:0,cond_label:g('cond_label').value,is_on:g('is_on').classList.contains('on')?1:0};await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}toast('РџРѕРґРїРёСЃРєРё СЃРѕС…СЂР°РЅРµРЅС‹')}
+$('subadd').onclick=async()=>{const rows=await (await fetch(NAPI+'?action=notif_subs')).json();const has=new Set((rows||[]).map(r=>r.event_kind));const miss=Object.keys(KIND_META).find(k=>!has.has(k));if(!miss){toast('Р’СЃРµ С‚РёРїС‹ СѓР¶Рµ РїРѕРґРїРёСЃР°РЅС‹');return}await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:miss,ch_web:1,ch_email:0,ch_tg:0,cond_label:'Р’СЃРµ СЃС‚Р°С‚СѓСЃС‹',is_on:1})});subLoad()};
+$('subreset').onclick=async()=>{const defs=[['receipt',0,0,0,'Р’СЃРµ СЃС‚Р°С‚СѓСЃС‹',1],['shipment',0,1,0,'Р Р°СЃС…РѕР¶РґРµРЅРёРµ, РћС‚РјРµРЅРµРЅРѕ',1],['task',1,0,1,'РџСЂРѕСЃСЂРѕС‡РµРЅРѕ',1],['nomenclature',0,1,0,'Р›СЋР±РѕРµ РёР·РјРµРЅРµРЅРёРµ',0]];for(const [k,w,e,t,c,on] of defs)await fetch(NAPI+'?action=notif_sub_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_kind:k,ch_web:w,ch_email:e,ch_tg:t,cond_label:c,is_on:on})});subLoad();toast('РЎР±СЂРѕС€РµРЅРѕ Рє Р·РЅР°С‡РµРЅРёСЏРј РїРѕ СЃС…РµРјРµ')};
 notifCounts();setInterval(notifCounts,60000);
-// --- Скрываемое левое меню (стрелка вверху) ---
+// --- РЎРєСЂС‹РІР°РµРјРѕРµ Р»РµРІРѕРµ РјРµРЅСЋ (СЃС‚СЂРµР»РєР° РІРІРµСЂС…Сѓ) ---
 if(localStorage.getItem('navhide')==='1')document.body.classList.add('navhide');
 $('navhidebtn').onclick=()=>{document.body.classList.add('navhide');try{localStorage.setItem('navhide','1')}catch(e){}};
 $('navshowbtn').onclick=()=>{document.body.classList.remove('navhide');try{localStorage.setItem('navhide','0')}catch(e){}};
-// --- Настройка столбцов (шестеренка): свои колонки для каждого пользователя ---
+// --- РќР°СЃС‚СЂРѕР№РєР° СЃС‚РѕР»Р±С†РѕРІ (С€РµСЃС‚РµСЂРµРЅРєР°): СЃРІРѕРё РєРѕР»РѕРЅРєРё РґР»СЏ РєР°Р¶РґРѕРіРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ ---
 const COLFORM='orders';
 let hideCols=[];
 function colTable(){const tb=document.querySelector('#rows');return tb?tb.closest('table'):null}
@@ -259,7 +261,7 @@ ths.forEach((th,i)=>{const h=hideCols.includes(i);th.style.display=h?'none':'';[
 async function colLoad(){try{const r=await (await fetch(API+'?action=columns_get&form='+COLFORM)).json();const c=(r&&r.cols&&Array.isArray(r.cols.hidden))?r.cols.hidden:[];hideCols=c.map(Number).filter(n=>n>=0)}catch(e){hideCols=[]}colApply()}
 async function colSave(){try{await fetch(API+'?action=columns_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:COLFORM,cols:{hidden:hideCols}})})}catch(e){}}
 function colPanel(){const tbl=colTable();if(!tbl)return;const ths=[...tbl.querySelectorAll('thead th')];
-$('collist').innerHTML=ths.map((th,i)=>{const t=((th.textContent||'').trim()||('Столбец '+(i+1)));return `<label style="display:block;padding:6px 4px;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="${i}" ${hideCols.includes(i)?'':'checked'}> ${t}</label>`}).join('');
+$('collist').innerHTML=ths.map((th,i)=>{const t=(Sort.thLabel(th)||('РЎС‚РѕР»Р±РµС† '+(i+1)));return `<label style="display:block;padding:6px 4px;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="${i}" ${hideCols.includes(i)?'':'checked'}> ${t}</label>`}).join('');
 document.querySelectorAll('#collist input[data-ci]').forEach(c=>c.onchange=()=>{const i=+c.dataset.ci;hideCols=c.checked?hideCols.filter(n=>n!==i):[...new Set([...hideCols,i])];colApply();colSave()});
 const p=$('colpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px'}}
 $('colset').onclick=e=>{e.stopPropagation();colPanel()};
@@ -267,11 +269,13 @@ $('colclose').onclick=()=>$('colpanel').style.display='none';
 $('colreset').onclick=async()=>{hideCols=[];colApply();await colSave();colPanel()};
 if(document.querySelector('#rows'))new MutationObserver(()=>colApply()).observe(document.querySelector('#rows'),{childList:true});
 colLoad();
+// РЎРѕСЂС‚РёСЂРѕРІРєР° СЂРµРµСЃС‚СЂР° Р·Р°РєР°Р·РѕРІ РїРѕ Р»СЋР±РѕРјСѓ СЃС‚РѕР»Р±С†Сѓ (Рђв†’РЇ / РЇв†’Рђ) вЂ” СЃРµСЂРІРµСЂРЅР°СЏ, СЃ РїР°РіРёРЅР°С†РёРµР№.
+Sort.init({mode:'server', key:'created_at', dir:'DESC', onChange:()=>{page=1;load()}});
 load();
 </script>
 <script data-shift-select>
-/* Shift+клик по галкам: выделение диапазона подряд, как в Windows/проводнике.
-   Обычный клик запоминает якорь, Shift+клик отмечает/снимает все строки между якорем и текущей. */
+/* Shift+РєР»РёРє РїРѕ РіР°Р»РєР°Рј: РІС‹РґРµР»РµРЅРёРµ РґРёР°РїР°Р·РѕРЅР° РїРѕРґСЂСЏРґ, РєР°Рє РІ Windows/РїСЂРѕРІРѕРґРЅРёРєРµ.
+   РћР±С‹С‡РЅС‹Р№ РєР»РёРє Р·Р°РїРѕРјРёРЅР°РµС‚ СЏРєРѕСЂСЊ, Shift+РєР»РёРє РѕС‚РјРµС‡Р°РµС‚/СЃРЅРёРјР°РµС‚ РІСЃРµ СЃС‚СЂРѕРєРё РјРµР¶РґСѓ СЏРєРѕСЂРµРј Рё С‚РµРєСѓС‰РµР№. */
 (function(){
   var anchorTbl=null, anchorIdx=-1;
   function boxesOf(tbl){

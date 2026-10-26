@@ -75,9 +75,16 @@ CREATE TABLE IF NOT EXISTS settings_history (
 CREATE TABLE IF NOT EXISTS storage_zones (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   warehouse_id BIGINT UNSIGNED NULL,
-  code VARCHAR(20) NOT NULL,
+  code VARCHAR(30) NOT NULL,
   name VARCHAR(255) NOT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
+  purpose VARCHAR(255) NULL COMMENT 'Для чего эта зона',
+  affects_placement TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Приоритет при размещении',
+  affects_reservation TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Приоритет при резервировании',
+  contractor_id BIGINT UNSIGNED NULL COMMENT 'Зона приравнена к клиенту',
+  is_virtual TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Пустая зона для отчётов',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_zone_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -87,6 +94,25 @@ CREATE TABLE IF NOT EXISTS cell_types (
   name VARCHAR(255) NOT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   UNIQUE KEY uq_cell_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS storage_lock_types (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(30) NOT NULL COMMENT 'Код типа блокировки: mechanical, seal, quarantine, damage, inventory',
+  name VARCHAR(255) NOT NULL COMMENT 'Наименование: Механическая, Пломба, Карантин, Повреждение, Инвентаризация',
+  description TEXT NULL COMMENT 'Описание / причина блокировки',
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  UNIQUE KEY uq_lock_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 5.1 Настройки робота размещения (секционная блокировка типа паллеты, лимиты секции)
+CREATE TABLE IF NOT EXISTS robot_settings (
+  id BIGINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
+  section_pallet_lock TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Вкл/выкл секционную блокировку типа паллеты (робот)',
+  euro_cap_per_section INT NOT NULL DEFAULT 4 COMMENT 'Макс паллет евро в секции',
+  fin_cap_per_section INT NOT NULL DEFAULT 3 COMMENT 'Макс паллет фин в секции',
+  fin_block_3rd_cell TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Блокировать 3-ю ячейку яруса под фин (причина «Фин секция»)',
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS pallet_types (

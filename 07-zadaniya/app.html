@@ -25,7 +25,7 @@ main{flex:1;padding:18px 22px;min-width:0}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:10px;color:#2C313C;border-bottom:1px solid #F0F0F0;white-space:nowrap}
 td{padding:10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
-tr.sel{background:#F8F6FC}tr:hover td{background:#fafaff;cursor:pointer}
+tr.sel{background:#F8F6FC}tr:hover td{background:#fafaff}a.num{cursor:pointer}
 a.num{color:var(--vio);font-weight:700;text-decoration:none}
 .st{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700}
 .st-done{background:#E8F5E9;color:#2E7D32;border:1px solid #A5D6A7}
@@ -115,11 +115,11 @@ td.cell{max-width:220px;overflow:hidden;text-overflow:ellipsis}
 <style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
 <body>
 <button id="navshowbtn" title="Показать меню">▶</button>
-<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi on" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi on" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
 <main>
 <div class="top"><h1>Задания</h1><div class="user"><button id="bellbtn" title="Уведомления">🔔<span id="bellbadge">0</span></button><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span></div></div>
 <div class="bar">
-<input id="q" type="text" placeholder="Поиск по № задания, типу, сотруднику, товару ...">
+<input id="q" type="text" placeholder="Поиск по № задания, типу, сотруднику, товару, списку заданий ...">
 <button class="btn" id="fbtn">Фильтры<span class="badge" id="fbadge" style="display:none">0</span></button>
 <button class="btn" id="imp">Импорт</button>
 <button class="btn" id="exp">Экспорт</button>
@@ -128,8 +128,8 @@ td.cell{max-width:220px;overflow:hidden;text-overflow:ellipsis}
 <div class="chips" id="chips"></div>
 <div class="selbar" id="selbar"><b id="selcount">Выбрано: 0</b><button class="btn" id="seldel">Удалить выбранные</button><button class="btn" id="selclr">Снять выбор</button><span class="hint">Ctrl+клик по строке — выбрать одну · Shift+клик по галкам — диапазон · Delete — удалить</span></div>
 <div class="card" style="overflow:auto">
-<table><thead><tr><th><input type="checkbox" id="chall" title="Выбрать все"></th><th>№ задания</th><th>Дата создания</th><th>Тип задания</th><th>Статус</th><th>Склад</th><th>Товары / позиции</th><th>Ячейка хранения</th><th>№ паллеты</th><th>Артикул</th><th>Наименование</th><th>Ячеек</th><th>Документ</th><th>Приоритет</th><th>Прогресс</th><th>Исполнитель</th><th>Флаги</th><th id="colset" class="gear" title="Настройки полей">⚙️</th></tr></thead>
-<tbody id="rows"><tr><td colspan="18">Загрузка...</td></tr></tbody></table>
+<table data-sort-mode="server"><thead><tr><th><input type="checkbox" id="chall" title="Выбрать все"></th><th data-sort="doc_no">№ задания</th><th data-sort="created_at">Дата создания</th><th data-sort="type">Тип задания</th><th data-sort="status">Статус</th><th data-sort="warehouse">Склад</th><th data-sort="goods">Товары / позиции</th><th data-sort="cell">Ячейка хранения</th><th data-sort="pallet">№ паллеты</th><th data-sort="sku">Артикул</th><th data-sort="name">Наименование</th><th data-sort="cells">Ячеек</th><th data-sort="doc_ref">Документ</th><th data-sort="list">Список заданий</th><th data-sort="priority">Приоритет</th><th data-sort="progress">Прогресс</th><th data-sort="executor">Исполнитель</th><th data-sort="flags">Флаги</th><th id="colset" class="gear" title="Настройки полей">⚙️</th></tr></thead>
+<tbody id="rows"><tr><td colspan="19">Загрузка...</td></tr></tbody></table>
 <div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
 <select id="pp"><option>5</option><option>9</option><option selected>20</option><option>50</option></select></div>
 <div class="pg" id="pg"></div></div>
@@ -162,6 +162,7 @@ td.cell{max-width:220px;overflow:hidden;text-overflow:ellipsis}
 <label>Документ</label><input id="doc" type="text" placeholder="№ отгрузки / поступления...">
 <label>Заказ</label><input id="ord" type="text" placeholder="№ заказа...">
 <label>Код товара</label><input id="sku" type="text" placeholder="Код / артикул...">
+<label>Список заданий</label><input id="lst" type="text" placeholder="PK-000001 ...">
 <label>Товаров</label><div class="frow"><input id="gf" type="number" placeholder="От"><input id="gt" type="number" placeholder="До"></div>
 <label>Позиций</label><div class="frow"><input id="lf" type="number" placeholder="От"><input id="lt" type="number" placeholder="До"></div>
 <label>Ячеек</label><div class="frow"><input id="cf2" type="number" placeholder="От"><input id="ct2" type="number" placeholder="До"></div>
@@ -232,7 +233,7 @@ td.cell{max-width:220px;overflow:hidden;text-overflow:ellipsis}
 <input type="file" id="impfile" accept=".csv" style="display:none">
 <div id="notifpanel">
 <div style="display:flex;justify-content:space-between;align-items:center"><h2>Уведомления</h2><div><a href="#" id="notifset" style="font-size:16px;text-decoration:none" title="Настройка уведомлений">⚙️</a></div></div>
-<div class="ntabs"><span id="nt_all" class="on">Все <b id="nc_all">0</b></span><span id="nt_unread">Непрочитанные <b id="nc_unread">0</b></span><span id="nt_imp">Важные <b id="nc_imp">0</b></span></div>
+<div class="ntabs"><span id="nt_all" class="on">Все <b id="nc_all">0</b></span><span id="nt_unread">Непрочитанные <b id="nc_unread">0</b></span><span id="nt_imp">Важные <b id="nc_imp">0</b></span><span id="nt_robot">Робот <b id="nc_robot">0</b></span></div>
 <div><a href="#" id="notifreadall" style="font-size:13px">Отметить все как прочитанные</a></div>
 <div id="notiflist" style="margin-top:6px"></div>
 <div style="margin-top:8px"><a href="../12-uvedomleniya/app.html" style="font-size:13px">Показать все уведомления</a></div>
@@ -257,6 +258,7 @@ td.cell{max-width:220px;overflow:hidden;text-overflow:ellipsis}
 </div>
 <div id="toast"></div>
 
+<script src="../shared/sort.js"></script>
 <script>
 const API='demo_sqlite.php';
 let page=1,perPage=20,lastRows=[],ctxId=null,curId=null,ntype='сбор';
@@ -271,7 +273,7 @@ function params(){const p=new URLSearchParams({action:'list',page,per_page:perPa
 const v=(id,k)=>{if($(id)&&$(id).value)p.set(k,$(id).value)};
 if($('q').value)p.set('search',$('q').value);
 v('cf','created_from');v('ct','created_to');v('df','due_from');v('dt','due_to');
-v('wh','warehouse_id');v('ex','executor');v('doc','doc_ref');v('ord','order_ref');v('sku','sku');
+v('wh','warehouse_id');v('ex','executor');v('doc','doc_ref');v('ord','order_ref');v('sku','sku');v('lst','list_code');
 v('gf','goods_from');v('gt','goods_to');v('lf','lines_from');v('lt','lines_to');
 v('cf2','cells_from');v('ct2','cells_to');v('pf','progress_from');v('pt','progress_to');
 v('vf','volume_from');v('vt','volume_to');v('wf','weight_from');v('wt','weight_to');
@@ -279,6 +281,7 @@ if($('ftp').value)p.set('type',$('ftp').value);
 if($('pri').value!=='all')p.set('priority',$('pri').value);
 if($('flg').value!=='all')p.set('flag',$('flg').value);
 document.querySelectorAll('#sts input:checked').forEach(c=>p.append('status[]',c.value));
+Sort.params(p);
 return p}
 function flagsHtml(o){let f=[];const fl=(o.flags||'');if(/danger/i.test(fl))f.push('⚠');if(o.need_check)f.push('☑');return f.join(' ')}
 async function load(){const r=await fetch(API+'?'+params());const j=await r.json();lastRows=j.rows||[];
@@ -289,6 +292,7 @@ if(q.get('search'))chips.push('Поиск: '+q.get('search'));
 if(q.get('warehouse_id'))chips.push('Склад');
 if(q.getAll('status[]').length)chips.push('Статус: '+q.getAll('status[]').length);
 if(q.get('type'))chips.push('Тип: '+q.get('type'));
+if(q.get('list_code'))chips.push('Список заданий: '+q.get('list_code'));
 $('chips').innerHTML=chips.map(c=>`<span class="chip">${c}</span>`).join('')+(n?` <a href="#" id="clrall" style="font-size:12px">Сбросить все</a>`:'');
 const ca=$('clrall');if(ca)ca.onclick=e=>{e.preventDefault();clrF()};
  $('rows').innerHTML=lastRows.map(o=>{const pc=o.progress??0;const isSel=selected.has(o.id);
@@ -301,10 +305,11 @@ return `<tr data-id="${o.id}"${isSel?' class="chked"':''}><td><input type="check
 <td class="cell" title="${esc(o.skus_full||'')}">${esc(o.skus||'—')}</td>
 <td class="cell" title="${esc(o.item_names_full||'')}">${esc(o.item_names||'—')}</td>
 <td>${o.cells_count??''}</td>
-<td>${o.doc_ref?`<a class="num" href="#">${o.doc_ref}</a>`:'—'}</td>
+ <td>${o.doc_ref?`<a class="num" href="#">${o.doc_ref}</a>`:'—'}</td>
+ <td class="cell" title="${esc(o.list_codes||'')}">${esc(o.list_codes||'—')}</td>
 <td><span class="pr pr-${o.priority}" data-prid="${o.id}" title="Нажми, чтобы сменить приоритет">${priLabel[o.priority]||o.priority}</span></td>
 <td><div class="prog"><i style="width:${pc}%"></i></div><small>${pc} %</small></td>
-<td>${o.executor_fio||''}</td><td>${flagsHtml(o)}</td><td>⋮</td></tr>`}).join('')||'<tr><td colspan=18>Ничего не найдено</td></tr>';
+ <td>${o.executor_fio||''}</td><td>${flagsHtml(o)}</td><td>⋮</td></tr>`}).join('')||'<tr><td colspan=19>Ничего не найдено</td></tr>';
 syncSelUI();
 const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
 for(let i=1;i<=Math.min(pages,5);i++)h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`;
@@ -312,7 +317,9 @@ $('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick
 document.querySelectorAll('#rows tr').forEach(tr=>{if(!tr.dataset.id)return;
 tr.onclick=e=>{if(e.target.tagName==='INPUT')return;
 if((e.ctrlKey||e.metaKey)&&tr.dataset.id){const cb=tr.querySelector('.rowchk');if(cb){cb.checked=!cb.checked;cb.dispatchEvent(new Event('change',{bubbles:true}))}return}
-if(!(e.target.classList&&e.target.classList.contains('num'))&&!(e.target.closest&&e.target.closest('[data-prid]')))openDet(+tr.dataset.id);};
+if(e.target.closest&&e.target.closest('[data-prid]'))return;
+if(e.target.closest&&e.target.closest('a.num'))return;
+document.querySelectorAll('#rows tr.sel').forEach(x=>x.classList.remove('sel'));tr.classList.add('sel');};
 tr.oncontextmenu=e=>{e.preventDefault();ctxId=+tr.dataset.id;colSub();syncDelLabel();const c=$('ctx');c.style.display='block';c.style.left=e.clientX+'px';c.style.top=e.clientY+'px'}})}
 // --- Выбор строк: общая галка, Ctrl+клик, Shift-диапазон (через скрипт data-shift-select), удаление ---
 function syncDelLabel(){const di=document.querySelector('#ctx [data-a="del"]');if(!di)return;
@@ -344,7 +351,7 @@ $('detcard').scrollIntoView({behavior:'smooth',block:'nearest'})}
 $('fbtn').onclick=()=>$('fp').classList.add('open');
 $('fclose').onclick=()=>$('fp').classList.remove('open');
 $('fok').onclick=()=>{page=1;$('fp').classList.remove('open');load()};
-function clrF(){['q','cf','ct','df','dt','ex','doc','ord','sku','gf','gt','lf','lt','cf2','ct2','pf','pt','vf','vt','wf','wt'].forEach(i=>{if($(i))$(i).value=''});['wh','ftp'].forEach(i=>{if($(i))$(i).value=''});['pri','flg'].forEach(i=>{if($(i))$(i).value='all'});document.querySelectorAll('#sts input').forEach(c=>c.checked=false);page=1;load()}
+function clrF(){['q','cf','ct','df','dt','ex','doc','ord','sku','lst','gf','gt','lf','lt','cf2','ct2','pf','pt','vf','vt','wf','wt'].forEach(i=>{if($(i))$(i).value=''});['wh','ftp'].forEach(i=>{if($(i))$(i).value=''});['pri','flg'].forEach(i=>{if($(i))$(i).value='all'});document.querySelectorAll('#sts input').forEach(c=>c.checked=false);page=1;load()}
 $('fclr').onclick=clrF;const fr=$('freset');if(fr)fr.onclick=e=>{e.preventDefault();clrF()};
 $('q').onchange=()=>{page=1;load()};$('pp').onchange=e=>{perPage=+e.target.value;page=1;load()};
 $('colset').onclick=e=>{e.stopPropagation();colPanel()};
@@ -357,8 +364,8 @@ const body={type:ntype,priority:$('npri').value,warehouse_id:+$('nwh').value,exe
 const r=await fetch(API+'?action=store',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const j=await r.json();
 if(r.ok){$('wiz').classList.remove('open');toast('Создано задание #'+j.id);load()}else toast('Ошибка: '+(j.error||''))};
-$('exp').onclick=()=>{const h=['№ задания','Дата создания','Тип','Статус','Склад','Товары','Ячейка хранения','№ паллеты','Артикул','Наименование','Ячеек','Документ','Приоритет','Прогресс','Исполнитель'];
-const csv='\ufeff'+h.join(';')+'\n'+lastRows.map(o=>[o.doc_no,o.created_at,o.type,stLabel[o.status],o.warehouse,(o.fact_qty+'/'+o.plan_qty),(o.cell_storage_full||o.cell_storage||''),(o.pallets_full||o.pallets||''),(o.skus_full||o.skus||''),(o.item_names_full||o.item_names||''),o.cells_count,o.doc_ref,priLabel[o.priority],o.progress,o.executor_fio].join(';')).join('\n');
+$('exp').onclick=()=>{const h=['№ задания','Дата создания','Тип','Статус','Склад','Товары','Ячейка хранения','№ паллеты','Артикул','Наименование','Ячеек','Документ','Список заданий','Приоритет','Прогресс','Исполнитель'];
+const csv='\ufeff'+h.join(';')+'\n'+lastRows.map(o=>[o.doc_no,o.created_at,o.type,stLabel[o.status],o.warehouse,(o.fact_qty+'/'+o.plan_qty),(o.cell_storage_full||o.cell_storage||''),(o.pallets_full||o.pallets||''),(o.skus_full||o.skus||''),(o.item_names_full||o.item_names||''),o.cells_count,o.doc_ref,(o.list_codes||''),priLabel[o.priority],o.progress,o.executor_fio].join(';')).join('\n');
 const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='tasks.csv';a.click()};
 $('imp').onclick=()=>$('impfile').click();
 $('impfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;const t=await f.text();toast('Импорт принят: '+t.split('\n').length+' строк (демо)');load()};
@@ -407,20 +414,21 @@ $('mmok').onclick=async()=>{if(mmMode!=='assign'||!ctxId)return;
 const v=$('mminp').value.trim();if(!v){toast('Укажите исполнителя');return}
 const r=await fetch(`${API}?action=assign&id=${ctxId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({executor_fio:v})});
 const j=await r.json();$('mm').classList.remove('open');toast(r.ok?'Исполнитель назначен':'Ошибка: '+(j.error||''));load()};
-// предфильтр из отгрузок: ?doc_ref=S-205107
-(function(){const u=new URLSearchParams(location.search);const d=u.get('doc_ref')||u.get('doc');if(d){$('doc').value=d;}})();
+// предфильтр из отгрузок: ?doc_ref=S-205107 · по списку заданий: ?list_code=PK-000001
+(function(){const u=new URLSearchParams(location.search);const d=u.get('doc_ref')||u.get('doc');if(d){$('doc').value=d;};
+const lc=u.get('list_code')||u.get('list');if(lc){$('lst').value=lc;}})();
 // --- уведомления: колокол в шапке (общее хранилище — API 08, как в модуле 12) ---
 const NAPI='../08-nomenklatura/demo_sqlite.php';
 let ntab='all';
-const KIND_META={receipt:{t:'Поступления',i:'📥',bg:'#E0EEFF'},shipment:{t:'Отгрузки',i:'📦',bg:'#DCE6D1'},task:{t:'Задания',i:'📝',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'}};
+const KIND_META={receipt:{t:'Поступления',i:'📥',bg:'#E0EEFF'},shipment:{t:'Отгрузки',i:'📦',bg:'#DCE6D1'},task:{t:'Задания',i:'📝',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'},robot:{t:'Робот',i:'🤖',bg:'#E8F5E9'}};
 const KIND_CONDS={receipt:['Все статусы','Принято','Принято с отклонениями','Отменено'],shipment:['Все статусы','Расхождение, Отменено','Доставлена'],task:['Все статусы','Просрочено','Назначено','Выполнено'],nomenclature:['Все статусы','Любое изменение']};
 function nTime(s){s=String(s||'');return s.length>=16?s.slice(11,16)+' · '+s.slice(8,10)+'.'+s.slice(5,7):s}
 async function notifCounts(){try{const r=await (await fetch(NAPI+'?action=notif_counts')).json();$('bellbadge').textContent=r.unread||0;$('bellbadge').style.display=r.unread?'flex':'none';$('nc_all').textContent=r.all||0;$('nc_unread').textContent=r.unread||0;$('nc_imp').textContent=r.important||0}catch(e){}}
-async function notifLoad(){try{const r=await (await fetch(`${NAPI}?action=notif_list&tab=${ntab}&limit=20`)).json();const rows=r.rows||[];const c=r.counts||{};$('nc_all').textContent=c.all||0;$('nc_unread').textContent=c.unread||0;$('nc_imp').textContent=c.important||0;$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
+async function notifLoad(){try{const r=await (await fetch(`${NAPI}?action=notif_list&tab=${ntab==='robot'?'all':ntab}&kind=${ntab==='robot'?'robot':''}&limit=20`)).json();const rows=r.rows||[];const c=r.counts||{};$('nc_all').textContent=c.all||0;$('nc_unread').textContent=c.unread||0;$('nc_imp').textContent=c.important||0;$('nc_robot').textContent=c.robot||0;$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
 $('notiflist').innerHTML=rows.map(x=>{const m=KIND_META[x.kind]||{t:x.kind,i:'🔔',bg:'#F4F0FB'};return `<div class="ntf ${+x.is_read?'read':''}" data-nid="${x.id}"><div class="ic" style="background:${m.bg}">${m.i}</div><div class="tx"><div class="sub">${m.t}</div><b>${x.title||''}</b><div class="body">${x.body||''}</div></div><div class="tm">${nTime(x.created_at)}</div>${+x.is_read?'':'<div class="dot"></div>'}</div>`}).join('')||'<p class="hint">Нет уведомлений</p>';
 document.querySelectorAll('#notiflist .ntf').forEach(el=>el.onclick=async()=>{const id=+el.dataset.nid;await fetch(NAPI+'?action=notif_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});notifLoad()})}catch(e){}}
-function setNtab(t){ntab=t;[['nt_all','all'],['nt_unread','unread'],['nt_imp','important']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));notifLoad()}
-$('nt_all').onclick=()=>setNtab('all');$('nt_unread').onclick=()=>setNtab('unread');$('nt_imp').onclick=()=>setNtab('important');
+function setNtab(t){ntab=t;[['nt_all','all'],['nt_unread','unread'],['nt_imp','important'],['nt_robot','robot']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));notifLoad()}
+$('nt_all').onclick=()=>setNtab('all');$('nt_unread').onclick=()=>setNtab('unread');$('nt_imp').onclick=()=>setNtab('important');$('nt_robot').onclick=()=>setNtab('robot');
 $('bellbtn').onclick=e=>{e.stopPropagation();const p=$('notifpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px';notifLoad()}};
 $('notifreadall').onclick=async e=>{e.preventDefault();await fetch(NAPI+'?action=notif_read_all',{method:'POST'});notifLoad();toast('Все отмечены как прочитанные')};
 $('notifset').onclick=e=>{e.preventDefault();$('notifpanel').style.display='none';$('notifmodal').classList.add('open');subLoad()};
@@ -449,7 +457,7 @@ ths.forEach((th,i)=>{const h=hideCols.includes(i);th.style.display=h?'none':'';[
 async function colLoad(){try{const r=await (await fetch(API+'?action=columns_get&form='+COLFORM)).json();const c=(r&&r.cols&&Array.isArray(r.cols.hidden))?r.cols.hidden:[];hideCols=c.map(Number).filter(n=>n>=0)}catch(e){hideCols=[]}colApply()}
 async function colSave(){try{await fetch(API+'?action=columns_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:COLFORM,cols:{hidden:hideCols}})})}catch(e){}}
 function colPanel(){const tbl=colTable();if(!tbl)return;const ths=[...tbl.querySelectorAll('thead th')];
-$('collist').innerHTML=ths.map((th,i)=>{const t=((th.textContent||'').trim()||('Столбец '+(i+1)));return `<label style="display:block;padding:6px 4px;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="${i}" ${hideCols.includes(i)?'':'checked'}> ${t}</label>`}).join('');
+$('collist').innerHTML=ths.map((th,i)=>{const t=(Sort.thLabel(th)||('Столбец '+(i+1)));return `<label style="display:block;padding:6px 4px;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="${i}" ${hideCols.includes(i)?'':'checked'}> ${t}</label>`}).join('');
 document.querySelectorAll('#collist input[data-ci]').forEach(c=>c.onchange=()=>{const i=+c.dataset.ci;hideCols=c.checked?hideCols.filter(n=>n!==i):[...new Set([...hideCols,i])];colApply();colSave()});
 const p=$('colpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px'}}
 $('colclose').onclick=()=>$('colpanel').style.display='none';
@@ -465,6 +473,8 @@ if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isCo
 if($('wiz').classList.contains('open')||$('mm').classList.contains('open'))return;
 if(selected.size){e.preventDefault();delTasks([...selected])}else toast('Ничего не выбрано: отметьте галками строки для удаления')});
 colLoad();
+// Сортировка реестра заданий по любому столбцу (А→Я / Я→А) — серверная, с пагинацией.
+Sort.init({mode:'server', key:'created_at', dir:'DESC', onChange:()=>{page=1;load()}});
 load();
 </script>
 <script data-shift-select>

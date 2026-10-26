@@ -8,6 +8,9 @@ declare(strict_types=1);
 // при отсутствии — берётся из карточки товара products.pallet_type, по умолчанию euro.
 // Смена тары: POST ?action=pallet_update {stock_id, pallet_type} с проверкой
 // storage_cells.allowed_pallet_types — иначе ошибка «изменение паллеты невозможно...».
+// Дата производства партии — product_stock.prod_date; срок хранения артикула —
+// products.shelf_life_days; контроль даты производства — products.control_prod_date.
+// Дата окончания срока = prod_date + shelf_life_days, осталось дней = дата - CURRENT_DATE.
 
 require_once __DIR__ . '/../shared/db.php';
 
@@ -43,32 +46,82 @@ function stock_pallet_label(string $code): string
     return $specs[$code]['label'] ?? $code;
 }
 
-/** Миграция: колонка тары на строке запаса. Безопасно на каждый запрос. */
+/** Миграция: колонки строки запаса. Портабельно (SQLite/MySQL/PostgreSQL). */
 function stock_ensure_pallet_col(PDO $pdo): void
 {
-    try {
-        $has = false;
-        foreach ($pdo->query('PRAGMA table_info(product_stock)')->fetchAll(PDO::FETCH_ASSOC) as $c) {
-            if (($c['name'] ?? '') === 'pallet_type') {
-                $has = true;
-                break;
-            }
-        }
-        if (!$has) {
-            $pdo->exec('ALTER TABLE product_stock ADD COLUMN pallet_type TEXT');
-        }
-    } catch (Throwable) {
-    }
-    // MySQL-прод: тот же ALTER (IF NOT EXISTS нет — ловим дубликат).
-    try {
-        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
-            $pdo->exec('ALTER TABLE product_stock ADD COLUMN pallet_type VARCHAR(10) NULL');
-        }
-    } catch (Throwable) {
-    }
+    // PRAGMA работает только в SQLite, поэтому на PostgreSQL/MySQL модуль
+    // падал на запросах к несуществующим колонкам. wms_ensure_column проверяет
+    // реальную схему нужным для драйвера способом.
+    wms_ensure_column($pdo, 'product_stock', 'pallet_type', 'VARCHAR(10) NULL', 'pallet_type TEXT', 'VARCHAR(10) NULL');
+    wms_ensure_column($pdo, 'product_stock', 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
+    wms_ensure_column($pdo, 'product_stock', 'pallet_date', 'DATE NULL', 'pallet_date TEXT', 'DATE NULL');
+    wms_ensure_column($pdo, 'product_stock', 'quality', "VARCHAR(20) NULL DEFAULT 'новый'", "quality TEXT DEFAULT 'новый'", "VARCHAR(20) NULL DEFAULT 'новый'");
+    wms_ensure_column($pdo, 'product_stock', 'receipt_no', 'VARCHAR(50) NULL', 'receipt_no TEXT', 'VARCHAR(50) NULL');
+    wms_ensure_column($pdo, 'product_stock', 'receipt_id', 'BIGINT NULL', 'receipt_id INTEGER', 'BIGINT NULL');
 }
 
 stock_ensure_pallet_col($pdo);
+
+/**
+ * Дотягиваем колонки, нужные для срока хранения:
+ *   product_stock.prod_date      — дата производства партии (уже есть в shared/db.php),
+ *   products.shelf_life_days      — срок хранения артикула в днях,
+ *   products.control_prod_date    — флаг контроля даты производства.
+ * Идемпотентно и безопасно на каждый запрос.
+ */
+function stock_ensure_shelf_cols(PDO $pdo): void
+{
+    if (!function_exists('wms_ensure_column')) {
+        return;
+    }
+    wms_ensure_column($pdo, 'product_stock', 'prod_date', 'DATE NULL', 'prod_date TEXT', 'DATE NULL');
+    wms_ensure_column($pdo, 'products', 'shelf_life_days', 'INTEGER NULL', 'shelf_life_days INTEGER', 'INTEGER NULL');
+    wms_ensure_column($pdo, 'products', 'control_prod_date', 'TINYINT(1) NOT NULL DEFAULT 0', 'control_prod_date INTEGER DEFAULT 0', 'SMALLINT NOT NULL DEFAULT 0');
+}
+
+stock_ensure_shelf_cols($pdo);
+
+/**
+ * SQL-выражения срока хранения (портабельно: pgsql / mysql / sqlite).
+ *   expire — дата окончания срока = prod_date + shelf_life_days (NULL, если нет даты/срока);
+ *   days   — сколько дней осталось хранить = дата окончания срока - CURRENT_DATE
+ *            (целое, может быть отрицательным — просрочено; NULL, если нечего считать).
+ */
+function stock_shelf_sql(PDO $pdo): array
+{
+    $drv = function_exists('wms_driver') ? wms_driver($pdo) : (string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    $cond = 's.prod_date IS NOT NULL AND p.shelf_life_days IS NOT NULL';
+    if ($drv === 'mysql') {
+        $exp = 'DATE_ADD(s.prod_date, INTERVAL p.shelf_life_days DAY)';
+        $days = 'DATEDIFF(DATE_ADD(s.prod_date, INTERVAL p.shelf_life_days DAY), CURDATE())';
+    } elseif ($drv === 'pgsql') {
+        $exp = '(CAST(s.prod_date AS date) + p.shelf_life_days)';
+        $days = '((CAST(s.prod_date AS date) + p.shelf_life_days) - CURRENT_DATE)';
+    } else {
+        $exp = "DATE(s.prod_date, '+' || p.shelf_life_days || ' days')";
+        $days = "CAST(ROUND(julianday(DATE(s.prod_date, '+' || p.shelf_life_days || ' days')) - julianday('now','localtime')) AS INTEGER)";
+    }
+    return [
+        'expire' => "CASE WHEN $cond THEN $exp END",
+        'days'   => "CASE WHEN $cond THEN $days END",
+    ];
+}
+
+/** Нормализация даты к строке YYYY-MM-DD (или null). */
+function stock_date_norm($v): ?string
+{
+    if ($v === null || $v === '') {
+        return null;
+    }
+    $s = trim((string)$v);
+    if ($s === '') {
+        return null;
+    }
+    if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $s, $m)) {
+        return $m[1] . '-' . $m[2] . '-' . $m[3];
+    }
+    return null;
+}
 
 /** Проверка: ячейка разрешает данный тип тары. */
 function stock_cell_allows(?string $allowedRaw, string $palletType): bool
@@ -221,6 +274,26 @@ function stock_enrich_row(array &$r, array $cellsMap, array $palletCells = []): 
     $places = ($palNo !== '' && isset($palletCells[$palNo])) ? $palletCells[$palNo] : [];
     $r['pallet_cells'] = array_values(array_unique(array_column($places, 'cell')));
     $r['pallet_conflict'] = count($places) > 1;
+    // Качество: 'новый' (по умолчанию) или 'Брак'.
+    $r['quality'] = trim((string)($r['quality'] ?? 'новый'));
+    if ($r['quality'] === '') {
+        $r['quality'] = 'новый';
+    }
+    // --- Дата производства и срок хранения ---
+    // prod_date — дата производства партии (product_stock.prod_date);
+    // shelf_life_days — срок хранения артикула (products.shelf_life_days);
+    // control_prod_date — флаг контроля даты производства (products.control_prod_date);
+    // shelf_expire_date — prod_date + shelf_life_days;
+    // shelf_days_left — сколько дней осталось хранить (может быть отрицательным).
+    $r['prod_date'] = stock_date_norm($r['prod_date'] ?? null);
+    $sl = $r['shelf_life_days'] ?? null;
+    $r['shelf_life_days'] = ($sl === null || $sl === '') ? null : (int)$sl;
+    $r['control_prod_date'] = (int)($r['control_prod_date'] ?? 0);
+    $r['shelf_expire_date'] = stock_date_norm($r['shelf_expire_date'] ?? null);
+    $dl = $r['shelf_days_left'] ?? null;
+    $r['shelf_days_left'] = ($dl === null || $dl === '') ? null : (int)$dl;
+    // Даты нет, а контроль на артикуле включён — UI подсветит незаполненную дату.
+    $r['prod_date_required'] = ($r['control_prod_date'] === 1 && $r['prod_date'] === null) ? 1 : 0;
 }
 
 /** Резерв {sku: [{doc_no, pallet, tasks[], qty}]} одним запросом по списку артикулов. */
@@ -278,14 +351,89 @@ if ($action === 'list') {
     $w = ['1=1'];
     $p = [];
     if (!empty($_GET['search'])) {
-        $w[] = '(p.sku LIKE :q OR p.code LIKE :q OR p.name LIKE :q OR s.cell LIKE :q OR s.pallet LIKE :q OR s.receipt_no LIKE :q)';
-        $p[':q'] = '%' . trim((string)$_GET['search']) . '%';
+        $q = '%' . trim((string)$_GET['search']) . '%';
+        $w[] = '(p.sku LIKE :q OR p.code LIKE :q OR p.name LIKE :q OR s.cell LIKE :q OR s.pallet LIKE :q OR s.supplier_batch LIKE :qb OR s.receipt_no LIKE :q)';
+        $p[':q'] = $q;
+        $p[':qb'] = $q;
     }
     if (!empty($_GET['warehouse_id'])) {
         $w[] = 's.warehouse_id = :wh';
         $p[':wh'] = (int)$_GET['warehouse_id'];
     }
+    // Фильтр: список артикулов (через запятую) — например, позиции, которые
+    // не удалось подобрать при резервировании (модуль «Отгрузки»).
+    $fSkus = [];
+    if (!empty($_GET['skus'])) {
+        $parts = preg_split('/[,\s;]+/', trim((string)$_GET['skus']), -1, PREG_SPLIT_NO_EMPTY);
+        foreach ((array)$parts as $s) {
+            $s = trim((string)$s);
+            if ($s !== '' && !in_array($s, $fSkus, true)) {
+                $fSkus[] = $s;
+            }
+        }
+    }
+    if ($fSkus) {
+        $ph = [];
+        foreach ($fSkus as $i => $s) {
+            $k = ':sk' . $i;
+            $ph[] = $k;
+            $p[$k] = $s;
+        }
+        $w[] = 'p.sku IN (' . implode(',', $ph) . ')';
+    }
+    // Фильтр: у артикула включён контроль даты производства.
+    $fControl = trim((string)($_GET['control_prod_date'] ?? ''));
+    if ($fControl !== '' && $fControl !== '0') {
+        $w[] = 'COALESCE(p.control_prod_date, 0) = 1';
+    }
+    // Фильтр: наличие даты производства в партии (1 — указана, 0 — не указана).
+    $fProdDate = trim((string)($_GET['prod_date'] ?? ($_GET['has_prod_date'] ?? '')));
+    if ($fProdDate === '1') {
+        $w[] = 's.prod_date IS NOT NULL';
+    } elseif ($fProdDate === '0') {
+        $w[] = 's.prod_date IS NULL';
+    }
+    $activeFilters = 0;
+    if (!empty($_GET['search'])) {
+        $activeFilters++;
+    }
+    if (!empty($_GET['warehouse_id'])) {
+        $activeFilters++;
+    }
+    if ($fSkus) {
+        $activeFilters++;
+    }
+    if ($fControl !== '' && $fControl !== '0') {
+        $activeFilters++;
+    }
+    if ($fProdDate === '1' || $fProdDate === '0') {
+        $activeFilters++;
+    }
     $where = 'WHERE ' . implode(' AND ', $w);
+    // Сортировка по любому столбцу реестра (А→Я / Я→А).
+    // Габариты/объём/вес считаются так же, как в stock_enrich_row().
+    $hExpr = "(CASE WHEN COALESCE(p.height_mm,0) > 0 THEN COALESCE(p.height_mm,0) ELSE 0 END)";
+    $palH = "(CASE WHEN s.pallet_type = 'fin' THEN 138 ELSE 144 END)";
+    $palW = "(CASE WHEN s.pallet_type = 'fin' THEN 1.0 ELSE 0.8 END)";
+    $shelf = stock_shelf_sql($pdo);
+    $sortMap = [
+        'warehouse' => ['w.name', 't'], 'cell' => ['s.cell', 't'], 'pallet' => ['s.pallet', 't'],
+        'batch' => ['s.supplier_batch', 't'], 'pallet_date' => ['s.pallet_date', 't'],
+        'prod_date' => ['s.prod_date', 'd'], 'shelf_left' => [$shelf['expire'], 'd'],
+        'pallet_type' => ['s.pallet_type', 't'], 'pallet_length' => ['s.pallet_type', 't'],
+        'pallet_width' => [$palW, 'n'],
+        'pallet_height' => ["($palH + $hExpr) / 1000.0", 'n'],
+        'volume' => ["1.2 * $palW * (($palH + $hExpr) / 1000.0)", 'n'],
+        'weight' => ["(COALESCE(p.weight_g,0) * COALESCE(s.qty,0) / 1000.0 + CASE WHEN COALESCE(s.pallet,'') <> '' THEN 25 ELSE 0 END)", 'n'],
+        'product_code' => ['p.code', 't'], 'sku' => ['p.sku', 't'], 'qty' => ['s.qty', 'n'],
+        'receipt' => ['s.receipt_no', 't'],
+        'id' => ['s.id', 'n'],
+    ];
+    $orderBy = wms_order_by($pdo, (string)($_GET['sort'] ?? ''), (string)($_GET['dir'] ?? 'ASC'), $sortMap, 'p.sku, s.cell, s.id', 't');
+    // Стабильный порядок при равных значениях (в т.ч. когда все даты пустые).
+    if (strpos($orderBy, 's.id') === false) {
+        $orderBy .= ', s.id';
+    }
     $cnt = $pdo->prepare(
         "SELECT COUNT(*) FROM product_stock s LEFT JOIN products p ON p.id = s.product_id $where"
     );
@@ -294,14 +442,17 @@ if ($action === 'list') {
     $off = ($page - 1) * $perPage;
     // s.pallet_type может отсутствовать в старых файлах — миграция выше уже отработала.
     $st = $pdo->prepare(
-        "SELECT s.id, s.cell, s.pallet, s.pallet_type, s.qty, s.receipt_no, s.warehouse_id,
+        "SELECT s.id, s.cell, s.pallet, s.supplier_batch, s.pallet_date, s.pallet_type, s.qty, s.receipt_no, s.warehouse_id,
                 w.name AS warehouse, p.sku, p.code AS product_code, p.name AS product_name, p.unit,
                 p.length_mm, p.width_mm, p.height_mm, p.weight_g, p.volume_m3 AS prod_volume_m3,
-                p.pallet_type AS prod_pallet_type, p.pallet_height_mm AS prod_pallet_height_mm
+                p.pallet_type AS prod_pallet_type, p.pallet_height_mm AS prod_pallet_height_mm,
+                s.prod_date, p.shelf_life_days, p.control_prod_date,
+                s.quality,
+                {$shelf['expire']} AS shelf_expire_date, {$shelf['days']} AS shelf_days_left
          FROM product_stock s
          LEFT JOIN products p ON p.id = s.product_id
          LEFT JOIN warehouses w ON w.id = s.warehouse_id
-         $where ORDER BY p.sku, s.cell, s.id LIMIT :lim OFFSET :off"
+         $where ORDER BY $orderBy LIMIT :lim OFFSET :off"
     );
     foreach ($p as $k => $v) {
         $st->bindValue($k, $v);
@@ -333,15 +484,18 @@ if ($action === 'list') {
     echo json_encode([
         'rows' => $rows, 'total' => $total,
         'from' => $total ? $off + 1 : 0, 'to' => min($off + $perPage, $total),
+        'active_filters' => $activeFilters,
         'pallet_specs' => stock_pallet_specs(),
         'conflicts' => stock_pallet_conflicts_list($palletCells),
-    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
 } elseif ($action === 'pallet_types') {
     echo json_encode(['rows' => array_values(stock_pallet_specs())], JSON_UNESCAPED_UNICODE);
 } elseif ($action === 'pallet_update' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $b = json_decode(file_get_contents('php://input'), true) ?? [];
     $stockId = (int)($b['stock_id'] ?? $b['id'] ?? 0);
     $wantRaw = (string)($b['pallet_type'] ?? '');
+    $batch = trim((string)($b['supplier_batch'] ?? $b['batch'] ?? ''));
+    $palletDate = trim((string)($b['pallet_date'] ?? ''));
     try {
         if ($stockId <= 0) {
             throw new RuntimeException('Не выбрана строка запаса');
@@ -350,7 +504,11 @@ if ($action === 'list') {
         if (!in_array($want, ['euro', 'fin'], true)) {
             throw new RuntimeException('Тип тары: евро или фин');
         }
-        $st = $pdo->prepare('SELECT id, cell, warehouse_id, pallet, pallet_type FROM product_stock WHERE id = :id');
+        $st = $pdo->prepare(
+            'SELECT s.id, s.cell, s.warehouse_id, s.pallet, s.pallet_type, s.supplier_batch, s.pallet_date,
+                    s.qty, s.quality, p.sku, p.name AS product_name
+             FROM product_stock s LEFT JOIN products p ON p.id = s.product_id WHERE s.id = :id'
+        );
         $st->execute([':id' => $stockId]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
@@ -412,8 +570,44 @@ if ($action === 'list') {
             echo json_encode(['error' => 'Изменение паллеты невозможно, ячейка не предназначена для данного типа паллеты.'], JSON_UNESCAPED_UNICODE);
             exit;
         }
-        $pdo->prepare('UPDATE product_stock SET pallet_type = :pt WHERE id = :id')
-            ->execute([':pt' => $want, ':id' => $stockId]);
+        $pdo->prepare('UPDATE product_stock SET pallet_type = :pt, supplier_batch = :b, pallet_date = :d WHERE id = :id')
+            ->execute([':pt' => $want, ':b' => $batch, ':d' => $palletDate !== '' ? $palletDate : null, ':id' => $stockId]);
+        // Журнал склада: изменение паллеты/партии/даты паллеты — это изменение товара.
+        try {
+            require_once __DIR__ . '/../shared/Journal.php';
+            $changes = [];
+            $oldPt = stock_norm_pallet_type((string)($row['pallet_type'] ?? ''));
+            if ($oldPt !== $want) {
+                $changes[] = 'тара ' . ($oldPt ?: '—') . ' → ' . $want;
+            }
+            $oldBatch = trim((string)($row['supplier_batch'] ?? ''));
+            if ($oldBatch !== $batch) {
+                $changes[] = 'партия «' . ($oldBatch !== '' ? $oldBatch : '—') . '» → «' . ($batch !== '' ? $batch : '—') . '»';
+            }
+            $oldDate = substr(trim((string)($row['pallet_date'] ?? '')), 0, 10);
+            $newDate = substr($palletDate, 0, 10);
+            if ($oldDate !== $newDate) {
+                $changes[] = 'дата паллеты ' . ($oldDate !== '' ? $oldDate : '—') . ' → ' . ($newDate !== '' ? $newDate : '—');
+            }
+            WmsJournal::log(wms_journal_pdo(), [
+                'op_type' => 'корректировка',
+                'doc_type' => 'Товарный запас',
+                'doc_no' => (string)($row['pallet'] ?? ''),
+                'sku' => (string)($row['sku'] ?? ''),
+                'product_name' => (string)($row['product_name'] ?? ''),
+                'qty' => (float)($row['qty'] ?? 0),
+                'pallet' => (string)($row['pallet'] ?? ''),
+                'sscc' => (string)($row['pallet'] ?? ''),
+                'cell_from' => (string)($row['cell'] ?? ''),
+                'cell_to' => (string)($row['cell'] ?? ''),
+                'zone' => 'Хранение',
+                'user_id' => 1,
+                'user_fio' => 'Товарный запас',
+                'comment' => 'Изменение паллеты: ' . implode('; ', $changes),
+                'quality' => (string)($row['quality'] ?? 'новый'),
+            ]);
+        } catch (Throwable) {
+        }
         // Фиксируем факт. тип стоящей паллеты на ячейке (тем же соединением).
         try {
             if (!$spdo) {

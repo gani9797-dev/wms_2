@@ -23,8 +23,9 @@ code{background:#F4F0FB;padding:2px 6px;border-radius:6px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:10px;color:#2C313C;border-bottom:1px solid #F0F0F0;white-space:nowrap}
 td{padding:10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
-tr:hover td{background:#fafaff;cursor:pointer}
-a.num{color:var(--vio);font-weight:700;text-decoration:none}
+tr:hover td{background:#fafaff}
+tr.sel td{background:#F4F2FF}
+a.num{color:var(--vio);font-weight:700;text-decoration:none;cursor:pointer}
 .st{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;background:#F0F6FF;color:#1D61D2;border:1px solid #A3C2F0}
 .pager{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;color:var(--mut);font-size:13px}
 .pg button{border:1px solid var(--line);background:#fff;border-radius:8px;min-width:34px;padding:6px 8px;margin:0 2px;cursor:pointer}
@@ -78,22 +79,34 @@ body.navhide main{max-width:none}
 #colpanel{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);z-index:130;width:320px;max-width:92vw;max-height:80vh;overflow:auto;padding:14px 16px}
 #colpanel h2{margin:0;font-size:16px}
 .hint{font-size:12px;color:var(--mut)}
+.fpanel{position:fixed;top:0;right:-560px;width:520px;max-width:96vw;height:100vh;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.15);transition:right .25s;padding:18px;overflow:auto;z-index:50}
+.fpanel.open{right:0}
+.fpanel label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:12px 0 4px}
+.fpanel input,.fpanel select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px}
+.chk{font-weight:400 !important;display:flex !important;align-items:center;gap:6px;margin:4px 0 !important}
+.chk input{width:auto !important}
 </style>
 <style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
 <body>
 <button id="navshowbtn" title="Показать меню">▶</button>
-<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp open" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a on" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<aside><button id="navhidebtn" title="Скрыть меню">◀&nbsp;Скрыть меню</button><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp open" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a on" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
 <main>
 <div class="top"><h1>8.1 Товарный запас</h1><div class="user"><button id="bellbtn" title="Уведомления">🔔<span id="bellbadge">0</span></button><span class="ava">ИИ</span><span>Иванов И.И.<br><small style="color:var(--mut)">Администратор</small></span></div></div>
 <div class="bar">
 <input id="q" type="text" placeholder="Поиск по артикулу, коду, ячейке, паллете, приходу...">
 <select id="wh" style="padding:10px 12px;border:1px solid var(--line);border-radius:10px"><option value="">Все склады</option></select>
+<button class="btn" id="fbtn">Фильтры (<span id="fbadge">0</span>)</button>
 </div>
 <div id="confwarn" style="display:none;background:#FFF1F1;border:1px solid #F5B5B5;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#8B1A1A"></div>
+<div id="resfail" style="display:none;background:#FFF8E6;border:1px solid #F0C36D;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#7A4B00">
+Показаны позиции, которые не удалось подобрать при резервировании: <b id="resfailsku"></b>.
+<button class="btn" id="resfailclr" style="padding:4px 12px;font-size:12px;margin-left:8px">Сбросить фильтр</button>
+</div>
+<div class="hint" style="margin-bottom:8px">«Срок хранения» = дата производства + срок хранения артикула минус сегодняшний день — сколько осталось хранить. Красным — просрочено, оранжевым — заканчивается в течение 30 дней.</div>
 <div class="card" style="overflow:auto">
-<table><thead><tr><th>Склад</th><th>Ячейка</th><th>Паллета</th><th>Тара</th><th>Длина паллеты, м</th><th>Ширина паллеты, м</th><th>Выс. паллеты, м</th><th>Объем, м³</th><th>Вес, кг</th><th>Арт. склад.</th><th>Артикул</th><th>Кол-во</th><th>Приход</th><th>Отгрузка</th><th>Резерв</th><th><span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
-<tbody id="rows"><tr><td colspan="16">Загрузка...</td></tr></tbody></table>
-<div class="hint" style="margin-top:8px">Тара: клик по номеру паллеты — смена Евро/Фин. Д/Ш/В — габариты паллеты в метрах (В — высота с товаром). Объем — Д×Ш×В. Вес — товар + тара (25 кг, если есть паллета). Если ячейка настроена только под евро, смена на фин запрещена.</div>
+<table data-sort-mode="server"><thead><tr><th data-col="warehouse" data-sort="warehouse">Склад</th><th data-col="cell" data-sort="cell">Ячейка</th><th data-col="pallet" data-sort="pallet">Паллета</th><th data-col="quality" data-sort="quality">Качество</th><th data-col="batch" data-sort="batch">Партия</th><th data-col="pallet_date" data-sort="pallet_date">Дата паллеты</th><th data-col="prod_date" data-sort="prod_date">Дата производства</th><th data-col="shelf_left" data-sort="shelf_left">Срок хранения</th><th data-col="pallet_type" data-sort="pallet_type">Тара</th><th data-col="pallet_length" data-sort="pallet_length">Длина паллеты, м</th><th data-col="pallet_width" data-sort="pallet_width">Ширина паллеты, м</th><th data-col="pallet_height" data-sort="pallet_height">Выс. паллеты, м</th><th data-col="volume" data-sort="volume">Объем, м³</th><th data-col="weight" data-sort="weight">Вес, кг</th><th data-col="product_code" data-sort="product_code">Арт. склад.</th><th data-col="sku" data-sort="sku">Артикул</th><th data-col="qty" data-sort="qty">Кол-во</th><th data-col="receipt" data-sort="receipt">Приход</th><th data-col-client="1" data-col="shipments" data-sort="shipments">Отгрузка</th><th data-sort-client="1" data-col="reserve" data-sort="reserve">Резерв</th><th data-col="gear"><span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
+<tbody id="rows"><tr><td colspan="20">Загрузка...</td></tr></tbody></table>
+<div class="hint" style="margin-top:8px">Тара: клик по номеру паллеты — смена Евро/Фин. Д/Ш/В — габариты паллеты в метрах (В — высота с товаром). Объем — Д×Ш×В. Вес — товар + тара (25 кг, если есть паллета). Если ячейка настроена только под евро, смена на фин запрещена. Дата производства — из приёмки (заполняется, если на артикуле включён контроль даты производства); срок хранения берётся из карточки артикула.</div>
 <div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
 <select id="pp"><option>5</option><option selected>20</option><option>50</option></select></div>
 <div class="pg" id="pg"></div></div>
@@ -102,7 +115,7 @@ body.navhide main{max-width:none}
 
 <div id="notifpanel">
 <div style="display:flex;justify-content:space-between;align-items:center"><h2>Уведомления</h2><div><a href="#" id="notifset" style="font-size:16px;text-decoration:none" title="Настройка уведомлений">⚙️</a></div></div>
-<div class="ntabs"><span id="nt_all" class="on">Все <b id="nc_all">0</b></span><span id="nt_unread">Непрочитанные <b id="nc_unread">0</b></span><span id="nt_imp">Важные <b id="nc_imp">0</b></span></div>
+<div class="ntabs"><span id="nt_all" class="on">Все <b id="nc_all">0</b></span><span id="nt_unread">Непрочитанные <b id="nc_unread">0</b></span><span id="nt_imp">Важные <b id="nc_imp">0</b></span><span id="nt_robot">Робот <b id="nc_robot">0</b></span></div>
 <div><a href="#" id="notifreadall" style="font-size:13px">Отметить все как прочитанные</a></div>
 <div id="notiflist" style="margin-top:6px"></div>
 <div style="margin-top:8px"><a href="../12-uvedomleniya/app.html" style="font-size:13px">Показать все уведомления</a></div>
@@ -126,59 +139,144 @@ body.navhide main{max-width:none}
 <div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="colreset">Сбросить</button><button class="btn pri" id="colclose">Готово</button></div>
 </div>
 <div id="toast"></div>
+<div class="fpanel" id="fp">
+<h2 style="margin:0">Фильтры (<span id="fbadge2">0</span>) <a href="#" id="freset" style="font-size:13px;font-weight:400">Сбросить все</a></h2>
+<label>Контроль даты производства</label>
+<label class="chk"><input type="checkbox" id="fc_ctl"> У артикула включён контроль даты производства</label>
+<label>Дата производства партии</label>
+<select id="fc_pd"><option value="">Любая</option><option value="1">Указана</option><option value="0">Не указана</option></select>
+<div class="hint" style="margin-top:8px">Дата производства вводится при приёмке через ТСД, если на артикуле проставлен флаг «Контроль даты производства». Срок хранения — из карточки артикула.</div>
+<div style="display:flex;gap:10px;margin-top:16px"><button class="btn" id="fclr">Сбросить фильтры</button><button class="btn pri" id="fok">Применить</button><button class="btn" id="fclose">Закрыть</button></div>
+<p style="color:var(--mut);font-size:13px">Активные фильтры: <span id="factive">0</span></p>
+</div>
+<div class="drawer" id="dr"><button class="btn" onclick="dr.classList.remove('open')">✕</button>
+<h2 id="dh">Карточка</h2>
+<div class="tabs" id="dtabs" style="display:flex;gap:18px;border-bottom:1px solid var(--line);margin:10px 0 16px;font-size:14px"></div>
+<div id="db">...</div>
+<div id="deditpane" style="display:none;border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-top:10px;background:#FAFAFA"></div>
+<div style="display:flex;gap:10px;margin:10px 0;flex-wrap:wrap"><button class="btn pri" id="dsave" style="display:none">Сохранить</button><button class="btn" id="dcancel" style="display:none">Отмена</button><a class="btn" id="dfull" href="#" target="_blank" style="text-decoration:none">Открыть в модуле →</a><button class="btn" onclick="dr.classList.remove('open')">Закрыть</button></div>
+</div>
+<style>.grid2{display:flex;gap:16px}.box{flex:1;border:1px solid #F0F0F0;border-radius:8px;padding:14px 16px;margin-bottom:14px}.box h3{margin:0 0 8px;font-size:14px}.kv{display:flex;justify-content:space-between;padding:7px 0;font-size:13px;gap:12px}.kv i{color:#4A4A4A;font-style:normal}#dtabs b{color:var(--vio);border-bottom:3px solid var(--vio);padding-bottom:8px;cursor:pointer}#dtabs span{color:#6C757D;cursor:pointer}</style>
 <div class="modal" id="palmodal"><div class="mbox"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Смена тары</h3><button class="btn" id="palmclose">✕</button></div>
 <div class="hint" id="palmsub" style="margin:6px 0"></div>
 <label>Паллета</label><input id="palm_num" disabled>
 <label>Ячейка (разрешенная тара)</label><input id="palm_cell" disabled>
 <label>Тара</label><select id="palm_type"><option value="euro">Евро — 1200×800</option><option value="fin">Фин — 1200×1000</option></select>
+<label>Партия</label><input id="palm_batch" placeholder="Номер партии поставщика">
+<label>Дата паллеты</label><input id="palm_date" type="date">
 <div class="hint" id="palmhint" style="margin-top:6px"></div>
 <div style="display:flex;gap:10px;margin-top:12px;justify-content:flex-end"><button class="btn" id="palmcancel">Отмена</button><button class="btn pri" id="palmsave">Сохранить</button></div>
 </div></div>
 
+<script src="../shared/sort.js"></script>
 <script>
 const API='demo_sqlite.php';
 let page=1,perPage=20,lastRows=[];
+// Фильтр «позиции, которые не удалось подобрать при резервировании»:
+// список приходит либо адресом (skus=...), либо из localStorage (wms_reserve_failed).
+let reserveSkus=[],reserveReasons={};
+function initReserveFilter(){
+  const q=new URLSearchParams(location.search);
+  let skus=[];
+  const s=(q.get('skus')||'').split(',').map(x=>x.trim()).filter(Boolean);
+  if(s.length)skus=s;
+  try{
+   const raw=localStorage.getItem('wms_reserve_failed');
+   const arr=raw?JSON.parse(raw):[];
+   if(!skus.length&&Array.isArray(arr))skus=arr.map(x=>String(x.sku||'').trim()).filter(Boolean);
+   if(Array.isArray(arr))arr.forEach(x=>{const k=String(x.sku||'').trim();if(k&&x.reason)reserveReasons[k]=String(x.reason)});
+  }catch(e){}
+  reserveSkus=[...new Set(skus)];
+  if(reserveSkus.length){
+   $('resfail').style.display='block';
+   $('resfailsku').textContent=reserveSkus.join(', ');
+   const why=reserveSkus.map(k=>k+(reserveReasons[k]?(' — '+reserveReasons[k]):'')).join('; ');
+   $('resfail').title=why;
+  }
+ }
+function clearReserveFilter(){
+  reserveSkus=[];
+  try{localStorage.removeItem('wms_reserve_failed')}catch(e){}
+  try{history.replaceState(null,'','app.html')}catch(e){}
+  $('resfail').style.display='none';
+  page=1;load();
+ }
 const $=id=>document.getElementById(id);
 function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2400)}
 async function loadWh(){try{const r=await (await fetch(API+'?action=refs')).json();
 $('wh').innerHTML='<option value="">Все склады</option>'+(r.warehouses||[]).map(w=>`<option value="${w.id}">${w.name}</option>`).join('')}catch(e){}}
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+// Дата в формате дд.мм.гггг ('2026-01-01' -> '01.01.2026').
+function dFmt(s){const p=String(s??'').slice(0,10).split('-');return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:''}
+// Число с неразрывным пробелом: 1234.5 -> '1 234,5'
+function fmtN(v){const n=Number(v);return isFinite(n)?n.toLocaleString('ru-RU',{maximumFractionDigits:3}):(v??'')}
+// Галка фильтра: '1' или ''.
+function flagVal(id){const e=$(id);return e&&e.checked?'1':''}
 function palletLabel(t){return t==='fin'?'Фин':'Евро'}
-async function load(){const p=new URLSearchParams({action:'list',page,per_page:perPage});
+async function load(){try{const p=new URLSearchParams({action:'list',page,per_page:perPage});
 if($('q').value)p.set('search',$('q').value);
 if($('wh').value)p.set('warehouse_id',$('wh').value);
-const r=await fetch(API+'?'+p);const j=await r.json();lastRows=j.rows||[];
+if(reserveSkus.length)p.set('skus',reserveSkus.join(','));
+// Фильтры: контроль даты производства + наличие даты производства в партии.
+if(flagVal('fc_ctl'))p.set('control_prod_date','1');
+if($('fc_pd').value)p.set('prod_date',$('fc_pd').value);
+Sort.params(p);
+const r=await fetch(API+'?'+p);if(!r.ok){const t=await r.text();throw new Error('HTTP '+r.status+': '+String(t||'').slice(0,300))}const j=await r.json();lastRows=j.rows||[];
 $('info').textContent=`Показано ${j.from}–${j.to} из ${j.total}`;
+const nf=j.active_filters||0;if($('fbadge'))$('fbadge').textContent=nf;if($('fbadge2'))$('fbadge2').textContent=nf;if($('factive'))$('factive').textContent=nf;
 const conf=j.conflicts||[];
 if(conf.length){$('confwarn').style.display='block';$('confwarn').innerHTML='⚠️ Одна и та же паллета в разных ячейках: '+conf.map(c=>`<b>${esc(c.pallet)}</b> (${(c.cells||[]).map(esc).join(', ')})`).join('; ')+'. Одна паллета не может быть в разных ячейках — устраните дубль.'}else{$('confwarn').style.display='none';$('confwarn').innerHTML=''}
-$('rows').innerHTML=lastRows.map(o=>{
+$('rows').innerHTML=lastRows.map((o,idx)=>{
 const docs=(o.reserve_docs&&o.reserve_docs.length?o.reserve_docs:(o.reserve||[]).map(x=>x.doc_no).filter((v,i,a)=>v&&a.indexOf(v)===i))||[];
-const ship=docs.length?docs.map(dn=>{const det=(o.reserve||[]).filter(x=>x.doc_no===dn);const tip=det.map(x=>`${x.tasks||''} ${(x.tasks||[]).join(', ')} · ${x.qty} шт`).join('; ');return `<a href="../03-otgruzki/app.html?doc_no=${encodeURIComponent(dn)}" target="_blank" style="color:var(--vio)" title="${esc(tip)}">${esc(dn)}</a>`}).join(', ')||'—':'—';
+const ship=docs.length?docs.map(dn=>{const det=(o.reserve||[]).filter(x=>x.doc_no===dn);const tip=det.map(x=>`${x.tasks||''} ${(x.tasks||[]).join(', ')} · ${x.qty} шт`).join('; ');return `<a href="#" class="num ship-link" data-doc="${esc(dn)}" title="${esc(tip)} — открыть карточку отгрузки справа">${esc(dn)}</a>`}).join(', ')||'—':'—';
 const rqty=(o.reserve_qty??(o.reserve||[]).reduce((a,x)=>a+(+x.qty||0),0));
 const rsvQty=(+rqty>0)?`${(+rqty).toLocaleString('ru-RU',{maximumFractionDigits:3})} шт`:'—';
 const palNum=o.pallet||'—';
 const palConf=!!o.pallet_conflict;
 const palCells=(o.pallet_cells||[]).join(', ');
 const palWarn=palConf?` — ВНИМАНИЕ: паллета в нескольких ячейках: ${palCells}. Одна паллета не может быть в разных ячейках!`:'';
-const palCell=o.pallet?`<a href="#" class="num pal-link" data-id="${o.id}" title="Сменить тару (сейчас: ${palletLabel(o.pallet_type)})${esc(palWarn)}" ${palConf?'style="color:#B00020"':''}>${palConf?'⚠️ ':''}${esc(palNum)}</a>`:`<a href="#" class="num pal-link" data-id="${o.id}" title="Указать тару (сейчас: ${palletLabel(o.pallet_type)})" style="color:var(--mut)">— ${palletLabel(o.pallet_type)}</a>`;
+const palQuality = o.quality || 'новый';
+const palQualityRed = palQuality === 'Брак';
+const palCell=o.pallet?`<a href="#" class="num pal-link" data-id="${o.id}" title="Сменить тару (сейчас: ${palletLabel(o.pallet_type)})${esc(palWarn)}" ${(palConf||palQualityRed)?'style="color:#B00020"':''}>${palConf?'⚠️ ':''}${esc(palNum)}</a>`:`<a href="#" class="num pal-link" data-id="${o.id}" title="Указать тару (сейчас: ${palletLabel(o.pallet_type)})" style="color:var(--mut)">— ${palletLabel(o.pallet_type)}</a>`;
+const qualityCell = `<span style="color:${palQualityRed?'#B00020':'var(--mut)'};font-weight:${palQualityRed?'700':'400'}">${esc(palQuality)}</span>`;
 const tara=`<span class="st" title="Ячейка разрешает: ${esc(o.cell_allowed||'euro,fin')}">${esc(o.pallet_label||palletLabel(o.pallet_type))}</span>`;
 const hTip=`Высота с товаром: ${o.total_height_m??'?'} м`;
 const vTip=`${o.pallet_length_m}×${o.pallet_width_m}×${o.total_height_m} м`;
 const wTip=`Товар ${o.goods_weight_kg??''} кг + тара ${o.pallet?'25':'0'} кг`;
-const cellLink=`<a class="num" href="../05-yacheyki-hraneniya/app.html?cell=${encodeURIComponent(o.cell||'')}&warehouse_id=${o.warehouse_id||''}" target="_blank" title="Открыть карточку ячейки (модуль 5)">${esc(o.cell||'')}</a>`;
-const codeLink=o.product_code?`<a class="num" href="../08-nomenklatura/app.html?code=${encodeURIComponent(o.product_code)}" target="_blank" title="Открыть карточку товара">${esc(o.product_code)}</a>`:'—';
-const skuLink=o.sku?`<a class="num" href="../08-nomenklatura/app.html?sku=${encodeURIComponent(o.sku)}" target="_blank" title="Открыть карточку товара"><b>${esc(o.sku)}</b></a>`:'—';
+const cellLink=`<a class="num cell-link" href="#" data-cell="${esc(o.cell||'')}" data-wh="${o.warehouse_id||''}" title="Открыть карточку ячейки справа (как в модуле 5)">${esc(o.cell||'')}</a>`;
+const codeLink=o.product_code?`<a class="num prod-link" href="#" data-code="${esc(o.product_code)}" data-sku="${esc(o.sku||'')}" title="Открыть карточку товара справа (как в модуле 8)">${esc(o.product_code)}</a>`:'—';
+const skuPlain=o.sku?`<span style="color:var(--ink)">${esc(o.sku)}</span><br><small style="color:var(--mut)">${esc(o.product_name||'')}</small>`:'—';
 const rcpt=o.receipt_no?`<a class="num" href="../02-postupleniya/app.html?doc_no=${encodeURIComponent(o.receipt_no)}" target="_blank" title="Открыть доп. форму прихода">${esc(o.receipt_no)}</a>`:'—';
-return `<tr${palConf?' style="background:#FFF5F5"':''}><td>${esc(o.warehouse||('Склад '+o.warehouse_id))}</td><td>${cellLink}</td><td>${palCell}</td><td>${tara}</td><td>${o.pallet_length_m??'—'}</td><td>${o.pallet_width_m??'—'}</td><td title="${esc(hTip)}">${o.total_height_m??'—'}</td><td title="${esc(vTip)}">${o.volume_m3??'—'}</td><td title="${esc(wTip)}">${o.weight_kg??'—'}</td><td>${codeLink}</td><td>${skuLink}<br><small style="color:var(--mut)">${esc(o.product_name||'')}</small></td><td>${o.qty}</td><td>${rcpt}</td><td>${ship}</td><td>${rsvQty}</td><td></td></tr>`}).join('')||'<tr><td colspan=16>Ничего не найдено</td></tr>';
+// Дата производства партии: при контроле на артикуле и без даты — подсветка «не введена».
+const pdCell=o.prod_date?esc(dFmt(o.prod_date)):((+o.control_prod_date===1)?'<span style="color:#B00020;font-weight:700" title="У артикула включён контроль даты производства — дата не введена">не введена</span>':'—');
+// Срок хранения: сколько дней осталось хранить (дата производства + срок хранения − сегодня).
+const dlRaw=(o.shelf_days_left===null||o.shelf_days_left===undefined||o.shelf_days_left==='')?null:parseInt(o.shelf_days_left,10);
+const expTip=o.shelf_expire_date?('Годен до '+dFmt(o.shelf_expire_date)):'';
+const slTip=(o.shelf_life_days!==null&&o.shelf_life_days!==undefined&&o.shelf_life_days!=='')?('Срок хранения артикула: '+o.shelf_life_days+' дн.'):'';
+let shelfCell='—';
+if(dlRaw!==null&&!isNaN(dlRaw)){
+const style=dlRaw<0?'color:#B00020;font-weight:700;':(dlRaw<=30?'color:#B45309;font-weight:700;':'');
+const tip=[expTip,slTip,dlRaw<0?('Просрочено на '+Math.abs(dlRaw)+' дн.'):(dlRaw<=30?'Скоро заканчивается (до 30 дн.)':'')].filter(Boolean).join(' · ');
+shelfCell=`<span style="${style}" title="${esc(tip)}">${dlRaw} дн.</span>`;
+}else if(expTip){
+shelfCell=`<span style="color:var(--mut)" title="${esc(expTip)}">—</span>`;
+}
+return `<tr data-idx="${idx}"${palConf?' style="background:#FFF5F5"':''}><td>${esc(o.warehouse||('Склад '+o.warehouse_id))}</td><td>${cellLink}</td><td>${palCell}</td><td>${qualityCell}</td><td>${esc(o.supplier_batch||'—')}</td><td>${esc(o.pallet_date||'—')}</td><td>${pdCell}</td><td>${shelfCell}</td><td>${tara}</td><td>${o.pallet_length_m??'—'}</td><td>${o.pallet_width_m??'—'}</td><td title="${esc(hTip)}">${o.total_height_m??'—'}</td><td title="${esc(vTip)}">${o.volume_m3??'—'}</td><td title="${esc(wTip)}">${o.weight_kg??'—'}</td><td>${codeLink}</td><td>${skuPlain}</td><td>${(o.qty!==null&&o.qty!==undefined&&o.qty!=='')?fmtN(o.qty):'—'}</td><td>${rcpt}</td><td>${ship}</td><td>${rsvQty}</td><td></td></tr>`}).join('')||'<tr><td colspan=20>Ничего не найдено</td></tr>';
 document.querySelectorAll('.pal-link').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openPalModal(+a.dataset.id)});
+document.querySelectorAll('.cell-link').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openCellDrawer(a.dataset.cell,a.dataset.wh)});
+document.querySelectorAll('.prod-link').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openProductDrawer(a.dataset.code,a.dataset.sku)});
+document.querySelectorAll('.ship-link').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openShipmentDrawer(a.dataset.doc)});
+document.querySelectorAll('#rows tr[data-idx]').forEach(tr=>{tr.onclick=e=>{if(e.target.closest&&e.target.closest('a'))return;document.querySelectorAll('#rows tr.sel').forEach(x=>x.classList.remove('sel'));tr.classList.add('sel')}});
 const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
 for(let i=1;i<=Math.min(pages,5);i++)h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`;
-$('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()})}
+$('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()})}catch(e){lastRows=[];$('info').textContent='—';$('pg').innerHTML='';$('rows').innerHTML=`<tr><td colspan="20" style="color:#B00020">Ошибка загрузки товарного запаса: ${esc(e&&e.message||e)}</td></tr>`}}
 let palId=null;
 function openPalModal(id){const o=lastRows.find(x=>+x.id===+id);if(!o){toast('Строка не найдена');return}palId=id;
 $('palm_num').value=o.pallet||('без номера · '+o.cell);
 $('palm_cell').value=(o.cell||'—')+' · разрешено: '+(o.cell_allowed||'euro,fin');
 $('palm_type').value=o.pallet_type||'euro';
+$('palm_batch').value=o.supplier_batch||'';
+$('palm_date').value=o.pallet_date?String(o.pallet_date).slice(0,10):'';
 $('palmsub').textContent=`${o.sku||''} · ${o.product_name||''} · ${o.qty} шт`;
 if(o.pallet_conflict){$('palmhint').style.color='#B00020';$('palmhint').textContent=`⚠️ Паллета ${(o.pallet||'')} в нескольких ячейках: ${(o.pallet_cells||[]).join(', ')}. Смена тары заблокирована — сначала устраните дубль (одна паллета не может быть в разных ячейках).`;$('palmsave').disabled=true}
 else{$('palmhint').style.color='';$('palmhint').textContent=`Сейчас: ${o.pallet_label||palletLabel(o.pallet_type)} ${o.pallet_length_m}×${o.pallet_width_m}, В=${o.total_height_m} м, V=${o.volume_m3} м³, вес=${o.weight_kg} кг.`;$('palmsave').disabled=false}
@@ -187,24 +285,120 @@ function closePalModal(){$('palmodal').classList.remove('open');palId=null;$('pa
 $('palmclose').onclick=$('palmcancel').onclick=closePalModal;
 $('palm_type').onchange=()=>{const v=$('palm_type').value;$('palmhint').textContent=v==='fin'?'Фин — 1.2×1.0×0.138 м, до 1200 кг.':'Евро — 1.2×0.8×0.144 м, до 1500 кг.'};
 $('palmsave').onclick=async()=>{if(!palId)return;const btn=$('palmsave');btn.disabled=true;
-try{const r=await fetch(API+'?action=pallet_update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stock_id:palId,pallet_type:$('palm_type').value})});
+try{const r=await fetch(API+'?action=pallet_update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stock_id:palId,pallet_type:$('palm_type').value,supplier_batch:$('palm_batch').value,pallet_date:$('palm_date').value})});
 const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
 closePalModal();toast('Тара изменена: '+(j.pallet_label||$('palm_type').value));load()}catch(e){toast('Ошибка: '+e.message)}finally{btn.disabled=false}};
+// --- Доп-окна справа (как в основных модулях): ячейка / товар / отгрузка ---
+const CELL_API='../05-yacheyki-hraneniya/demo_sqlite.php';
+const NOM_API='../08-nomenklatura/demo_sqlite.php';
+const SHIP_API='../03-otgruzki/demo_sqlite.php';
+let dKind=null,dId=null,dTab='main',dRef={};
+function dHideEdit(){$('deditpane').style.display='none';$('deditpane').innerHTML='';$('dsave').style.display='none';$('dcancel').style.display='none';$('dsave').onclick=null}
+function dTabs(tabs,active){$('dtabs').innerHTML=tabs.map(t=>t.k===active?`<b data-t="${t.k}">${t.l}</b>`:`<span data-t="${t.k}">${t.l}</span>`).join('');document.querySelectorAll('#dtabs [data-t]').forEach(el=>el.onclick=()=>{dTab=el.dataset.t;dHideEdit();dRender()})}
+function dOpen(title,fullUrl){dHideEdit();$('dh').textContent=title;$('dfull').href=fullUrl;$('dr').classList.add('open')}
+async function resolveCellId(cell,wh){try{const r=await (await fetch(`${CELL_API}?action=list&search=${encodeURIComponent(cell)}&per_page=50`)).json();const rows=r.rows||r||[];const hit=rows.find(x=>String(x.code)===String(cell)&&(!wh||+x.warehouse_id===+wh||String(x.warehouse)===String(wh)))||rows.find(x=>String(x.code)===String(cell))||rows[0];return hit?hit.id:null}catch(e){return null}}
+async function resolveProductId(code,sku){try{const q=code||sku||'';const r=await (await fetch(`${NOM_API}?action=list&search=${encodeURIComponent(q)}&per_page=20`)).json();const rows=r.rows||[];const hit=rows.find(x=>code&&String(x.code)===String(code))||rows.find(x=>sku&&String(x.sku)===String(sku))||rows[0];return hit?hit.id:null}catch(e){return null}}
+async function resolveShipId(doc){try{const r=await (await fetch(`${SHIP_API}?action=list&search=${encodeURIComponent(doc)}&page=1&per_page=20`)).json();const rows=r.rows||[];const hit=rows.find(x=>String(x.doc_no)===String(doc))||rows[0];return hit?hit.id:null}catch(e){return null}}
+async function openCellDrawer(cell,wh){if(!cell)return;dKind='cell';dTab='main';dRef={cell,wh};dOpen('Ячейка '+cell,'../05-yacheyki-hraneniya/app.html');$('db').innerHTML='Загрузка...';dTabs([{k:'main',l:'Основное'},{k:'content',l:'Содержимое'},{k:'hist',l:'История'}],dTab);
+const id=await resolveCellId(cell,wh);if(!id){$('db').innerHTML=`<p class="hint">Ячейка ${esc(cell)} не найдена в модуле 5.</p>`;return}dId=id;dRender()}
+async function openProductDrawer(code,sku){if(!code&&!sku)return;dKind='product';dTab='main';dRef={code,sku};dOpen('Товар '+(code||sku),'../08-nomenklatura/app.html');$('db').innerHTML='Загрузка...';dTabs([{k:'main',l:'Основное'},{k:'stock',l:'Запас'}],dTab);
+const id=await resolveProductId(code,sku);if(!id){const o=lastRows.find(x=>String(x.product_code)===String(code));$('db').innerHTML=o?`<div class="box"><h3>${esc(o.product_name||'')}</h3><div class="kv"><i>Арт. склада</i><b>${esc(o.product_code||'')}</b></div><div class="kv"><i>Артикул</i><span>${esc(o.sku||'')}</span></div><div class="kv"><i>Ячейка</i><span>${esc(o.cell||'')}</span></div><div class="kv"><i>Кол-во</i><span>${esc(o.qty)}</span></div></div>`:'<p class="hint">Товар не найден в модуле 8.</p>';return}dId=id;dRender()}
+async function openShipmentDrawer(doc){if(!doc)return;dKind='ship';dTab='main';dRef={doc};dOpen('Отгрузка '+doc,'../03-otgruzki/app.html');$('db').innerHTML='Загрузка...';dTabs([{k:'main',l:'Основное'},{k:'goods',l:'Товары'},{k:'hist',l:'История'}],dTab);
+const id=await resolveShipId(doc);if(!id){const det=(lastRows.flatMap(x=>x.reserve||[]).filter(x=>x.doc_no===doc));$('db').innerHTML=`<div class="box"><h3>Отгрузка ${esc(doc)}</h3><div class="kv"><i>Заданий</i><span>${det.map(x=>(x.tasks||[]).join(', ')).filter(Boolean).join('; ')||'—'}</span></div><div class="kv"><i>Штук в резерве</i><span>${det.reduce((a,x)=>a+(+x.qty||0),0)}</span></div></div>`;return}dId=id;dRender()}
+async function dRender(){if(dKind==='cell')await dRenderCell();else if(dKind==='product')await dRenderProduct();else if(dKind==='ship')await dRenderShip()}
+async function dRenderCell(){dTabs([{k:'main',l:'Основное'},{k:'content',l:'Содержимое'},{k:'hist',l:'История'}],dTab);
+try{if(dTab==='main'){const s=await (await fetch(`${CELL_API}?action=show&id=${dId}`)).json();if(s.error){$('db').innerHTML=s.error;return}
+$('dh').textContent='Ячейка '+(s.code||'');$('dfull').href='../05-yacheyki-hraneniya/app.html';
+$('db').innerHTML=`<div style="margin-bottom:8px"><span class="st">${esc(s.status_label||s.status||'')}</span></div><div class="grid2"><div class="box"><h3>Основная информация (как в модуле 5)</h3><div class="kv"><i>Адрес</i><b>${esc(s.code||'')}</b></div><div class="kv"><i>Зона</i><span>${esc(s.zone_label||s.zone||'—')}</span></div><div class="kv"><i>Тип ячейки</i><span>${esc(s.type_label||s.cell_type||'—')}</span></div><div class="kv"><i>Категория</i><span>${esc(s.category||'—')}</span></div><div class="kv"><i>Склад</i><span>${esc(s.warehouse||'')}</span></div></div><div class="box"><h3>Текущее состояние</h3><div class="kv"><i>Остаток, шт</i><b>${esc(s.qty??'—')}</b></div><div class="kv"><i>Паллет</i><span>${esc(s.pallet_count??'—')}</span></div><div class="kv"><i>Блокировка</i><span>${esc(s.lock_label||(s.is_locked==1?'Да':'Нет'))}</span></div></div></div><button class="btn pri" id="dcell-edit" style="margin-top:10px">Редактировать ячейку</button>`;
+$('dcell-edit').onclick=()=>dCellEdit(s)}
+else if(dTab==='content'){const r=await (await fetch(`${CELL_API}?action=content&id=${dId}`)).json();$('db').innerHTML=`<h3>Содержимое ячейки (${(r||[]).length})</h3><table class="mini"><tr><th>Код</th><th>Артикул</th><th>Наименование</th><th>Кол-во</th><th>Резерв</th></tr>`+(r||[]).map(t=>`<tr><td>${esc(t.product_code||'')}</td><td>${esc(t.sku||'')}</td><td>${esc(t.name||'')}</td><td>${esc(t.qty)}</td><td>${esc(t.reserved_qty??'')}</td></tr>`).join('')+'</table>'}
+else{const r=await (await fetch(`${CELL_API}?action=history&id=${dId}`)).json();$('db').innerHTML=`<h3>История (${(r||[]).length})</h3><table class="mini"><tr><th>Дата</th><th>Поле</th><th>Было</th><th>Стало</th></tr>`+(r||[]).map(x=>`<tr><td>${esc(x.created_at||'')}</td><td>${esc(x.field_label||x.field||'')}</td><td>${esc(x.old_value||'')}</td><td>${esc(x.new_value||'')}</td></tr>`).join('')+'</table>'}}catch(e){$('db').innerHTML='Ошибка: '+e.message}}
+function dCellEdit(s){const p=$('deditpane');p.style.display='block';p.innerHTML=`<h3 style="margin-top:0">Редактирование ячейки (как в модуле 5)</h3>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Адрес</label><input id="dec" type="text" value="${esc(s.code||'')}"></div><div style="flex:1"><label>Склад</label><select id="dew"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Зона</label><select id="dez"><option value="storage">Хранение</option><option value="shipment">Отгрузка</option><option value="receiving">Приёмка</option></select></div><div style="flex:1"><label>Тип</label><select id="det"><option value="pallet">Паллетная</option><option value="box">Коробочная</option></select></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Категория</label><input id="decat" type="text" value="${esc(s.category||'')}"></div><div style="flex:1"><label>Вместимость, шт</label><input id="decap" type="number" min="0" value="${esc(s.capacity??0)}"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Темп. от</label><input id="detf" type="number" value="${esc(s.temp_from??'')}"></div><div style="flex:1"><label>Темп. до</label><input id="dett" type="number" value="${esc(s.temp_to??'')}"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Разрешено</label><input id="deal" type="text" value="${esc(s.allowed_goods||'Все')}"></div><div style="flex:1"><label>Макс паллет</label><input id="demp" type="number" value="${esc(s.max_pallets??'')}"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Ширина балки, м</label><select id="debm"><option value="3.2">3,2</option><option value="3.6">3,6</option></select></div><div style="flex:1"><label>Высота ячейки, мм</label><input id="dehh" type="number" min="1" value="${esc(s.cell_height_mm??'')}"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Типы тары</label><select id="dept"><option value="euro,fin">Евро + Фин</option><option value="euro">Только Евро</option><option value="fin">Только Фин</option></select></div><div style="flex:1"><label>Стоит паллета</label><select id="deptf"><option value="">—</option><option value="euro">Евро</option><option value="fin">Фин</option></select></div></div>
+<label>Комментарий</label><input id="decm" type="text" value="${esc(s.comment||'')}"><label style="display:block;margin-top:10px;border-top:1px solid var(--line);padding-top:8px;font-weight:700;font-size:13px"><input type="checkbox" id="deqlock" style="width:auto"> Только новый товар (брак в ячейку нельзя размещать)</label>
+<div style="font-size:11px;color:var(--mut);margin-top:4px">Если включено: при размещении и перемещении паллета с качеством «Брак» в эту ячейку не попадёт.</div>`;
+$('dew').value=String(s.warehouse_id||1);$('dez').value=s.zone||'storage';$('det').value=s.cell_type||'pallet';$('debm').value=String(s.beam_width??'3.2');$('dept').value=s.allowed_pallet_types||'euro,fin';$('deptf').value=s.pallet_type||'';$('deqlock').checked=(s.quality_lock==1);
+$('dsave').style.display='';$('dcancel').style.display='';
+$('dsave').onclick=async()=>{const cap=$('decap').value===''?0:+$('decap').value;if(cap<0){toast('Вместимость не может быть отрицательной');return}
+const body={code:$('dec').value.trim(),warehouse_id:+$('dew').value,zone:$('dez').value,cell_type:$('det').value,category:$('decat').value||null,capacity:cap,temp_from:$('detf').value===''?null:+$('detf').value,temp_to:$('dett').value===''?null:+$('dett').value,allowed_goods:$('deal').value||'Все',max_pallets:$('demp').value===''?null:+$('demp').value,comment:$('decm').value||null,beam_width:parseFloat($('debm').value)||3.2,cell_height_mm:$('dehh').value===''?null:+$('dehh').value,allowed_pallet_types:$('dept').value||'euro,fin',pallet_type:$('deptf').value||null,quality_lock:$('deqlock').checked?1:0};
+const r=await fetch(`${CELL_API}?action=update&id=${dId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const j=await r.json();if(r.ok){toast('Сохранено');dHideEdit();dRender()}else toast('Ошибка: '+(j.error||''))};
+$('dcancel').onclick=()=>dHideEdit()}
+async function dRenderProduct(){dTabs([{k:'main',l:'Основное'},{k:'stock',l:'Запас'}],dTab);
+try{if(dTab==='main'){const r=await (await fetch(`${NOM_API}?action=show&id=${dId}`)).json();if(r.error){$('db').innerHTML=r.error;return}
+$('dh').textContent='Товар '+(r.code||r.sku||'');$('dfull').href='../08-nomenklatura/app.html?code='+encodeURIComponent(r.code||'');
+$('db').innerHTML=`<div class="grid2"><div class="box"><h3>Редактирование — основное (как в модуле 8)</h3><div class="kv"><i>Код (Арт. склада)</i><b style="color:var(--vio)">${esc(r.code||'')}</b></div><div class="kv"><i>Артикул</i><span>${esc(r.sku||'')}</span></div><div class="kv"><i>Наименование</i><span>${esc(r.name||'')}</span></div><div class="kv"><i>Категория</i><span>${esc(r.category||'—')}</span></div><div class="kv"><i>Ед. изм.</i><span>${esc(r.unit||'')}</span></div><div class="kv"><i>Бренд / Владелец</i><span>${esc(r.brand||'—')} / ${esc(r.owner||'—')}</span></div></div><div class="box"><h3>Остатки</h3><div class="kv"><i>Остаток</i><b>${esc(r.qty??'—')}</b></div><div class="kv"><i>Зарезервировано</i><span>${esc(r.reserved_qty??'—')}</span></div><div class="kv"><i>Статус</i><span>${esc(r.status_label||r.status||'')}</span></div><div class="kv"><i>Штрихкоды</i><span>${esc((r.barcode_list||[]).join(', ')||r.barcodes||'—')}</span></div></div></div><button class="btn pri" id="dprod-edit" style="margin-top:10px">Редактировать товар</button>`;
+$('dprod-edit').onclick=()=>dProductEdit(r)}
+else{const r=await (await fetch(`${NOM_API}?action=stock&id=${dId}`)).json();$('db').innerHTML=`<h3>Запас по ячейкам (${(r||[]).length})</h3><table class="mini"><tr><th>Склад</th><th>Ячейка</th><th>Паллета</th><th>Кол-во</th><th>Приход</th></tr>`+(r||[]).map(s=>`<tr><td>${esc(s.warehouse||'')}</td><td>${esc(s.cell||'')}</td><td>${esc(s.pallet||'')}</td><td>${esc(s.qty)}</td><td>${esc(s.receipt_no||'—')}</td></tr>`).join('')+'</table>'}}catch(e){$('db').innerHTML='Ошибка: '+e.message}}
+function dProductEdit(r){const p=$('deditpane');p.style.display='block';p.innerHTML=`<h3 style="margin-top:0">Редактирование товара (как в модуле 8)</h3>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Код (Арт. склада)</label><input id="dpc" type="text" value="${esc(r.code||'')}"></div><div style="flex:1"><label>Артикул</label><input id="dpsku" type="text" value="${esc(r.sku||'')}"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Наименование</label><input id="dpname" type="text" value="${esc(r.name||'')}"></div><div style="flex:1"><label>Категория</label><input id="dpcat" type="text" value="${esc(r.category||'')}"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Ед. изм.</label><input id="dpunit" type="text" value="${esc(r.unit||'шт')}"></div><div style="flex:1"><label>Бренд</label><input id="dpbrand" type="text" value="${esc(r.brand||'')}"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Владелец</label><input id="dpowner" type="text" value="${esc(r.owner||'')}"></div><div style="flex:1"><label>Штрихкоды (через запятую)</label><input id="dpbc" type="text" value="${esc((r.barcode_list||[]).join(', ')||r.barcodes||'')}"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Длина, мм</label><input id="dplen" type="number" value="${esc(r.length_mm||'')}"></div><div style="flex:1"><label>Ширина, мм</label><input id="dpwid" type="number" value="${esc(r.width_mm||'')}"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Высота, мм</label><input id="dphei" type="number" value="${esc(r.height_mm||'')}"></div><div style="flex:1"><label>Вес, г</label><input id="dpwgt" type="number" value="${esc(r.weight_g||'')}"></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Кол-во в коробе</label><input id="dpinbox" type="number" value="${esc(r.qty_in_box||'')}"></div><div style="flex:1"><label>Коробов на паллете</label><input id="dponpal" type="number" value="${esc(r.boxes_per_pallet||'')}"></div></div>
+<label>Описание</label><input id="dpdescr" type="text" value="${esc(r.description||'')}">`;
+$('dsave').style.display='';$('dcancel').style.display='';
+$('dsave').onclick=async()=>{const num=id=>{const v=$(id).value;return v===''||v===null?null:+v};
+const body={sku:$('dpsku').value.trim(),code:$('dpc').value.trim()||null,name:$('dpname').value.trim(),category:$('dpcat').value,unit:$('dpunit').value,brand:$('dpbrand').value,owner:$('dpowner').value,description:$('dpdescr').value||null,length_mm:num('dplen'),width_mm:num('dpwid'),height_mm:num('dphei'),weight_g:num('dpwgt'),qty_in_box:num('dpinbox'),boxes_per_pallet:num('dponpal'),barcodes:$('dpbc').value.split(/[,\s;]+/).map(s=>s.trim()).filter(Boolean)};
+if(!body.sku||!body.name){toast('Заполните артикул и наименование');return}
+const r2=await fetch(`${NOM_API}?action=update&id=${dId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const j=await r2.json();if(r2.ok){toast('Сохранено');dHideEdit();dRender()}else toast('Ошибка: '+(j.error||''))};
+$('dcancel').onclick=()=>dHideEdit()}
+async function dRenderShip(){dTabs([{k:'main',l:'Основное'},{k:'goods',l:'Товары'},{k:'hist',l:'История'}],dTab);
+try{if(dTab==='main'){const s=await (await fetch(`${SHIP_API}?action=show&id=${dId}`)).json();if(s.error){$('db').innerHTML=s.error;return}
+$('dh').textContent='Отгрузка '+(s.doc_no||'');$('dfull').href='../03-otgruzki/app.html';
+$('db').innerHTML=`<div class="grid2"><div class="box"><h3>Основная информация (как в модуле 3)</h3><div class="kv"><i>№ документа</i><b>${esc(s.doc_no||'')}</b></div><div class="kv"><i>Дата создания</i><span>${esc(s.doc_date||'—')}</span></div><div class="kv"><i>Грузополучатель</i><span>${esc(s.consignee||s.contractor||'')}</span></div><div class="kv"><i>Склад</i><span>${esc(s.warehouse_name||s.warehouse||'')}</span></div><div class="kv"><i>Статус</i><span>${esc(s.status_label||s.status||'')}</span></div><div class="kv"><i>ТС / Ворота</i><span>${esc(s.vehicle||'—')} / ${esc(s.gate||'—')}</span></div></div><div class="box"><h3>Финансы</h3><div class="kv"><i>Сумма с НДС</i><b>${esc(s.total_with_vat??s.total??'—')}</b></div><div class="kv"><i>Оплачено / Долг</i><span>${esc(s.paid??'—')} / ${esc(s.debt??'—')}</span></div></div></div><button class="btn pri" id="dship-edit" style="margin-top:10px">Редактировать отгрузку</button>`;
+$('dship-edit').onclick=()=>dShipEdit(s)}
+else if(dTab==='goods'){const r=await (await fetch(`${SHIP_API}?action=items&id=${dId}`)).json();$('db').innerHTML=`<h3>Товары (${(r||[]).length})</h3><table class="mini"><tr><th>Артикул</th><th>Наименование</th><th>Кол-во</th><th>Цена</th></tr>`+(r||[]).map(t=>`<tr><td>${esc(t.sku||'')}</td><td>${esc(t.name||'')}</td><td>${esc(t.qty)}</td><td>${esc(t.price??'')}</td></tr>`).join('')+'</table>'}
+else{const r=await (await fetch(`${SHIP_API}?action=history&id=${dId}`)).json();$('db').innerHTML=`<h3>История (${(r||[]).length})</h3><table class="mini"><tr><th>Дата</th><th>Поле</th><th>Было</th><th>Стало</th></tr>`+(r||[]).map(x=>`<tr><td>${esc(x.created_at||'')}</td><td>${esc(x.field||x.action||'')}</td><td>${esc(x.old_value||x.old_status||'')}</td><td>${esc(x.new_value||x.new_status||'')}</td></tr>`).join('')+'</table>'}}catch(e){$('db').innerHTML='Ошибка: '+e.message}}
+function dShipEdit(s){const p=$('deditpane');p.style.display='block';p.innerHTML=`<h3 style="margin-top:0">Редактирование отгрузки (как в модуле 3: статус и приоритет)</h3>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Статус</label><select id="dsst"><option value="draft">Черновик</option><option value="created">Создан</option><option value="assembling">На сборке</option><option value="assembled">Собрано</option><option value="packing">На упаковке</option><option value="packed">Упаковано</option><option value="on_check">На проверке</option><option value="awaiting_payment">Ожидает оплаты</option><option value="delivering">Доставляется</option><option value="delivered">Доставлена</option><option value="cancelled">Отменена</option></select></div><div style="flex:1"><label>Приоритет</label><select id="dspri"><option value="low">Низкий</option><option value="normal">Обычный</option><option value="high">Высокий</option></select></div></div>
+<p class="hint">Модуль 3 не имеет общего update: меняются статус и приоритет отдельными вызовами (как ПКМ в реестре отгрузок). Прочие поля — только просмотр, полное редактирование — в модуле 3.</p>`;
+$('dsst').value=s.status||'assembling';$('dspri').value=s.priority||'normal';
+$('dsave').style.display='';$('dcancel').style.display='';
+$('dsave').onclick=async()=>{try{
+const r1=await fetch(`${SHIP_API}?action=status&id=${dId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:$('dsst').value})});
+const j1=await r1.json();if(!r1.ok)throw new Error(j1.error||('статус HTTP '+r1.status));
+const r2=await fetch(`${SHIP_API}?action=priority&id=${dId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({priority:$('dspri').value})});
+const j2=await r2.json();if(!r2.ok)throw new Error(j2.error||('приоритет HTTP '+r2.status));
+toast('Сохранено');dHideEdit();dRender()}catch(e){toast('Ошибка: '+e.message)}};
+$('dcancel').onclick=()=>dHideEdit()}
 $('q').onchange=()=>{page=1;load()};$('pp').onchange=e=>{perPage=+e.target.value;page=1;load()};
 $('wh').onchange=()=>{page=1;load()};
+// --- Панель фильтров: контроль даты производства + наличие даты производства ---
+function fOpen(){const p=$('fp');if(p)p.classList.add('open')}
+function fClose(){const p=$('fp');if(p)p.classList.remove('open')}
+function fReset(){$('fc_ctl').checked=false;$('fc_pd').value='';page=1;load()}
+if($('fbtn'))$('fbtn').onclick=()=>fOpen();
+if($('fclose'))$('fclose').onclick=()=>fClose();
+if($('fok'))$('fok').onclick=()=>{page=1;load();fClose()};
+if($('fclr'))$('fclr').onclick=()=>{fReset();fClose()};
+if($('freset'))$('freset').onclick=e=>{e.preventDefault();fReset()};
+if($('fc_ctl'))$('fc_ctl').onchange=()=>{page=1;load()};
+if($('fc_pd'))$('fc_pd').onchange=()=>{page=1;load()};
+if($('resfailclr'))$('resfailclr').onclick=()=>clearReserveFilter();
+initReserveFilter();
 loadWh();
 // --- уведомления: колокол в шапке (общее хранилище — API 08, как в модуле 12) ---
 const NAPI='../08-nomenklatura/demo_sqlite.php';
 let ntab='all';
-const KIND_META={receipt:{t:'Поступления',i:'📥',bg:'#E0EEFF'},shipment:{t:'Отгрузки',i:'📦',bg:'#DCE6D1'},task:{t:'Задания',i:'📝',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'}};
+const KIND_META={receipt:{t:'Поступления',i:'📥',bg:'#E0EEFF'},shipment:{t:'Отгрузки',i:'📦',bg:'#DCE6D1'},task:{t:'Задания',i:'📝',bg:'#FFFFCC'},nomenclature:{t:'Номенклатура',i:'📁',bg:'#E6E6E6'},robot:{t:'Робот',i:'🤖',bg:'#E8F5E9'}};
 const KIND_CONDS={receipt:['Все статусы','Принято','Принято с отклонениями','Отменено'],shipment:['Все статусы','Расхождение, Отменено','Доставлена'],task:['Все статусы','Просрочено','Назначено','Выполнено'],nomenclature:['Все статусы','Любое изменение']};
 function nTime(s){s=String(s||'');return s.length>=16?s.slice(11,16)+' · '+s.slice(8,10)+'.'+s.slice(5,7):s}
 async function notifCounts(){try{const r=await (await fetch(NAPI+'?action=notif_counts')).json();$('bellbadge').textContent=r.unread||0;$('bellbadge').style.display=r.unread?'flex':'none';$('nc_all').textContent=r.all||0;$('nc_unread').textContent=r.unread||0;$('nc_imp').textContent=r.important||0}catch(e){}}
-async function notifLoad(){try{const r=await (await fetch(`${NAPI}?action=notif_list&tab=${ntab}&limit=20`)).json();const rows=r.rows||[];const c=r.counts||{};$('nc_all').textContent=c.all||0;$('nc_unread').textContent=c.unread||0;$('nc_imp').textContent=c.important||0;$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
+async function notifLoad(){try{const r=await (await fetch(`${NAPI}?action=notif_list&tab=${ntab==='robot'?'all':ntab}&kind=${ntab==='robot'?'robot':''}&limit=20`)).json();const rows=r.rows||[];const c=r.counts||{};$('nc_all').textContent=c.all||0;$('nc_unread').textContent=c.unread||0;$('nc_imp').textContent=c.important||0;$('nc_robot').textContent=c.robot||0;$('bellbadge').textContent=c.unread||0;$('bellbadge').style.display=c.unread?'flex':'none';
 $('notiflist').innerHTML=rows.map(x=>{const m=KIND_META[x.kind]||{t:x.kind,i:'🔔',bg:'#F4F0FB'};return `<div class="ntf ${+x.is_read?'read':''}" data-nid="${x.id}"><div class="ic" style="background:${m.bg}">${m.i}</div><div class="tx"><div class="sub">${m.t}</div><b>${x.title||''}</b><div class="body">${x.body||''}</div></div><div class="tm">${nTime(x.created_at)}</div>${+x.is_read?'':'<div class="dot"></div>'}</div>`}).join('')||'<p class="hint">Нет уведомлений</p>';
 document.querySelectorAll('#notiflist .ntf').forEach(el=>el.onclick=async()=>{const id=+el.dataset.nid;await fetch(NAPI+'?action=notif_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});notifLoad()})}catch(e){}}
-function setNtab(t){ntab=t;[['nt_all','all'],['nt_unread','unread'],['nt_imp','important']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));notifLoad()}
-$('nt_all').onclick=()=>setNtab('all');$('nt_unread').onclick=()=>setNtab('unread');$('nt_imp').onclick=()=>setNtab('important');
+function setNtab(t){ntab=t;[['nt_all','all'],['nt_unread','unread'],['nt_imp','important'],['nt_robot','robot']].forEach(([id,k])=>$(id).classList.toggle('on',t===k));notifLoad()}
+$('nt_all').onclick=()=>setNtab('all');$('nt_unread').onclick=()=>setNtab('unread');$('nt_imp').onclick=()=>setNtab('important');$('nt_robot').onclick=()=>setNtab('robot');
 $('bellbtn').onclick=e=>{e.stopPropagation();const p=$('notifpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px';notifLoad()}};
 $('notifreadall').onclick=async e=>{e.preventDefault();await fetch(NAPI+'?action=notif_read_all',{method:'POST'});notifLoad();toast('Все отмечены как прочитанные')};
 $('notifset').onclick=e=>{e.preventDefault();$('notifpanel').style.display='none';$('notifmodal').classList.add('open');subLoad()};
@@ -225,22 +419,31 @@ if(localStorage.getItem('navhide')==='1')document.body.classList.add('navhide');
 $('navhidebtn').onclick=()=>{document.body.classList.add('navhide');try{localStorage.setItem('navhide','1')}catch(e){}};
 $('navshowbtn').onclick=()=>{document.body.classList.remove('navhide');try{localStorage.setItem('navhide','0')}catch(e){}};
 // --- Настройка столбцов (шестеренка): свои колонки для каждого пользователя ---
+// Столбцы идентифицируются ключом data-col (устойчиво к смене порядка и добавлению
+// новых столбцов). Старый формат настроек — индексы thead — переводится по LEGACY_COLS.
 const COLFORM='stock';
+const LEGACY_COLS=['warehouse','cell','pallet','batch','pallet_date','pallet_type','pallet_length','pallet_width','pallet_height','volume','weight','product_code','sku','qty','receipt','shipments','reserve','gear'];
 let hideCols=[];
 function colTable(){const tb=document.querySelector('#rows');return tb?tb.closest('table'):null}
-function colApply(){const tbl=colTable();if(!tbl)return;const ths=[...tbl.querySelectorAll('thead th')];
-ths.forEach((th,i)=>{const h=hideCols.includes(i);th.style.display=h?'none':'';[...tbl.querySelectorAll('tbody tr')].forEach(tr=>{const c=tr.children[i];if(c)c.style.display=h?'none':''})})}
-async function colLoad(){try{const r=await (await fetch(API+'?action=columns_get&form='+COLFORM)).json();const c=(r&&r.cols&&Array.isArray(r.cols.hidden))?r.cols.hidden:[];hideCols=c.map(Number).filter(n=>n>=0)}catch(e){hideCols=[]}colApply()}
+function colDefs(){const tbl=colTable();if(!tbl)return[];return [...tbl.querySelectorAll('thead th')].map((th,i)=>({th:th,idx:i,key:th.getAttribute('data-col')||('c'+i)}))}
+function colApply(){const tbl=colTable();if(!tbl)return;const defs=colDefs();
+defs.forEach(d=>{const h=hideCols.includes(d.key);d.th.style.display=h?'none':'';[...tbl.querySelectorAll('tbody tr')].forEach(tr=>{const c=tr.children[d.idx];if(c)c.style.display=h?'none':''})})}
+async function colLoad(){try{const r=await (await fetch(API+'?action=columns_get&form='+COLFORM)).json();const c=(r&&r.cols&&Array.isArray(r.cols.hidden))?r.cols.hidden:[];
+const keys=colDefs().map(d=>d.key);
+hideCols=c.map(x=>{if(typeof x==='number'||(typeof x==='string'&&/^\d+$/.test(x))){const i=Number(x);const k=LEGACY_COLS[i]!==undefined?LEGACY_COLS[i]:keys[i];return k===undefined?null:k}return String(x)}).filter(k=>k&&keys.includes(k));
+}catch(e){hideCols=[]}colApply()}
 async function colSave(){try{await fetch(API+'?action=columns_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:COLFORM,cols:{hidden:hideCols}})})}catch(e){}}
-function colPanel(){const tbl=colTable();if(!tbl)return;const ths=[...tbl.querySelectorAll('thead th')];
-$('collist').innerHTML=ths.map((th,i)=>{const t=((th.textContent||'').trim()||('Столбец '+(i+1)));return `<label style="display:block;padding:6px 4px;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="${i}" ${hideCols.includes(i)?'':'checked'}> ${t}</label>`}).join('');
-document.querySelectorAll('#collist input[data-ci]').forEach(c=>c.onchange=()=>{const i=+c.dataset.ci;hideCols=c.checked?hideCols.filter(n=>n!==i):[...new Set([...hideCols,i])];colApply();colSave()});
+function colPanel(){const defs=colDefs();if(!defs.length)return;
+$('collist').innerHTML=defs.map(d=>{const t=(Sort.thLabel(d.th)||('Столбец '+(d.idx+1)));return `<label style="display:block;padding:6px 4px;font-size:13px;cursor:pointer"><input type="checkbox" data-ck="${esc(d.key)}" ${hideCols.includes(d.key)?'':'checked'}> ${esc(t)}</label>`}).join('');
+document.querySelectorAll('#collist input[data-ck]').forEach(c=>c.onchange=()=>{const k=c.dataset.ck;hideCols=c.checked?hideCols.filter(n=>n!==k):[...new Set([...hideCols,k])];colApply();colSave()});
 const p=$('colpanel');const open=p.style.display==='block';if(open){p.style.display='none'}else{p.style.display='block';p.style.top='64px';p.style.right='16px'}}
 $('colset').onclick=e=>{e.stopPropagation();colPanel()};
 $('colclose').onclick=()=>$('colpanel').style.display='none';
 $('colreset').onclick=async()=>{hideCols=[];colApply();await colSave();colPanel()};
 if(document.querySelector('#rows'))new MutationObserver(()=>colApply()).observe(document.querySelector('#rows'),{childList:true});
 colLoad();
+// Сортировка реестра запаса по любому столбцу (А→Я / Я→А) — серверная, с пагинацией.
+Sort.init({mode:'server', key:'sku', dir:'ASC', onChange:()=>{page=1;load()}});
 load();
 </script>
 <script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>

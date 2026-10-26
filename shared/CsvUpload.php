@@ -7,12 +7,18 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/ProductCode.php';
 require_once __DIR__ . '/DocNo.php';
+require_once __DIR__ . '/pg.php';
 
 // ---------- Утилиты ----------
 
 function csv_upload_is_mysql(PDO $pdo): bool
 {
-    return $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql';
+    return function_exists('wms_is_mysql') ? wms_is_mysql($pdo) : $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql';
+}
+
+function csv_upload_is_pgsql(PDO $pdo): bool
+{
+    return function_exists('wms_is_pgsql') ? wms_is_pgsql($pdo) : $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
 }
 
 function csv_upload_now(): string
@@ -20,7 +26,7 @@ function csv_upload_now(): string
     return date('Y-m-d H:i:s');
 }
 
-/** Дотянуть колонки (name => [mysql_ddl, sqlite_ddl]). Безопасно при повторе. */
+/** Дотянуть колонки (name => [mysql_ddl, sqlite_ddl, pg_ddl?]). Безопасно при повторе. */
 function csv_upload_ensure_columns(PDO $pdo, string $table, array $cols): void
 {
     try {
@@ -32,6 +38,16 @@ function csv_upload_ensure_columns(PDO $pdo, string $table, array $cols): void
             foreach ($cols as $name => $ddl) {
                 if (!in_array($name, $have, true)) {
                     $pdo->exec("ALTER TABLE `$table` ADD COLUMN " . $ddl[0]);
+                }
+            }
+        } elseif (csv_upload_is_pgsql($pdo)) {
+            $have = function_exists('wms_table_columns') ? wms_table_columns($pdo, $table) : [];
+            foreach ($cols as $name => $ddl) {
+                if (!in_array($name, $have, true)) {
+                    $pgDdl = $ddl[2] ?? $ddl[1];
+                    // sqlite-дефолт datetime('now') недопустим в PG
+                    $pgDdl = str_replace("datetime('now')", 'NOW()', $pgDdl);
+                    $pdo->exec("ALTER TABLE \"$table\" ADD COLUMN " . $pgDdl);
                 }
             }
         } else {
@@ -184,7 +200,9 @@ function csv_upload_parse(array $file, array $spec): array
         'ship_type' => 'Тип отгрузки', 'sku' => 'артикул', 'name' => 'наименование',
         'qty' => 'количество', 'quality' => 'качество', 'barcode' => 'штрихкод',
         'marking' => 'Признак сканирования марки', 'serial' => 'Признак сканирования с/н',
-        'comment' => 'Комментарий'];
+        'comment' => 'Комментарий', 'unit' => 'Ед. изм.', 'batch' => 'Партия',
+        'plan_date' => 'Дата отгрузки', 'external_no' => 'Номер заказа',
+        'contract_no' => 'Договор'];
     foreach ($spec['required'] as $req) {
         if (!isset($map[$req])) {
             $missing[] = $ru[$req] ?? $req;
@@ -198,7 +216,8 @@ function csv_upload_parse(array $file, array $spec): array
     $errors = [];
     // Шапка документа: текстовые поля — первое непустое, флаги — ИЛИ по строкам.
     $hdr = ['contractor' => '', 'supplier' => '', 'consignee' => '', 'ship_type' => '',
-        'marking' => false, 'serial' => false, 'comments' => []];
+        'marking' => false, 'serial' => false, 'comments' => [],
+        'external_no' => '', 'contract_no' => '', 'plan_date' => null];
     $firstNonEmpty = static function (string $cur, string $v): string {
         return $cur !== '' ? $cur : trim($v);
     };
@@ -214,7 +233,7 @@ function csv_upload_parse(array $file, array $spec): array
             $name = $get('name');
             $qty = csv_upload_norm_qty($get('qty'));
             $qRaw = $get('quality');
-            $quality = csv_upload_norm_quality($qRaw);
+            $quality = $qRaw === '' ? 'Годен' : csv_upload_norm_quality($qRaw);
             $bcRaw = $get('barcode');
             $barcodes = [];
             if ($bcRaw !== '') {
@@ -240,8 +259,7 @@ function csv_upload_parse(array $file, array $spec): array
                 continue;
             }
             if (!$barcodes) {
-                $errors[] = "Строка $n ($sku): укажи штрихкод товара (несколько — через запятую)";
-                continue;
+                $barcodes = [$sku]; // ШК не обязателен (заявки без штрихкодов) — кодом служит артикул
             }
             if ($pdRaw !== '' && $prodDate === null) {
                 $errors[] = "Строка $n ($sku): дата производства — формат ГГГГ-ММ-ДД или ДД.ММ.ГГГГ";
@@ -252,8 +270,11 @@ function csv_upload_parse(array $file, array $spec): array
             if ($cmt !== '' && !in_array($cmt, $hdr['comments'], true)) {
                 $hdr['comments'][] = $cmt;
             }
+            $batchRaw = trim((string)$get('batch'));
             $rows[] = ['sku' => $sku, 'name' => $name, 'qty' => $qty, 'quality' => $quality,
-                'barcodes' => $barcodes, 'group' => $get('group'), 'prod_date' => $prodDate];
+                'barcodes' => $barcodes, 'group' => $get('group'), 'prod_date' => $prodDate,
+                'batch' => $batchRaw !== '' ? $batchRaw : null,
+                'unit' => trim((string)$get('unit')) !== '' ? trim((string)$get('unit')) : 'шт'];
         } else {
             $sku = $get('sku');
             $qty = csv_upload_norm_qty($get('qty'));
@@ -274,6 +295,15 @@ function csv_upload_parse(array $file, array $spec): array
             $hdr['contractor'] = $firstNonEmpty($hdr['contractor'], $get('contractor'));
             $hdr['consignee'] = $firstNonEmpty($hdr['consignee'], $get('consignee'));
             $hdr['ship_type'] = $firstNonEmpty($hdr['ship_type'], $get('ship_type'));
+            $hdr['external_no'] = $firstNonEmpty($hdr['external_no'], $get('external_no'));
+            $hdr['contract_no'] = $firstNonEmpty($hdr['contract_no'], $get('contract_no'));
+            $planRaw = $get('plan_date');
+            if ($hdr['plan_date'] === null && $planRaw !== '') {
+                $pd = csv_upload_norm_date($planRaw);
+                if ($pd !== null) {
+                    $hdr['plan_date'] = $pd;
+                }
+            }
             if (csv_upload_bool_flag($get('marking'))) {
                 $hdr['marking'] = true;
             }
@@ -284,7 +314,11 @@ function csv_upload_parse(array $file, array $spec): array
             if ($cmt !== '' && !in_array($cmt, $hdr['comments'], true)) {
                 $hdr['comments'][] = $cmt;
             }
-            $rows[] = ['sku' => $sku, 'qty' => $qty, 'prod_date' => $prodDate];
+            $unitRaw = trim($get('unit'));
+            $batchRaw = trim($get('batch'));
+            $rows[] = ['sku' => $sku, 'name' => $get('name'), 'qty' => $qty, 'prod_date' => $prodDate,
+                'unit' => $unitRaw !== '' ? $unitRaw : 'шт',
+                'batch' => $batchRaw !== '' ? $batchRaw : null];
         }
     }
     $hdr['comment'] = implode('; ', $hdr['comments']);
@@ -296,7 +330,7 @@ function csv_upload_receipt_spec(): array
 {
     return [
         'kind' => 'receipt',
-        'required' => ['supplier', 'sku', 'name', 'qty', 'quality', 'barcode'],
+        'required' => ['supplier', 'sku', 'name', 'qty'],
         'fields' => [
             'supplier' => ['поставщик', 'контрагент', 'supplier', 'продавец'],
             'sku' => ['артикул', 'sku', 'artikul'],
@@ -304,6 +338,8 @@ function csv_upload_receipt_spec(): array
             'qty' => ['количество', 'колво', 'кол-во', 'qty', 'quantity', 'шт'],
             'quality' => ['качество', 'качествотовара', 'quality', 'состояние'],
             'barcode' => ['штрихкод', 'штрихкодтовара', 'шк', 'barcode', 'ean', 'ean13'],
+            'batch' => ['партия', 'партияпоставщика', 'партиятовара', 'batch', 'lot', 'партияпоставки'],
+            'unit' => ['единица', 'единицаизмерения', 'едизм', 'ед', 'unit'],
             'group' => ['группа', 'группатовара', 'group', 'productgroup'],
             'prod_date' => ['датапроизводства', 'датавыпуска', 'proddate', 'productiondate', 'дата'],
             'comment' => ['комментарий', 'коммент', 'comment', 'примечание'],
@@ -317,12 +353,22 @@ function csv_upload_shipment_spec(): array
         'kind' => 'shipment',
         'required' => ['contractor', 'sku', 'qty'],
         'fields' => [
-            'contractor' => ['контрагент', 'contractor', 'клиент', 'покупатель'],
-            'consignee' => ['получатель', 'грузополучатель', 'consignee'],
-            'ship_type' => ['типотгрузки', 'тип', 'deliverytype', 'shipmenttype', 'видотгрузки'],
+            'contractor' => ['контрагент', 'contractor', 'клиент', 'покупатель', 'заказчик'],
+            'consignee' => ['получатель', 'грузополучатель', 'consignee', 'адресат'],
+            'ship_type' => ['типотгрузки', 'тип', 'типдоставки', 'способдоставки', 'deliverytype',
+                'shipmenttype', 'видотгрузки', 'доставка'],
             'sku' => ['артикул', 'sku', 'artikul'],
+            'name' => ['наименование', 'название', 'name', 'номенклатура', 'товар'],
             'qty' => ['количество', 'колво', 'кол-во', 'qty', 'quantity', 'шт'],
+            'unit' => ['единица', 'единицаизмерения', 'едизм', 'ед', 'ед.', 'ед изм', 'ед.изм',
+                'ед.изм.', 'unit', 'uom'],
+            'batch' => ['партия', 'партияпоставщика', 'партиятовара', 'batch', 'lot', 'партияпоставки'],
             'prod_date' => ['датапроизводства', 'датавыпуска', 'proddate', 'productiondate', 'дата'],
+            'plan_date' => ['датаотгрузки', 'датадоставки', 'датаотправки', 'планируемаядата',
+                'датаотгрузкипланируемая', 'shipdate', 'plandate'],
+            'external_no' => ['номерзаказа', 'номерзаявки', 'номердокумента', 'внешнийномер',
+                'orderno', 'asn'],
+            'contract_no' => ['договор', 'номердоговора', 'contractno'],
             'marking' => ['признаксканированиямарки', 'сканированиемарки', 'маркировка', 'marking', 'чз'],
             'serial' => ['признаксканированиясн', 'сканированиесн', 'серийники', 'serial', 'сн'],
             'comment' => ['комментарий', 'коммент', 'comment', 'примечание'],
@@ -406,6 +452,13 @@ function csv_upload_apply_shipment_header(PDO $shp, int $sid, array $header): vo
     }
     if (trim((string)($header['ship_type'] ?? '')) !== '') {
         $extra['delivery_type'] = trim((string)$header['ship_type']);
+    }
+    if (trim((string)($header['contract_no'] ?? '')) !== '') {
+        $extra['contract_no'] = trim((string)$header['contract_no']);
+    }
+    $planDate = trim((string)($header['plan_date'] ?? ''));
+    if ($planDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}/', $planDate)) {
+        $extra['plan_shipment_date'] = substr($planDate, 0, 10);
     }
     if (!empty($header['marking'])) {
         $extra['marking_scan'] = 1;
@@ -508,12 +561,13 @@ function csv_upload_chz_required(?string $itemGroup, ?string $productGroup): boo
  * Создает документ поступления из строк CSV + заводит новые артикулы в номенклатуру.
  * @return array{id, doc_no, items, new_skus}
  */
-function csv_upload_import_receipt(PDO $rcp, PDO $nom, array $rows, int $supplierId, int $warehouseId, int $userId, string $fileName): array
+function csv_upload_import_receipt(PDO $rcp, PDO $nom, array $rows, int $supplierId, int $warehouseId, int $userId, string $fileName, array $header = []): array
 {
     csv_upload_ensure_columns($rcp, 'receipt_items', [
         'quality' => ['VARCHAR(20) NULL', 'quality TEXT'],
         'prod_date' => ['DATE NULL', 'prod_date TEXT'],
         'prod_group' => ['VARCHAR(100) NULL', 'prod_group TEXT'],
+        'supplier_batch' => ['VARCHAR(100) NULL', 'supplier_batch TEXT'],
     ]);
     csv_upload_ensure_columns($nom, 'products', [
         'need_measure' => ['TINYINT(1) NOT NULL DEFAULT 0', 'need_measure INTEGER DEFAULT 0'],
@@ -528,40 +582,60 @@ function csv_upload_import_receipt(PDO $rcp, PDO $nom, array $rows, int $supplie
         throw new RuntimeException('Нет корректных строк для загрузки');
     }
     $now = csv_upload_now();
+    $externalNo = trim((string)($header['external_no'] ?? ''));
+    $planDate = ($header['plan_date'] ?? null) ? trim((string)$header['plan_date']) : null;
+    if ($planDate !== null && !preg_match('/^\d{4}-\d{2}-\d{2}/', $planDate)) {
+        $planDate = null;
+    }
+    if ($planDate !== null && strlen($planDate) === 10) {
+        $planDate .= ' 00:00:00';
+    }
+    $unloadType = trim((string)($header['unload_type'] ?? ''));
+    $contractNo = trim((string)($header['contract_no'] ?? ''));
     $rcp->beginTransaction();
     try {
         $docNo = csv_upload_next_receipt_no($rcp);
         // Статус expected (а не draft): документ сразу виден на ТСД «Приход»
         // (prihod.php показывает expected..accepting) и готов к приемке.
         $st = $rcp->prepare(
-            "INSERT INTO receipts (doc_no,doc_date,supplier_id,contractor_id,warehouse_id,status,
-              receipt_type,cargo_places_plan,created_by,creator_id,comment)
-             VALUES (:no,:dt,:s,:s,:w,'expected','supply',:cp,:u,:u,:cmt)"
+            "INSERT INTO receipts (doc_no,external_no,doc_date,plan_delivery_date,supplier_id,contractor_id,warehouse_id,status,
+              receipt_type,cargo_places_plan,created_by,creator_id,comment,unload_type,contract_no)
+             VALUES (:no,:ext,:dt,:plan,:s,:s,:w,'expected','supply',:cp,:u,:u,:cmt,:ut,:cn)"
         );
+        $cmt = 'Загружено из файла: ' . $fileName;
+        if (trim((string)($header['comment'] ?? '')) !== '') {
+            $cmt .= ' · ' . trim((string)$header['comment']);
+        }
         $st->execute([
-            ':no' => $docNo, ':dt' => $now, ':s' => $supplierId, ':w' => $warehouseId,
-            ':cp' => count($rows), ':u' => $userId, ':cmt' => 'Загружено из CSV: ' . $fileName,
+            ':no' => $docNo, ':ext' => $externalNo !== '' ? $externalNo : null, ':dt' => $now,
+            ':plan' => $planDate, ':s' => $supplierId, ':w' => $warehouseId,
+            ':cp' => count($rows), ':u' => $userId, ':cmt' => $cmt,
+            ':ut' => $unloadType !== '' ? $unloadType : null, ':cn' => $contractNo !== '' ? $contractNo : null,
         ]);
         $rid = (int)$rcp->lastInsertId();
         $ins = $rcp->prepare(
-            "INSERT INTO receipt_items (receipt_id,line_no,code,sku,name,unit,qty,quality,prod_group,prod_date)
-             VALUES (:r,:ln,:code,:sku,:name,'шт',:qty,:q,:pg,:pd)"
+            "INSERT INTO receipt_items (receipt_id,line_no,code,sku,name,unit,qty,quality,prod_group,prod_date,supplier_batch)
+             VALUES (:r,:ln,:code,:sku,:name,:unit,:qty,:q,:pg,:pd,:batch)"
         );
         $ln = 0;
         $qtyTotal = 0.0;
         $skus = [];
         foreach ($rows as $r) {
+            $batch = isset($r['batch']) && trim((string)$r['batch']) !== '' ? trim((string)$r['batch']) : null;
+            $unit = isset($r['unit']) && trim((string)$r['unit']) !== '' ? trim((string)$r['unit']) : 'шт';
             $ins->execute([
                 ':r' => $rid, ':ln' => ++$ln, ':code' => $r['barcodes'][0] ?? null, ':sku' => $r['sku'],
                 ':name' => function_exists('mb_substr') ? mb_substr($r['name'], 0, 255, 'UTF-8') : substr($r['name'], 0, 255),
-                ':qty' => $r['qty'], ':q' => $r['quality'],
-                ':pg' => $r['group'] !== '' ? $r['group'] : null, ':pd' => $r['prod_date'],
+                ':unit' => function_exists('mb_substr') ? mb_substr($unit, 0, 10, 'UTF-8') : substr($unit, 0, 10),
+                ':qty' => $r['qty'], ':q' => $r['quality'] ?? 'Годен',
+                ':pg' => ($r['group'] ?? '') !== '' ? $r['group'] : null, ':pd' => $r['prod_date'] ?? null,
+                ':batch' => $batch,
             ]);
             $qtyTotal += (float)$r['qty'];
             if (!isset($skus[$r['sku']])) {
-                $skus[$r['sku']] = ['name' => $r['name'], 'barcodes' => [], 'group' => $r['group']];
+                $skus[$r['sku']] = ['name' => $r['name'], 'barcodes' => [], 'group' => (string)($r['group'] ?? '')];
             }
-            if ($skus[$r['sku']]['group'] === '' && $r['group'] !== '') {
+            if ($skus[$r['sku']]['group'] === '' && ($r['group'] ?? '') !== '') {
                 $skus[$r['sku']]['group'] = $r['group'];
             }
             foreach ($r['barcodes'] as $bc) {
@@ -574,7 +648,7 @@ function csv_upload_import_receipt(PDO $rcp, PDO $nom, array $rows, int $supplie
             ->execute([':c' => $ln, ':s' => count($skus), ':q' => $qtyTotal, ':id' => $rid]);
         try {
             $rcp->prepare("INSERT INTO receipt_history (receipt_id,user_id,action,field,old_value,new_value) VALUES (:r,:u,'create','Документ',NULL,:n)")
-                ->execute([':r' => $rid, ':u' => $userId, ':n' => 'Загружено из CSV: ' . $fileName . ' (' . $ln . ' строк)']);
+                ->execute([':r' => $rid, ':u' => $userId, ':n' => 'Загружено из файла: ' . $fileName . ' (' . $ln . ' строк)']);
         } catch (Throwable) {
         }
         $rcp->commit();
@@ -678,6 +752,9 @@ function csv_upload_import_shipment(PDO $shp, ?PDO $nom, array $rows, int $contr
              VALUES (:no,:dt,:c,:w,'assembling',:u,:u,:cmt)"
         );
         $cmt = 'Загружено из CSV: ' . $fileName;
+        if (trim((string)($header['external_no'] ?? '')) !== '') {
+            $cmt .= ' · Заказ № ' . trim((string)$header['external_no']);
+        }
         if (trim((string)($header['comment'] ?? '')) !== '') {
             $cmt .= ' · ' . trim((string)$header['comment']);
         }
@@ -687,15 +764,29 @@ function csv_upload_import_shipment(PDO $shp, ?PDO $nom, array $rows, int $contr
         ]);
         $sid = (int)$shp->lastInsertId();
         $ins = $shp->prepare(
-            "INSERT INTO shipment_items (shipment_id,sku,name,unit,qty,price,\"sum\",prod_date)
-             VALUES (:s,:sku,:name,'шт',:qty,0,0,:pd)"
+            "INSERT INTO shipment_items (shipment_id,sku,name,unit,qty,price," . wms_quote_ident($shp, 'sum') . ",prod_date)
+             VALUES (:s,:sku,:name,:unit,:qty,0,0,:pd)"
         );
         $qtyTotal = 0.0;
         $skus = [];
         foreach ($rows as $r) {
+            // Наименование: номенклатура — источник правды, наименование из файла — запасной вариант.
+            $name = (string)($names[$r['sku']] ?? '');
+            if ($name === '') {
+                $name = trim((string)($r['name'] ?? ''));
+            }
+            if ($name === '') {
+                $name = (string)$r['sku'];
+            }
+            $unit = trim((string)($r['unit'] ?? ''));
+            if ($unit === '') {
+                $unit = 'шт';
+            }
             $ins->execute([
-                ':s' => $sid, ':sku' => $r['sku'], ':name' => $names[$r['sku']] ?? $r['sku'],
-                ':qty' => $r['qty'], ':pd' => $r['prod_date'],
+                ':s' => $sid, ':sku' => $r['sku'],
+                ':name' => function_exists('mb_substr') ? mb_substr($name, 0, 255, 'UTF-8') : substr($name, 0, 255),
+                ':unit' => function_exists('mb_substr') ? mb_substr($unit, 0, 10, 'UTF-8') : substr($unit, 0, 10),
+                ':qty' => $r['qty'], ':pd' => $r['prod_date'] ?? null,
             ]);
             $qtyTotal += (float)$r['qty'];
             $skus[$r['sku']] = true;
@@ -782,6 +873,9 @@ function csv_upload_import_orders(PDO $shp, ?PDO $nom, array $rows, int $contrac
              VALUES (:no,:c,:csg,:w,'created',:cmt,:now)"
         );
         $cmt = 'Наряд, загружено из CSV: ' . $fileName;
+        if (trim((string)($header['external_no'] ?? '')) !== '') {
+            $cmt .= ' · Заказ № ' . trim((string)$header['external_no']);
+        }
         if (trim((string)($header['comment'] ?? '')) !== '') {
             $cmt .= ' · ' . trim((string)$header['comment']);
         }
@@ -792,13 +886,27 @@ function csv_upload_import_orders(PDO $shp, ?PDO $nom, array $rows, int $contrac
         $oid = (int)$shp->lastInsertId();
         $ins = $shp->prepare(
             "INSERT INTO client_order_items (order_id,sku,name,unit,qty,prod_date)
-             VALUES (:o,:sku,:name,'шт',:qty,:pd)"
+             VALUES (:o,:sku,:name,:unit,:qty,:pd)"
         );
         $qtyTotal = 0.0;
         foreach ($rows as $r) {
+            // Наименование: номенклатура — источник правды, наименование из файла — запасной вариант.
+            $name = (string)($names[$r['sku']] ?? '');
+            if ($name === '') {
+                $name = trim((string)($r['name'] ?? ''));
+            }
+            if ($name === '') {
+                $name = (string)$r['sku'];
+            }
+            $unit = trim((string)($r['unit'] ?? ''));
+            if ($unit === '') {
+                $unit = 'шт';
+            }
             $ins->execute([
-                ':o' => $oid, ':sku' => $r['sku'], ':name' => $names[$r['sku']] ?? $r['sku'],
-                ':qty' => $r['qty'], ':pd' => $r['prod_date'],
+                ':o' => $oid, ':sku' => $r['sku'],
+                ':name' => function_exists('mb_substr') ? mb_substr($name, 0, 255, 'UTF-8') : substr($name, 0, 255),
+                ':unit' => function_exists('mb_substr') ? mb_substr($unit, 0, 10, 'UTF-8') : substr($unit, 0, 10),
+                ':qty' => $r['qty'], ':pd' => $r['prod_date'] ?? null,
             ]);
             $qtyTotal += (float)$r['qty'];
         }
@@ -973,6 +1081,102 @@ function csv_upload_import_marks(PDO $rcp, int $rid, array $rows, int $userId, s
     try {
         $rcp->prepare("INSERT INTO receipt_history (receipt_id,user_id,action,field,old_value,new_value) VALUES (:r,:u,'marks','Марки ЧЗ',NULL,:n)")
             ->execute([':r' => $rid, ':u' => $userId, ':n' => 'Загружено из файла ' . $fileName . ': ' . $loaded . ' марок']);
+    } catch (Throwable) {
+    }
+    return ['loaded' => $loaded, 'skipped_dup' => $dups, 'by_sku' => $bySku, 'row_errors' => $rowErrors];
+}
+
+// ---------- Файл марок ЧЗ на документ отгрузки ----------
+
+/** Гарантировать таблицу реестра марок отгрузки (переносимо MySQL/SQLite). */
+function csv_upload_ensure_shipment_marks(PDO $pdo): void
+{
+    try {
+        $pdo->query("SELECT 1 FROM shipment_marks LIMIT 1")->fetchColumn();
+    } catch (Throwable) {
+        try {
+            if (csv_upload_is_mysql($pdo)) {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS shipment_marks (
+                  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shipment_id BIGINT UNSIGNED NOT NULL,
+                  sku VARCHAR(50) NOT NULL, marking_code TEXT NOT NULL, prod_date DATE NULL,
+                  status VARCHAR(20) NOT NULL DEFAULT 'expected', accepted_at DATETIME NULL,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  UNIQUE KEY uq_shipment_mark (shipment_id, marking_code(191)),
+                  KEY idx_sm_shipment (shipment_id), KEY idx_sm_sku (sku)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            } else {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS shipment_marks (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT, shipment_id INTEGER NOT NULL, sku TEXT NOT NULL,
+                  marking_code TEXT NOT NULL, prod_date TEXT, status TEXT NOT NULL DEFAULT 'expected',
+                  accepted_at TEXT, created_at TEXT DEFAULT (datetime('now')))");
+                $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_shipment_mark ON shipment_marks(shipment_id, marking_code)");
+            }
+        } catch (Throwable) {
+        }
+    }
+    // Дата производства марки — по ней подбирается «подходящая» марка при сортировке.
+    csv_upload_ensure_columns($pdo, 'shipment_marks', [
+        'prod_date' => ['DATE NULL', 'prod_date TEXT', 'prod_date DATE NULL'],
+    ]);
+}
+
+/**
+ * Записать марки в реестр отгрузки. Марки чужих артикулов отклоняются построчно.
+ * @return array{loaded, skipped_dup, by_sku, row_errors}
+ */
+function csv_upload_import_shipment_marks(PDO $pdo, int $shipmentId, array $rows, ?int $userId, string $fileName): array
+{
+    csv_upload_ensure_shipment_marks($pdo);
+    $h = $pdo->prepare("SELECT status FROM shipments WHERE id = :id");
+    $h->execute([':id' => $shipmentId]);
+    $head = $h->fetch(PDO::FETCH_ASSOC);
+    if (!$head) {
+        throw new RuntimeException('Документ не найден');
+    }
+    if (in_array((string)($head['status'] ?? ''), ['cancelled', 'archived', 'delivered'], true)) {
+        throw new RuntimeException('Документ закрыт — марки не загружаются');
+    }
+    if (!$rows) {
+        throw new RuntimeException('Нет корректных строк для загрузки');
+    }
+    $skus = [];
+    $q = $pdo->prepare("SELECT DISTINCT sku FROM shipment_items WHERE shipment_id = :r");
+    $q->execute([':r' => $shipmentId]);
+    foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $s) {
+        $skus[$s] = true;
+    }
+    $ins = $pdo->prepare("INSERT INTO shipment_marks (shipment_id, sku, marking_code, status) VALUES (:r, :s, :m, 'expected')");
+    $loaded = 0;
+    $dups = 0;
+    $bySku = [];
+    $rowErrors = [];
+    // Марка честного знака уникальна в системе маркировки: та же марка не может
+    // стоять в двух отгрузках. Проверяем ДО вставки, иначе дубль проходил бы,
+    // а расхождения вскрылись бы только при сортировке.
+    $findOther = $pdo->prepare(
+        "SELECT shipment_id FROM shipment_marks WHERE marking_code = :m AND shipment_id <> :r LIMIT 1"
+    );
+    foreach ($rows as $i => $r) {
+        if (!isset($skus[$r['sku']])) {
+            $rowErrors[] = 'Строка ' . ($i + 2) . ' (' . $r['sku'] . '): артикула нет в документе';
+            continue;
+        }
+        try {
+            $findOther->execute([':m' => $r['mark'], ':r' => $shipmentId]);
+            $other = $findOther->fetchColumn();
+            if ($other !== false && $other !== null) {
+                $rowErrors[] = 'Строка ' . ($i + 2) . ': марка ' . $r['mark'] . ' уже загружена в другую отгрузку ( #' . (int)$other . ')';
+                continue;
+            }
+            $ins->execute([':r' => $shipmentId, ':s' => $r['sku'], ':m' => $r['mark']]);
+            $loaded++;
+            $bySku[$r['sku']] = ($bySku[$r['sku']] ?? 0) + 1;
+        } catch (Throwable) {
+            $dups++; // уже есть в реестре
+        }
+    }
+    try {
+        $pdo->prepare("INSERT INTO shipment_history (shipment_id,user_id,action,field,old_value,new_value) VALUES (:s,:u,'marks','Марки ЧЗ',NULL,:n)")
+            ->execute([':s' => $shipmentId, ':u' => $userId, ':n' => 'Загружено из файла ' . $fileName . ': ' . $loaded . ' марок']);
     } catch (Throwable) {
     }
     return ['loaded' => $loaded, 'skipped_dup' => $dups, 'by_sku' => $bySku, 'row_errors' => $rowErrors];

@@ -16,6 +16,7 @@ final class CellService
         'temp_from', 'temp_to', 'allowed_goods', 'max_weight_kg', 'max_pallets',
         'hazmat_allowed', 'comment',
         'beam_width', 'cell_height_mm', 'allowed_pallet_types', 'pallet_type',
+        'allow_multi_pallet_types', 'allow_mixed_goods',
     ];
 
     private const LABELS = [
@@ -28,10 +29,42 @@ final class CellService
         'hazmat_allowed' => 'Опасный груз', 'comment' => 'Комментарий',
         'beam_width' => 'Ширина балки', 'cell_height_mm' => 'Высота ячейки',
         'allowed_pallet_types' => 'Типы тары', 'pallet_type' => 'Тип паллеты',
+        'allow_multi_pallet_types' => 'Несколько типов паллет',
+        'allow_mixed_goods' => 'Разные товары в ячейке',
         'status' => 'Статус', 'is_locked' => 'Блокировка',
     ];
 
     public const BEAMS = [3.2, 3.6];
+
+    /**
+     * Допустимые коды зон ячейки: базовые + справочник storage_zones
+     * (в нём, например, quarantine — «Карантин»).
+     * @return string[]
+     */
+    public function zoneCodes(): array
+    {
+        $out = CellStatus::zones();
+        try {
+            $st = $this->pdo->query("SELECT code FROM storage_zones WHERE COALESCE(is_active,1)=1");
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $c = trim((string)($r['code'] ?? ''));
+                if ($c !== '' && !in_array($c, $out, true)) {
+                    $out[] = $c;
+                }
+            }
+        } catch (Throwable) {
+        }
+        return $out;
+    }
+
+    /** Проверка зоны ячейки (код из справочника storage_zones или базовый). */
+    private function assertZone(string $zone): void
+    {
+        $z = trim($zone);
+        if ($z === '' || !in_array($z, $this->zoneCodes(), true)) {
+            throw new RuntimeException('Недопустимая зона: ' . implode('/', $this->zoneCodes()));
+        }
+    }
 
     public static function normalizeBeam(mixed $v): float
     {
@@ -61,6 +94,19 @@ final class CellService
         return implode(',', $parts);
     }
 
+    /** Тип тары в нормализованном виде: euro | fin (по умолчанию — euro). */
+    public static function normalizePalletType(mixed $v): string
+    {
+        $s = function_exists('mb_strtolower') ? mb_strtolower(trim((string)($v ?? '')), 'UTF-8') : strtolower(trim((string)($v ?? '')));
+        if (in_array($s, ['евро', 'euro', 'eur', 'е'], true)) {
+            return 'euro';
+        }
+        if (in_array($s, ['фин', 'финская', 'fin', 'fan', 'ф'], true)) {
+            return 'fin';
+        }
+        return $s !== '' ? $s : 'euro';
+    }
+
     private function now(): string
     {
         return $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? 'NOW()' : "datetime('now')";
@@ -76,9 +122,7 @@ final class CellService
             throw new RuntimeException('Склад обязателен');
         }
         $zone = (string)($b['zone'] ?? 'storage');
-        if (!in_array($zone, ['storage', 'shipment', 'receiving'], true)) {
-            throw new RuntimeException('Недопустимая зона: storage/shipment/receiving');
-        }
+        $this->assertZone($zone);
         $type = (string)($b['cell_type'] ?? 'pallet');
         if (!in_array($type, ['pallet', 'box'], true)) {
             throw new RuntimeException('Недопустимый тип: pallet/box');
@@ -117,7 +161,55 @@ final class CellService
         }
         $id = (int)$this->pdo->lastInsertId();
         $this->hist($id, $userId, $userFio, 'create', 'Создание', null, $code);
+        // Дополнительные зоны отбора (ручной отбор / отбор водителем) — несколько на ячейку.
+        $this->setPickZones($id, CellStatus::normalizePickZones($b['pick_zones'] ?? []), $userId, $userFio);
         return $id;
+    }
+
+    /**
+     * Зоны отбора ячейки (дополнительные): manual=ручной отбор, driver=отбор водителем.
+     * @param string[] $zones
+     */
+    public function setPickZones(int $cellId, array $zones, int $userId, string $userFio = 'Иванов И.И.', bool $hist = true): void
+    {
+        $zones = array_values(array_filter($zones, fn($z) => in_array($z, CellStatus::pickZones(), true)));
+        $cur = $this->pickZones($cellId);
+        if (array_values($cur) === array_values($zones)) {
+            return;
+        }
+        try {
+            $this->pdo->prepare('DELETE FROM storage_cell_zones WHERE cell_id = :c')->execute([':c' => $cellId]);
+            foreach ($zones as $z) {
+                $this->pdo->prepare('INSERT INTO storage_cell_zones (cell_id, zone) VALUES (:c, :z)')
+                    ->execute([':c' => $cellId, ':z' => $z]);
+            }
+        } catch (Throwable) {
+            return;
+        }
+        if ($hist) {
+            $oldRu = implode(', ', array_map([CellStatus::class, 'pickZoneLabel'], $cur));
+            $newRu = implode(', ', array_map([CellStatus::class, 'pickZoneLabel'], $zones));
+            $this->hist($cellId, $userId, $userFio, 'pick_zones', 'Зоны отбора', $oldRu, $newRu);
+        }
+    }
+
+    /** @return string[] коды зон отбора ячейки */
+    public function pickZones(int $cellId): array
+    {
+        try {
+            $st = $this->pdo->prepare('SELECT zone FROM storage_cell_zones WHERE cell_id = :c ORDER BY id');
+            $st->execute([':c' => $cellId]);
+            $out = [];
+            foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $z) {
+                $z = (string)$z;
+                if (!in_array($z, $out, true)) {
+                    $out[] = $z;
+                }
+            }
+            return $out;
+        } catch (Throwable) {
+            return [];
+        }
     }
 
     public function update(int $id, array $b, int $userId, string $userFio = 'Иванов И.И.'): void
@@ -129,9 +221,12 @@ final class CellService
             throw new RuntimeException('Ячейка не найдена');
         }
         $realCols = array_flip($this->tableColumns());
-        $b = $this->normalizePlacementFields($b, true);
+        $b = $this->normalizePlacementFields($b, true, $old);
         if (array_key_exists('capacity', $b)) {
             $this->assertCapacity($b['capacity']);
+        }
+        if (array_key_exists('zone', $b)) {
+            $this->assertZone((string)$b['zone']);
         }
         $set = [];
         $params = [':id' => $id];
@@ -158,6 +253,10 @@ final class CellService
         if ($set) {
             $this->pdo->prepare('UPDATE storage_cells SET ' . implode(', ', $set) . ' WHERE id = :id')->execute($params);
         }
+        // Дополнительные зоны отбора (несколько зон у ячейки).
+        if (array_key_exists('pick_zones', $b)) {
+            $this->setPickZones($id, CellStatus::normalizePickZones($b['pick_zones']), $userId, $userFio);
+        }
     }
 
     public function copy(int $id, int $userId, string $userFio = 'Иванов И.И.'): int
@@ -175,6 +274,11 @@ final class CellService
         $old['pallet_count'] = 0;
         $old['status'] = 'free';
         $old['is_locked'] = 0;
+        // Тип паллеты — тоже сбрасываем: копия ячейки ПУСТАЯ. Если оставить
+        // pallet_type, CellPlacement::isOccupied() считает копию занятой
+        // (она «съедает» место на балке) и запрещает её как цель перемещения.
+        $old['pallet_type'] = null;
+        $old['lock_reason'] = null;
         unset($old['created_at'], $old['updated_at']);
         $old = array_intersect_key($old, array_flip($this->tableColumns()));
         $keys = array_keys($old);
@@ -184,6 +288,8 @@ final class CellService
         $st->execute($old);
         $nid = (int)$this->pdo->lastInsertId();
         $this->hist($nid, $userId, $userFio, 'copy', 'Копирование', (string)$id, $old['code']);
+        // Копия наследует зоны отбора.
+        $this->setPickZones($nid, $this->pickZones($id), $userId, $userFio, false);
         return $nid;
     }
 
@@ -240,7 +346,7 @@ final class CellService
         if ((float)($row['qty'] ?? 0) != 0.0 || (float)($row['reserved_qty'] ?? 0) != 0.0) {
             throw new RuntimeException('Нельзя удалить: в ячейке есть товар или резерв (' . ($row['code'] ?? $id) . '). Сначала переместите его.');
         }
-        foreach (['cell_content', 'cell_history', 'cell_movements'] as $t) {
+        foreach (['cell_content', 'cell_history', 'cell_movements', 'storage_cell_zones'] as $t) {
             try {
                 $this->pdo->prepare("DELETE FROM $t WHERE cell_id = :id")->execute([':id' => $id]);
             } catch (Throwable) {
@@ -321,7 +427,15 @@ final class CellService
             $line = $this->pdo->prepare("SELECT * FROM cell_content WHERE cell_id = :c AND sku = :s LIMIT 1");
             $line->execute([':c' => $src['id'], ':s' => $sku]);
             $sLine = $line->fetch(PDO::FETCH_ASSOC);
-            if ($sLine && (float)$sLine['qty'] >= $qty) {
+            if (!$sLine) {
+                // Нет позиции этого товара в содержимом источника — перемещение
+                // не отразится в cell_content, и содержимое разойдётся с ячейкой.
+                throw new RuntimeException('В содержимом ячейки-источника нет товара ' . $sku);
+            }
+            if ((float)$sLine['qty'] < $qty) {
+                throw new RuntimeException('Недостаточно товара ' . $sku . ' в ячейке-источнике: ' . $sLine['qty']);
+            }
+            {
                 $this->pdo->prepare("UPDATE cell_content SET qty = qty - :q WHERE id = :id")
                     ->execute([':q' => $qty, ':id' => $sLine['id']]);
                 $line->execute([':c' => $dst['id'], ':s' => $sku]);
@@ -364,6 +478,29 @@ final class CellService
             throw $e;
         }
 
+        // Журнал склада (модуль 14): перемещение паллеты/товара между ячейками.
+        // Пишем рядом с cell_movements (там же смотрим источник движения),
+        // но уже после фиксации перемещения в своей транзакции.
+        try {
+            require_once __DIR__ . '/../shared/Journal.php';
+            WmsJournal::log(wms_journal_pdo(), [
+                'op_type' => 'перемещение',
+                'doc_type' => 'Перемещение',
+                'doc_no' => $docNo,
+                'sku' => $sku,
+                'product_name' => (string)($sLine['name'] ?? ''),
+                'qty' => $qty,
+                'pallet' => (string)($sLine['pallet'] ?? ''),
+                'cell_from' => (string)$src['code'],
+                'cell_to' => (string)$dst['code'],
+                'zone' => 'Хранение',
+                'user_id' => $userId,
+                'user_fio' => $userFio,
+                'comment' => 'Перемещение товара между ячейками',
+            ]);
+        } catch (Throwable) {
+        }
+
         // Best-effort: отразить смену ячейки в Номенклатуре (product_stock.cell).
         $nomSync = ['synced' => false, 'note' => 'sku не найден в номенклатуре или БД недоступна'];
         try {
@@ -373,11 +510,69 @@ final class CellService
             $p->execute([':s' => $sku]);
             $pid = $p->fetchColumn();
             if ($pid) {
-                $u = $nom->prepare(
-                    "UPDATE product_stock SET cell = :t WHERE product_id = :p AND warehouse_id = :w AND cell = :f"
+                // Переносим ТОЛЬКО перемещённое количество: строки запаса этого
+                // SKU в исходной ячейке по очереди (по паллетам), а не все строки
+                // целиком — иначе перемещение 3 шт из ячейки уводило в приёмник
+                // ВСЕ паллеты этого товара.
+                $rows = $nom->prepare(
+                    "SELECT id, pallet, pallet_type, receipt_id, qty FROM product_stock
+                     WHERE product_id = :p AND warehouse_id = :w AND cell = :f ORDER BY id"
                 );
-                $u->execute([':t' => $dst['code'], ':p' => $pid, ':w' => $src['warehouse_id'], ':f' => $src['code']]);
-                $nomSync = ['synced' => true, 'updated' => $u->rowCount()];
+                $rows->execute([':p' => $pid, ':w' => $src['warehouse_id'], ':f' => $src['code']]);
+                $rest = (float)$qty;
+                $moved = 0;
+                foreach ($rows->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                    if ($rest <= 1e-9) {
+                        break;
+                    }
+                    $rq = (float)$r['qty'];
+                    if ($rq <= 1e-9) {
+                        continue;
+                    }
+                    $take = min($rq, $rest);
+                    if ($take >= $rq - 1e-9) {
+                        // Строка переезжает целиком.
+                        $nom->prepare("UPDATE product_stock SET cell = :t WHERE id = :id")
+                            ->execute([':t' => $dst['code'], ':id' => $r['id']]);
+                    } else {
+                        // Часть строки: в источнике убавляем, в приёмнике начисляем.
+                        $nom->prepare("UPDATE product_stock SET qty = qty - :q WHERE id = :id")
+                            ->execute([':q' => $take, ':id' => $r['id']]);
+                        $d = $nom->prepare(
+                            "SELECT id FROM product_stock WHERE product_id = :p AND warehouse_id = :w
+                             AND cell = :c AND COALESCE(pallet,'') = :pal LIMIT 1"
+                        );
+                        $d->execute([':p' => $pid, ':w' => $src['warehouse_id'], ':c' => $dst['code'],
+                            ':pal' => (string)($r['pallet'] ?? '')]);
+                        if ($dId = $d->fetchColumn()) {
+                            $nom->prepare("UPDATE product_stock SET qty = qty + :q WHERE id = :id")
+                                ->execute([':q' => $take, ':id' => (int)$dId]);
+                        } else {
+                            $ins = $nom->prepare(
+                                "INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,pallet_type,qty"
+                                . ($r['receipt_id'] !== null ? ',receipt_id' : '') . ") VALUES (:p,:w,:c,:pal,:pt,:q"
+                                . ($r['receipt_id'] !== null ? ',:r' : '') . ")"
+                            );
+                            $ip = [':p' => $pid, ':w' => $src['warehouse_id'], ':c' => $dst['code'],
+                                ':pal' => $r['pallet'] ?? null, ':pt' => $r['pallet_type'] ?? null, ':q' => $take];
+                            if ($r['receipt_id'] !== null) {
+                                $ip[':r'] = $r['receipt_id'];
+                            }
+                            try {
+                                $ins->execute($ip);
+                            } catch (Throwable) {
+                                $nom->prepare(
+                                    "INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,pallet_type,qty)
+                                     VALUES (:p,:w,:c,:pal,:pt,:q)"
+                                )->execute([':p' => $pid, ':w' => $src['warehouse_id'], ':c' => $dst['code'],
+                                    ':pal' => $r['pallet'] ?? null, ':pt' => $r['pallet_type'] ?? null, ':q' => $take]);
+                            }
+                        }
+                    }
+                    $rest = round($rest - $take, 3);
+                    $moved++;
+                }
+                $nomSync = ['synced' => true, 'updated' => $moved, 'qty' => round((float)$qty - max(0, $rest), 3)];
             }
         } catch (Throwable $e) {
             $nomSync = ['synced' => false, 'error' => $e->getMessage()];
@@ -389,7 +584,8 @@ final class CellService
     public function massUpdate(array $ids, array $patch, int $userId, string $userFio = 'Иванов И.И.'): int
     {
         $allowed = ['status', 'zone', 'cell_type', 'category', 'allowed_goods', 'is_locked',
-            'beam_width', 'cell_height_mm', 'allowed_pallet_types'];
+            'beam_width', 'cell_height_mm', 'allowed_pallet_types', 'pick_zones',
+            'allow_multi_pallet_types', 'allow_mixed_goods'];
         $patch = array_intersect_key($patch, array_flip($allowed));
         if (!$ids || !$patch) {
             return 0;
@@ -398,13 +594,22 @@ final class CellService
             throw new RuntimeException('Недопустимый статус');
         }
         $n = 0;
+        // Зоны отбора — отдельная таблица (несколько зон у ячейки).
+        $hasPickZones = array_key_exists('pick_zones', $patch);
+        $pickZones = $hasPickZones ? CellStatus::normalizePickZones($patch['pick_zones']) : [];
+        if ($hasPickZones) {
+            unset($patch['pick_zones']);
+        }
         foreach ($ids as $id) {
             $id = (int)$id;
-            $cur = $this->pdo->prepare("SELECT * FROM storage_cells WHERE id = :id");
+            $cur = $this->pdo->prepare('SELECT * FROM storage_cells WHERE id = :id');
             $cur->execute([':id' => $id]);
             $old = $cur->fetch(PDO::FETCH_ASSOC);
             if (!$old) {
                 continue;
+            }
+            if ($hasPickZones) {
+                $this->setPickZones($id, $pickZones, $userId, $userFio);
             }
             $set = [];
             $params = [':id' => $id];
@@ -434,7 +639,8 @@ final class CellService
             throw new RuntimeException('Ячейка не найдена');
         }
         return ['kind' => $kind, 'code' => $c['code'], 'warehouse' => $c['warehouse'] ?? '',
-            'zone' => CellStatus::zoneLabel($c['zone'] ?? null), 'type' => CellStatus::typeLabel($c['cell_type'] ?? null)];
+            'zone' => CellStatus::zoneLabel($c['zone'] ?? null), 'type' => CellStatus::typeLabel($c['cell_type'] ?? null),
+            'pick_zones' => implode(', ', array_map(fn($z) => CellStatus::pickZoneLabel($z), $this->pickZones((int)$id)))];
     }
 
     public function exportCsv(CellFilter $f, CellRepository $repo): string
@@ -442,12 +648,12 @@ final class CellService
         $f->page = 1;
         $f->perPage = 5000;
         $data = $repo->paginate($f);
-        $head = ['Адрес', 'Склад', 'Зона', 'Тип', 'Балка', 'Высота', 'Тара', 'Категория', 'Статус', 'Заполненность %', 'В ячейке', 'Резерв', 'Остаток', 'Паллет', 'Темп. режим', 'Блокировка'];
+        $head = ['Адрес', 'Склад', 'Зона', 'Зоны отбора', 'Тип', 'Балка', 'Высота', 'Тара', 'Категория', 'Статус', 'Заполненность %', 'В ячейке', 'Резерв', 'Остаток', 'Паллет', 'Темп. режим', 'Блокировка'];
         $lines = ["\xEF\xBB\xBF" . implode(';', $head)];
         foreach ($data['rows'] as $r) {
             $lines[] = implode(';', [
                 $r['code'] ?? '', str_replace(';', ',', (string)($r['warehouse'] ?? '')),
-                $r['zone_label'] ?? '', $r['type_label'] ?? '',
+                $r['zone_label'] ?? '', $r['pick_zones_label'] ?? '', $r['type_label'] ?? '',
                 $r['beam_label'] ?? '', $r['height_label'] ?? '', $r['pallet_types_label'] ?? '',
                 str_replace(';', ',', (string)($r['category'] ?? '')),
                 $r['status_label'] ?? '', !empty($r['is_unlimited']) ? '∞' : (string)($r['fill_pct'] ?? 0),
@@ -508,9 +714,7 @@ final class CellService
         }
         $warehouseId = (int)$b['warehouse_id'];
         $zone = (string)($b['zone'] ?? 'storage');
-        if (!in_array($zone, ['storage', 'shipment', 'receiving'], true)) {
-            throw new RuntimeException('Недопустимая зона: storage/shipment/receiving');
-        }
+        $this->assertZone($zone);
         $type = (string)($b['cell_type'] ?? 'pallet');
         if (!in_array($type, ['pallet', 'box'], true)) {
             throw new RuntimeException('Недопустимый тип: pallet/box');
@@ -566,6 +770,8 @@ final class CellService
             'beam_width' => $beam,
             'cell_height_mm' => $norm['cell_height_mm'] ?? null,
             'allowed_pallet_types' => $norm['allowed_pallet_types'] ?? 'euro,fin',
+            'allow_multi_pallet_types' => $norm['allow_multi_pallet_types'] ?? 1,
+            'allow_mixed_goods' => $norm['allow_mixed_goods'] ?? 1,
         ];
         $base = array_intersect_key($base, $realCols);
 
@@ -654,10 +860,13 @@ final class CellService
 
     /**
      * Нормализация полей размещения: ширина балки (3.2/3.6), высота ячейки (мм),
-     * разрешенные типы тары (euro/fin), фактический тип паллеты.
+     * разрешенные типы тары (euro/fin), фактический тип паллеты, флаги настроек
+     * ячейки (несколько типов паллет / разные товары в одной ячейке).
      * $partial=true — нормализовать только переданные ключи (для update).
+     * $old — текущая строка ячейки (для update): нужна, чтобы галка «Несколько типов
+     * паллет» знала текущее состояние и закреплённый тип тары.
      */
-    private function normalizePlacementFields(array $b, bool $partial = false): array
+    private function normalizePlacementFields(array $b, bool $partial = false, ?array $old = null): array
     {
         $out = $b;
         if (!$partial || array_key_exists('beam_width', $b)) {
@@ -694,6 +903,50 @@ final class CellService
                 }
             }
         }
+        // Флаги настроек ячейки: 0/1 (для булевых значений из JSON).
+        foreach (['allow_multi_pallet_types', 'allow_mixed_goods'] as $flag) {
+            if (array_key_exists($flag, $out)) {
+                $out[$flag] = ((int)$out[$flag] === 1) ? 1 : 0;
+            }
+        }
+        // Связка «несколько типов паллет» ↔ allowed_pallet_types:
+        //   галка ВКЛ  → в ячейке допустимы оба типа (euro,fin);
+        //   галка ВЫКЛ → в ячейке только один тип: закреплённый (pallet_type) либо euro.
+        $multi = null;
+        if (array_key_exists('allow_multi_pallet_types', $out)) {
+            $multi = ((int)$out['allow_multi_pallet_types'] === 1);
+        } elseif ($old !== null) {
+            $multi = ((int)($old['allow_multi_pallet_types'] ?? 1) === 1);
+        }
+        if ($multi !== null) {
+            $out['allow_multi_pallet_types'] = $multi ? 1 : 0;
+            if ($multi) {
+                $out['allowed_pallet_types'] = 'euro,fin';
+            } else {
+                $single = '';
+                if (array_key_exists('allowed_pallet_types', $out)
+                    && $out['allowed_pallet_types'] !== null && $out['allowed_pallet_types'] !== '') {
+                    $parts = explode(',', (string)$out['allowed_pallet_types']);
+                    if (count($parts) === 1) {
+                        $single = trim($parts[0]);
+                    }
+                }
+                if ($single === '') {
+                    // Текущий фактический тип паллеты — иначе euro по умолчанию.
+                    $cur = array_key_exists('pallet_type', $out)
+                        ? (string)($out['pallet_type'] ?? '')
+                        : (string)($old['pallet_type'] ?? '');
+                    $single = self::normalizePalletType($cur);
+                    if ($single !== 'euro' && $single !== 'fin') {
+                        $single = 'euro';
+                    }
+                }
+                if ($single !== 'euro' && $single !== 'fin') {
+                    throw new RuntimeException('Закреплённый тип тары: euro (евро) или fin (фин)');
+                }
+                $out['allowed_pallet_types'] = $single;
+            }
+        }
         return $out;
     }
 
@@ -712,6 +965,11 @@ final class CellService
                     $out[] = $c['name'];
                 }
                 return $this->colsCache = $out;
+            }
+            if ($drv === 'pgsql') {
+                $st = $this->pdo->prepare("SELECT column_name FROM information_schema.columns WHERE table_name='storage_cells'");
+                $st->execute();
+                return $this->colsCache = array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN));
             }
             $st = $this->pdo->query("SHOW COLUMNS FROM storage_cells");
             $out = [];

@@ -50,9 +50,12 @@ final class ReceiptController
             return;
         }
         $pdo = $this->prop('pdo');
+        // Номер документа — ДО открытия транзакции: на MySQL LOCK TABLES
+        // неявно коммитит активную транзакцию, и последующий commit() падал бы
+        // с «There is no active transaction» (строка всё равно была бы записана).
+        $no = $this->service->nextDocNo();
         $pdo->beginTransaction();
         try {
-            $no = $this->service->nextDocNo();
             $now = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? 'NOW()' : "datetime('now')";
             $st = $pdo->prepare(
                 "INSERT INTO receipts (doc_no,external_no,doc_date,plan_delivery_date,supplier_id,contractor_id,
@@ -94,9 +97,14 @@ final class ReceiptController
     {
         try {
             $to = ReceiptStatus::from($body['to'] ?? '');
-            $this->service->changeStatus($id, $to, $this->userId);
+            $closed = $this->service->changeStatus($id, $to, $this->userId);
             $stock = $this->maybePushStock($id, $to);
-            $this->json(['ok' => true, 'status' => $to->value, 'label' => $to->label(), 'stock' => $stock]);
+            // При закрытии статус выводится из факта расхождений.
+            $status = is_array($closed) && isset($closed['status']) ? (string)$closed['status'] : $to->value;
+            $this->json(['ok' => true, 'status' => $status, 'label' => ReceiptStatus::tryLabel($status),
+                'stock' => $stock,
+                'acts' => $closed['acts'] ?? [], 'excess_qty' => $closed['excess_qty'] ?? 0,
+                'shortage_qty' => $closed['shortage_qty'] ?? 0, 'deviation' => $closed['deviation'] ?? '']);
         } catch (Throwable $e) {
             $this->json(['error' => $e->getMessage()], 400);
         }
@@ -121,6 +129,9 @@ final class ReceiptController
     }
 
     // Закрытие приходует факт в Номенклатуру (прод MySQL — та же БД `wms`, демо — второй файл через shared).
+    // ВНИМАНИЕ: само закрытие (гарды + акты расхождений + статус по факту)
+    // уже выполнено в ReceiptService::changeStatus() через wms_close_receipt_guarded().
+    // Здесь только проброс факта в Номенклатуру.
     private function maybePushStock(int $id, ReceiptStatus $to): ?array
     {
         if (!in_array($to, [ReceiptStatus::Closed, ReceiptStatus::ClosedShort], true)) {
@@ -128,13 +139,16 @@ final class ReceiptController
         }
         try {
             $pdo = $this->prop('pdo');
-            if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
-                require_once __DIR__ . '/../shared/StockSync.php';
-                return wms_push_receipt_to_nomenclature($pdo, $pdo, $id, $this->userId, 'Реестр поступлений');
-            }
-            require_once __DIR__ . '/../shared/db.php';
+            $isMysql = ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql');
+            $out = [];
             require_once __DIR__ . '/../shared/StockSync.php';
-            return wms_push_receipt_to_nomenclature($pdo, wms_nomenclature_pdo(), $id, $this->userId, 'Реестр поступлений');
+            if ($isMysql) {
+                $out['stock'] = wms_push_receipt_to_nomenclature($pdo, $pdo, $id, $this->userId, 'Реестр поступлений');
+            } else {
+                require_once __DIR__ . '/../shared/db.php';
+                $out['stock'] = wms_push_receipt_to_nomenclature($pdo, wms_nomenclature_pdo(), $id, $this->userId, 'Реестр поступлений');
+            }
+            return $out;
         } catch (Throwable $e) {
             return ['synced' => false, 'error' => $e->getMessage()];
         }
@@ -222,7 +236,8 @@ final class ReceiptController
                     ? ['line_no' => 'п/п', 'code' => 'Код', 'sku' => 'Артикул', 'name' => 'Наименование', 'unit' => 'Ед.', 'qty' => 'Кол-во']
                     : null;
                 $bcText = ($kind === 'receiver_doc') ? (string)($data['head']['doc_no'] ?? '') : '';
-                wms_pdf_output(wms_pdf_auto($data, $force, $bcText !== '' ? $bcText : null), wms_pdf_filename($data['title'] ?? $kind, $id));
+                // Печатные формы поступлений печатаем в альбомной ориентации.
+                wms_pdf_output(wms_pdf_auto($data, $force, $bcText !== '' ? $bcText : null, true), wms_pdf_filename($data['title'] ?? $kind, $id));
             } catch (Throwable $e) {
                 http_response_code(400);
                 header('Content-Type: text/plain; charset=utf-8');

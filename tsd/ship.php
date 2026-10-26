@@ -1,29 +1,18 @@
 <?php
 declare(strict_types=1);
-// ТСД-модуль отгрузок (сборка). Отдельная точка, пишет в ТУ ЖЕ БД, что и /shipments/demo_sqlite.php:
+require_once __DIR__ . '/../shared/tsd_auth.php';
+// ТСД-модуль отгрузок (сборка). Пишет в ЕДИНУЮ БД отгрузок
+// (03-otgruzki/wms_demo.sqlite через shared/db.php — тот же файл, что модуль 03):
 //   tsd_picks (факт сборки: shipment_id, sku, qty, user_id) — новая таблица факта,
 //   shipments.readiness (0-100%), shipments.status (assembling -> assembled),
 //   shipment_history (action=pick).
 // То есть "собрал на ТСД -> сразу видно в Отгрузках".
 
-const TSD_TOKEN = 'tsd-12345';
 const TSD_SHIP_STATUSES = ['created', 'assembling', 'assembled', 'packing'];
 
 function tsd_token_ok(): bool
 {
-    $t = $_GET['token'] ?? $_POST['token'] ?? '';
-    if ($t === '') {
-        $h = $_SERVER['HTTP_X_TSD_TOKEN'] ?? '';
-        if ($h !== '') {
-            $t = $h;
-        } else {
-            $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-            if (str_starts_with($auth, 'Bearer ')) {
-                $t = substr($auth, 7);
-            }
-        }
-    }
-    if ($t !== '' && hash_equals(TSD_TOKEN, (string)$t)) {
+    if (wms_tsd_token_ok()) {
         return true;
     }
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -42,10 +31,12 @@ function j(mixed $d, int $c = 200): void
 
 function db(): PDO
 {
-    $pdo = new PDO('sqlite:' . __DIR__ . '/../shipments/wms_demo.sqlite', null, null, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
+    // Единая БД отгрузок (владелец — 03-otgruzki). См. shared/db.php.
+    // Тот же файл читает модуль 03 (03-otgruzki/demo_sqlite.php), поэтому
+    // сборки с ТСД сразу видны в веб-модуле «Отгрузки» (факт tsd_picks).
+    require_once __DIR__ . '/../shared/db.php';
+    if (function_exists('wms_use_pgsql') && wms_use_pgsql()) return wms_pg_pdo();
+    $pdo = wms_shipments_pdo();
     $pdo->exec("CREATE TABLE IF NOT EXISTS tsd_picks (id INTEGER PRIMARY KEY AUTOINCREMENT, shipment_id INTEGER NOT NULL, sku TEXT NOT NULL, qty REAL NOT NULL DEFAULT 1, user_id INTEGER, created_at TEXT DEFAULT (datetime('now')))");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_picks_ship ON tsd_picks(shipment_id)");
     return $pdo;

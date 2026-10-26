@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS storage_cells (
   cell_height_mm INT NULL COMMENT 'Высота ячейки, мм: паллета выше не встанет',
   allowed_pallet_types VARCHAR(30) NOT NULL DEFAULT 'euro,fin' COMMENT 'Какие типы тары можно размещать: euro / fin / euro,fin',
   pallet_type VARCHAR(10) NULL COMMENT 'Фактический тип стоящей паллеты: euro / fin',
+  allow_multi_pallet_types TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Разрешено несколько типов паллет (0 — в ячейке только один тип тары)',
+  allow_mixed_goods TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Разрешено хранить разные товары в одной ячейке (0 — только один товар)',
+  quality_lock TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Только новый товар: 1=брак в ячейку нельзя размещать',
   hazmat_allowed TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Параметры: опасный груз разрешен',
   comment TEXT NULL COMMENT 'Комментарий: Провести инвент',
   is_archived TINYINT(1) NOT NULL DEFAULT 0,
@@ -78,6 +81,19 @@ CREATE TABLE IF NOT EXISTS cell_content (
   CONSTRAINT fk_cc_cell FOREIGN KEY (cell_id) REFERENCES storage_cells (id) ON DELETE CASCADE,
   KEY idx_cc_cell (cell_id),
   KEY idx_cc_sku (sku)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Дополнительные зоны ячейки (ТСД «Отбор по зоне»). У ячейки может быть несколько зон:
+-- manual = Ручной отбор (задание падает только роли Кладовщик),
+-- driver = Отбор водителем (задание падает только роли Водитель).
+CREATE TABLE IF NOT EXISTS storage_cell_zones (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  cell_id BIGINT UNSIGNED NOT NULL,
+  zone VARCHAR(30) NOT NULL COMMENT 'manual=Ручной отбор, driver=Отбор водителем',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_cz_cell FOREIGN KEY (cell_id) REFERENCES storage_cells (id) ON DELETE CASCADE,
+  UNIQUE KEY uq_cell_zone (cell_id, zone),
+  KEY idx_cz_zone (zone)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- История изменений ячейки (вкладка "История").

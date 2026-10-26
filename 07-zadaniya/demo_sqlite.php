@@ -15,10 +15,13 @@ require_once __DIR__ . '/../shared/db.php';
 // Старый локальный файл 07-zadaniya/wms_tasks.sqlite больше не используется
 // (13 строк из него побайтово совпадают — миграция не требуется).
 $pdo = wms_tasks_pdo();
+$isSqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
 
 // --- Схема SQLite (упрощенная; прод — tasks/schema.sql на MySQL) ---
+// Только SQLite: в PostgreSQL схема создаётся из db/schema-pg.sql, сиды — миграцией.
+if ($isSqlite):
 $pdo->exec("CREATE TABLE IF NOT EXISTS warehouses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
-$pdo->exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, fio TEXT NOT NULL, role TEXT DEFAULT 'storekeeper')");
+// users — единый справочник сотрудников (shared/wms_users.sqlite), подключён в shared/db.php.
 $pdo->exec("CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, doc_no TEXT NOT NULL UNIQUE, type TEXT NOT NULL DEFAULT 'сбор',
   status TEXT NOT NULL DEFAULT 'new', priority TEXT NOT NULL DEFAULT 'normal',
@@ -43,12 +46,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS task_history (
 // --- Сид из макета, если пусто ---
 if ((int)$pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn() === 0) {
     $pdo->exec("INSERT INTO warehouses (id,name) VALUES (1,'Основной склад'),(2,'Холодильный склад')");
-    $pdo->exec("INSERT INTO users (id,fio,role) VALUES
-      (1,'Иванов И.И.','Администратор'),(11,'11 Ибрагимов Е.С.','Кладовщик'),
-      (233,'233 Петрова М.А.','Кладовщик'),(258,'258 Смирнов А.С.','Кладовщик'),
-      (819,'819 Шветцов А.В.','Кладовщик'),(1220,'1220 Михайлова О.С.','Кладовщик'),
-      (1287,'1287 Ш Феничев Олег','Кладовщик'),(1465,'1465 Ионова М.И.','Кладовщик'),
-      (3315,'3315 Иванов П.М.','Кладовщик')");
+    // Сотрудники — в общей базе (shared/wms_users.sqlite), сиды там.
 
     // doc_no, created, type, status, priority, wh, doc_ref, order_ref, exec_id, exec_fio, plan, fact, prog, cells, vol, weight, due
     $rows = [
@@ -80,6 +78,7 @@ if ((int)$pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn() === 0) {
 
     $pdo->exec("INSERT INTO task_history (task_id,user_id,action,field,old_value,new_value) VALUES ($tid,1,'create',NULL,NULL,'TASK-202506-02456')");
 }
+endif;
 
 $repo = new TaskRepository($pdo);
 $service = new TaskService($pdo);
