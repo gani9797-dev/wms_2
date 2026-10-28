@@ -264,7 +264,7 @@ function wms_sync_pallet_stock(PDO $recPdo, PDO $nomPdo, int $receiptId, string 
     $row = null;
     try {
         $sRow = $nomPdo->prepare(
-            "SELECT id, qty FROM product_stock WHERE product_id=:p AND warehouse_id=:w AND cell=:c
+            "SELECT id, qty, COALESCE(supplier_batch,'') AS supplier_batch FROM product_stock WHERE product_id=:p AND warehouse_id=:w AND cell=:c
              AND COALESCE(receipt_id,0)=:r AND COALESCE(pallet,'')=:pal LIMIT 1"
         );
         $sRow->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':r' => $receiptId, ':pal' => $pallet]);
@@ -272,12 +272,54 @@ function wms_sync_pallet_stock(PDO $recPdo, PDO $nomPdo, int $receiptId, string 
     } catch (Throwable) {
         $row = null;
     }
+    // Партия для запаса и журнала: по конкретной паллете (receipt_operations),
+    // иначе из позиции приёмки, иначе из строки запаса.
+    $batch = trim((string)($row['supplier_batch'] ?? ''));
+    if ($batch === '' && $pallet !== '') {
+        try {
+            $bq = $recPdo->prepare(
+                "SELECT supplier_batch FROM receipt_operations
+                  WHERE pallet=:p AND sku=:s AND COALESCE(supplier_batch,'')<>''
+                  ORDER BY id LIMIT 1"
+            );
+            $bq->execute([':p' => $pallet, ':s' => $sku]);
+            $batch = trim((string)($bq->fetchColumn() ?: ''));
+        } catch (Throwable) {
+        }
+    }
+    if ($batch === '') {
+        try {
+            $bq = $recPdo->prepare(
+                "SELECT supplier_batch FROM receipt_items
+                  WHERE receipt_id=:r AND sku=:s AND COALESCE(supplier_batch,'')<>''
+                  ORDER BY id LIMIT 1"
+            );
+            $bq->execute([':r' => $receiptId, ':s' => $sku]);
+            $batch = trim((string)($bq->fetchColumn() ?: ''));
+        } catch (Throwable) {
+        }
+    }
     $storage = null;
     try {
         require_once __DIR__ . '/db.php';
         $storage = wms_storage_pdo();
     } catch (Throwable) {
-        $storage = null;
+    $palletDate = null;
+    if ($pallet !== '') {
+        try {
+            $pq = $recPdo->prepare("SELECT created_at FROM tsd_pallets WHERE sscc=:s ORDER BY id DESC LIMIT 1");
+            $pq->execute([':s' => $pallet]);
+            $v = $pq->fetchColumn();
+            if ($v !== false && $v !== null && trim((string)$v) !== '') {
+                $palletDate = substr(trim((string)$v), 0, 10);
+            }
+        } catch (Throwable) {
+        }
+    }
+    if ($palletDate === null) {
+        $palletDate = date('Y-m-d');
+    }
+    $storage = null;
     }
     $ptype = wms_pallet_type_for($nomPdo, $storage, $cell, $prod);
 
@@ -287,8 +329,8 @@ function wms_sync_pallet_stock(PDO $recPdo, PDO $nomPdo, int $receiptId, string 
     if ($row) {
         // UPDATE — остаток приводится к факту приёмки по паллете.
         try {
-            $nomPdo->prepare("UPDATE product_stock SET qty=:q, pallet_type=COALESCE(pallet_type,:pt), prod_date=COALESCE(:pd, prod_date), quality=COALESCE(:ql, quality) WHERE id=:id")
-                ->execute([':q' => $fact, ':pt' => $ptype, ':pd' => $prodDate, ':ql' => $quality, ':id' => (int)$row['id']]);
+            $nomPdo->prepare("UPDATE product_stock SET qty=:q, pallet_type=COALESCE(pallet_type,:pt), prod_date=COALESCE(:pd, prod_date), quality=COALESCE(:ql, quality), pallet_date=COALESCE(pallet_date, :pdt), supplier_batch=COALESCE(NULLIF(supplier_batch,''), :sb) WHERE id=:id")
+                ->execute([':q' => $fact, ':pt' => $ptype, ':pd' => $prodDate, ':ql' => $quality, ':pdt' => $palletDate, ':sb' => ($batch !== '' ? $batch : null), ':id' => (int)$row['id']]);
         } catch (Throwable) {
             $nomPdo->prepare("UPDATE product_stock SET qty=:q WHERE id=:id")
                 ->execute([':q' => $fact, ':id' => (int)$row['id']]);
@@ -297,22 +339,23 @@ function wms_sync_pallet_stock(PDO $recPdo, PDO $nomPdo, int $receiptId, string 
     } else {
         try {
             $nomPdo->prepare(
-                "INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,pallet_type,qty,receipt_id,receipt_no,prod_date,quality)
-                 VALUES (:p,:w,:c,:pal,:pt,:q,:r,:d,:pd,:ql)"
+                "INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,pallet_type,qty,receipt_id,receipt_no,prod_date,quality,pallet_date,supplier_batch)
+                 VALUES (:p,:w,:c,:pal,:pt,:q,:r,:d,:pd,:ql,:pdt,:sb)"
             )->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':pal' => ($pallet !== '' ? $pallet : null),
-                ':pt' => $ptype, ':q' => $fact, ':r' => $receiptId, ':d' => $docNo, ':pd' => $prodDate, ':ql' => $quality]);
+                ':pt' => $ptype, ':q' => $fact, ':r' => $receiptId, ':d' => $docNo, ':pd' => $prodDate, ':ql' => $quality, ':pdt' => $palletDate,
+                ':sb' => ($batch !== '' ? $batch : null)]);
             $out['stock_id'] = (int)$nomPdo->lastInsertId();
         } catch (Throwable) {
             try {
                 $nomPdo->prepare(
-                    "INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,qty,prod_date,quality)
-                     VALUES (:p,:w,:c,:pal,:q,:pd,:ql)"
+                    "INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,qty,prod_date,quality,pallet_date,supplier_batch)
+                     VALUES (:p,:w,:c,:pal,:q,:pd,:ql,:pdt,:sb)"
                 )->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':pal' => ($pallet !== '' ? $pallet : null),
-                    ':q' => $fact, ':pd' => $prodDate, ':ql' => $quality]);
+                    ':q' => $fact, ':pd' => $prodDate, ':ql' => $quality, ':pdt' => $palletDate, ':sb' => ($batch !== '' ? $batch : null)]);
             } catch (Throwable) {
                 $nomPdo->prepare(
-                    "INSERT INTO product_stock (product_id,warehouse_id,cell,qty) VALUES (:p,:w,:c,:q)"
-                )->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':q' => $fact]);
+                    "INSERT INTO product_stock (product_id,warehouse_id,cell,qty,pallet_date,supplier_batch) VALUES (:p,:w,:c,:q,:pdt,:sb)"
+                )->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':q' => $fact, ':pdt' => $palletDate, ':sb' => ($batch !== '' ? $batch : null)]);
             }
             $out['stock_id'] = (int)$nomPdo->lastInsertId();
         }
@@ -360,6 +403,7 @@ function wms_sync_pallet_stock(PDO $recPdo, PDO $nomPdo, int $receiptId, string 
                 'doc_no' => $docNo,
                 'sku' => $sku,
                 'product_name' => (string)($prod['name'] ?? ''),
+                'supplier_batch' => $batch,
                 'qty' => $delta,
                 'pallet' => $pallet,
                 'cell_to' => $cell,

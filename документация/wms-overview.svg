@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6C8EBF"/>
+    </marker>
+    <style>
+      .box { rx: 9; stroke-width: 1.3; }
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 700; fill: #1C2331; }
+      .sub { font-family: Arial, Helvetica, sans-serif; font-size: 11px; fill: #4A5568; }
+      .lane-title { font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 700; fill: #374151; }
+      .arrow { fill: none; stroke: #6C8EBF; stroke-width: 1.8; marker-end: url(#arrow); }
+      .dashed { fill: none; stroke: #6C8EBF; stroke-width: 1.8; stroke-dasharray: 6 4; marker-end: url(#arrow); }
+      .arrow-label { font-family: Arial, Helvetica, sans-serif; font-size: 10px; fill: #5A6473; text-anchor: middle; }
+      .note { font-family: Arial, Helvetica, sans-serif; font-size: 11px; fill: #5A4A00; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="#FFFFFF"/>
+  <text x="30" y="30" font-family="Arial" font-size="22" font-weight="700" fill="#1C2331">WMS TiMLog — модули и потоки</text>
+  <text x="30" y="50" font-family="Arial" font-size="12" fill="#6B7280">Обзор. Детали — в wms-architecture.drawio, страницы 02–06.</text>
+
+  <rect x="20" y="70" width="1540" height="120" rx="8" fill="#F8F9FA" stroke="#D0D7DE"/>
+  <text x="32" y="94" class="lane-title">1. Вход и права</text>
+  <rect x="20" y="210" width="1540" height="120" rx="8" fill="#F8F9FA" stroke="#D0D7DE"/>
+  <text x="32" y="234" class="lane-title">2. Приход</text>
+  <rect x="20" y="350" width="1540" height="120" rx="8" fill="#F8F9FA" stroke="#D0D7DE"/>
+  <text x="32" y="374" class="lane-title">3. Заказы и отгрузка</text>
+  <rect x="20" y="490" width="1540" height="120" rx="8" fill="#F8F9FA" stroke="#D0D7DE"/>
+  <text x="32" y="514" class="lane-title">4. Склад, задания и справочники</text>
+  <rect x="20" y="630" width="1540" height="120" rx="8" fill="#F8F9FA" stroke="#D0D7DE"/>
+  <text x="32" y="654" class="lane-title">5. Сервис и настройки</text>
+
+  <!-- Row 1 -->
+  <rect x="170" y="99" width="210" height="62" class="box" fill="#E1D5E7" stroke="#9673A6"/>
+  <text x="182" y="120" class="title">Браузер / вход</text><text x="182" y="138" class="sub">/login → сессия</text>
+  <rect x="410" y="99" width="210" height="62" class="box" fill="#E1D5E7" stroke="#9673A6"/>
+  <text x="422" y="120" class="title">router.php</text><text x="422" y="138" class="sub">сессия, права, HTML/API</text>
+  <rect x="650" y="99" width="210" height="62" class="box" fill="#E1D5E7" stroke="#9673A6"/>
+  <text x="662" y="120" class="title">shared/Auth.php</text><text x="662" y="138" class="sub">логин / пароль</text>
+  <rect x="890" y="99" width="210" height="62" class="box" fill="#FFF2CC" stroke="#D6B656"/>
+  <text x="902" y="120" class="title">Сотрудники и роли</text><text x="902" y="138" class="sub">employees · wms_roles · role_access</text>
+  <rect x="1130" y="99" width="210" height="62" class="box" fill="#FFF2CC" stroke="#D6B656"/>
+  <text x="1142" y="120" class="title">PostgreSQL wms</text><text x="1142" y="138" class="sub">116 таблиц</text>
+  <path d="M380 130 L410 130" class="arrow"/><path d="M620 130 L650 130" class="arrow"/><path d="M860 130 L890 130" class="arrow"/><path d="M1100 130 L1130 130" class="arrow"/>
+
+  <!-- Row 2 -->
+  <rect x="170" y="239" width="210" height="62" class="box" fill="#D5E8D4" stroke="#82B366"/>
+  <text x="182" y="260" class="title">in/ — импорт</text><text x="182" y="278" class="sub">CSV / TXT / XLSX</text>
+  <rect x="410" y="239" width="210" height="62" class="box" fill="#D5E8D4" stroke="#82B366"/>
+  <text x="422" y="260" class="title">02 Поступления</text><text x="422" y="278" class="sub">+ TSD Приход</text>
+  <rect x="650" y="239" width="210" height="62" class="box" fill="#FFF2CC" stroke="#D6B656"/>
+  <text x="662" y="260" class="title">Таблицы прихода</text><text x="662" y="278" class="sub">receipts · items · operations</text>
+  <rect x="890" y="239" width="210" height="62" class="box" fill="#D5E8D4" stroke="#82B366"/>
+  <text x="902" y="260" class="title">StockSync</text><text x="902" y="278" class="sub">закрытие прихода</text>
+  <rect x="1130" y="239" width="210" height="62" class="box" fill="#FFF2CC" stroke="#D6B656"/>
+  <text x="1142" y="260" class="title">Товары и остатки</text><text x="1142" y="278" class="sub">products · product_stock</text>
+  <path d="M380 270 L410 270" class="arrow"/><path d="M620 270 L650 270" class="arrow"/><path d="M860 270 L890 270" class="arrow"/><path d="M1100 270 L1130 270" class="arrow"/>
+
+  <!-- Row 3 -->
+  <rect x="170" y="379" width="210" height="62" class="box" fill="#DAE8FC" stroke="#6C8EBF"/>
+  <text x="182" y="400" class="title">03.1 Заказы</text><text x="182" y="418" class="sub">client_orders · items</text>
+  <rect x="410" y="379" width="210" height="62" class="box" fill="#DAE8FC" stroke="#6C8EBF"/>
+  <text x="422" y="400" class="title">03 Отгрузки</text><text x="422" y="418" class="sub">shipments · items</text>
+  <rect x="650" y="379" width="210" height="62" class="box" fill="#FFE6CC" stroke="#D79B00"/>
+  <text x="662" y="400" class="title">TSD Отбор / Сортировка</text><text x="662" y="418" class="sub">otbor · sort · ship</text>
+  <rect x="890" y="379" width="210" height="62" class="box" fill="#FFF2CC" stroke="#D6B656"/>
+  <text x="902" y="400" class="title">Факт отбора</text><text x="902" y="418" class="sub">tsd_picks · readiness</text>
+  <rect x="1130" y="379" width="210" height="62" class="box" fill="#E1D5E7" stroke="#9673A6"/>
+  <text x="1142" y="400" class="title">14 Журнал</text><text x="1142" y="418" class="sub">wms_journal</text>
+  <path d="M380 410 L410 410" class="arrow"/><path d="M620 410 L650 410" class="arrow"/><path d="M860 410 L890 410" class="arrow"/><path d="M1100 410 L1130 410" class="arrow"/>
+
+  <!-- Row 4 -->
+  <rect x="170" y="519" width="210" height="62" class="box" fill="#D5E8D4" stroke="#82B366"/>
+  <text x="182" y="540" class="title">05 Ячейки</text><text x="182" y="558" class="sub">storage_cells · cell_content</text>
+  <rect x="410" y="519" width="210" height="62" class="box" fill="#D5E8D4" stroke="#82B366"/>
+  <text x="422" y="540" class="title">07 Задания</text><text x="422" y="558" class="sub">tasks · task_items</text>
+  <rect x="650" y="519" width="210" height="62" class="box" fill="#D5E8D4" stroke="#82B366"/>
+  <text x="662" y="540" class="title">08 Номенклатура</text><text x="662" y="558" class="sub">products · barcodes</text>
+  <rect x="890" y="519" width="210" height="62" class="box" fill="#D5E8D4" stroke="#82B366"/>
+  <text x="902" y="540" class="title">09 Контрагенты</text><text x="902" y="558" class="sub">counterparties · owners</text>
+  <rect x="1130" y="519" width="210" height="62" class="box" fill="#FFE6CC" stroke="#D79B00"/>
+  <text x="1142" y="540" class="title">CellPlacement</text><text x="1142" y="558" class="sub">зоны / ячейки</text>
+  <path d="M380 550 L410 550" class="arrow"/><text x="395" y="542" class="arrow-label">размещение</text>
+  <path d="M620 550 L650 550" class="arrow"/><text x="635" y="542" class="arrow-label">SKU</text>
+  <path d="M860 550 L890 550" class="arrow"/><text x="875" y="542" class="arrow-label">владелец</text>
+  <path d="M1100 550 L1130 550" class="arrow"/>
+
+  <!-- Row 5 -->
+  <rect x="170" y="659" width="210" height="62" class="box" fill="#E1D5E7" stroke="#9673A6"/>
+  <text x="182" y="680" class="title">10 Сотрудники</text><text x="182" y="698" class="sub">карточки / роли</text>
+  <rect x="410" y="659" width="210" height="62" class="box" fill="#E1D5E7" stroke="#9673A6"/>
+  <text x="422" y="680" class="title">13 Настройки</text><text x="422" y="698" class="sub">роли / склад / робот</text>
+  <rect x="650" y="659" width="210" height="62" class="box" fill="#E1D5E7" stroke="#9673A6"/>
+  <text x="662" y="680" class="title">12 Уведомления</text><text x="662" y="698" class="sub">notifications</text>
+  <rect x="890" y="659" width="210" height="62" class="box" fill="#F5F5F5" stroke="#999999"/>
+  <text x="902" y="680" class="title">Статические макеты</text><text x="902" y="698" class="sub">01 · 02.1 · 03.2 · 03.3 · 04 · …</text>
+  <rect x="1130" y="659" width="210" height="62" class="box" fill="#E1D5E7" stroke="#9673A6"/>
+  <text x="1142" y="680" class="title">15 Этикетки</text><text x="1142" y="698" class="sub">ZPL 58×40 · логирование</text>
+  <path d="M380 690 L410 690" class="arrow"/><path d="M620 690 L650 690" class="arrow"/>
+
+  <rect x="20" y="775" width="1540" height="95" rx="8" fill="#FFF2CC" stroke="#D6B656"/>
+  <text x="34" y="798" font-family="Arial" font-size="12" font-weight="700" fill="#7A5B00">Как читать</text>
+  <text x="34" y="818" class="note">Сплошная стрелка — основной поток; пунктир — логическая связь. Владелец товара (products.contractor_id) участвует в подборе зоны через CellPlacement.</text>
+  <text x="34" y="837" class="note">Приход: 02/TSD → receipt_operations/qty_fact → StockSync → products. Отгрузка: 03.1 → 03 → TSD → tsd_picks → статусы и журнал.</text>
+  <text x="34" y="856" class="note">02.1 · 03.2/03.3 · 04 · 05.1 · 06 · 09.1 · 10.1/10.2 · 11 · 13.2–13.4 — статические макеты; 13.1 — UI без API; 15 — S/A/PL этикетки и лог.</text>
+</svg>

@@ -45,17 +45,17 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS task_history (
 
 // --- Сид из макета, если пусто ---
 if ((int)$pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn() === 0) {
-    $pdo->exec("INSERT INTO warehouses (id,name) VALUES (1,'Основной склад'),(2,'Холодильный склад')");
+    $pdo->exec("INSERT INTO warehouses (id,name) VALUES (1,'Основной склад')");
     // Сотрудники — в общей базе (shared/wms_users.sqlite), сиды там.
 
     // doc_no, created, type, status, priority, wh, doc_ref, order_ref, exec_id, exec_fio, plan, fact, prog, cells, vol, weight, due
     $rows = [
         ['TASK-202506-02456', '2025-06-22 12:01', 'сбор',        'done',      'low',    1, 'S-205107', null, 1465, '1465 Ионова М.И.',    15, 15, 100, 8,  2.10, 12.0, '2025-06-22'],
         ['TASK-202506-02450', '2025-06-21 18:18', 'размещение',  'work',      'normal', 1, '10002458П', null, 258,  '258 Смирнов А.С.',     30, 20, 70,  3,  1.20, 8.0,  '2025-06-23'],
-        ['TASK-202506-02417', '2025-06-21 12:05', 'перемещение', 'new',       'normal', 2, null,        null, 3315, '3315 Иванов П.М.',     5,  0,  0,   1,  0.40, 2.0,  '2025-06-23'],
+        ['TASK-202506-02417', '2025-06-21 12:05', 'перемещение', 'new',       'normal', 1, null,        null, 3315, '3315 Иванов П.М.',     5,  0,  0,   1,  0.40, 2.0,  '2025-06-23'],
         ['TASK-202506-02308', '2025-06-21 18:18', 'сбор',        'cancelled', 'high',   1, 'S-205106', null, 1220, '1220 Михайлова О.С.', 12, 0,  0,   12, 1.00, 6.0,  '2025-06-23'],
         ['TASK-202506-02300', '2025-06-21 12:05', 'сбор',        'paused',    'high',   1, 'S-205105', null, 819,  '819 Шветцов А.В.',    40, 14, 39,  9,  3.10, 20.0, '2025-06-23'],
-        ['TASK-202506-02250', '2025-06-21 12:05', 'перемещение', 'work',      'normal', 2, null,        null, 233,  '233 Петрова М.А.',    30, 3,  3,   7,  2.40, 15.0, '2025-06-24'],
+        ['TASK-202506-02250', '2025-06-21 12:05', 'перемещение', 'work',      'normal', 1, null,        null, 233,  '233 Петрова М.А.',    30, 3,  3,   7,  2.40, 15.0, '2025-06-24'],
         ['TASK-202506-02210', '2025-06-21 17:10', 'перемещение', 'new',       'low',    1, null,        null, 11,   '11 Ибрагимов Е.С.',   90, 0,  0,   4,  5.00, 40.0, '2025-06-24'],
     ];
     $st = $pdo->prepare("INSERT INTO tasks (doc_no,created_at,type,status,priority,warehouse_id,doc_ref,order_ref,executor_id,executor_fio,plan_qty,fact_qty,progress,cells_count,volume,weight,due_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");

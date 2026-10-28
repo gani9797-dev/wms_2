@@ -61,6 +61,7 @@ final class EmployeeRepository
             $r['on_shift'] = (int)($r['on_shift'] ?? 0) ? 1 : 0;
             $r['worked_text'] = $this->workedText((int)($r['worked_minutes'] ?? 0));
             $r['work_time'] = $this->workTime((string)($r['cur_work_from'] ?? ''), (string)($r['cur_work_to'] ?? ''));
+            unset($r['password_hash']);
         }
         unset($r);
         $from = $total === 0 ? 0 : $offset + 1;
@@ -88,6 +89,8 @@ final class EmployeeRepository
         $row['status_label'] = EmployeeStatus::label($row['status']);
         $row['db_status'] = $rawStatus;
         $row['experience'] = $this->experience((string)($row['hired_at'] ?? ''));
+        $row['has_password'] = trim((string)($row['password_hash'] ?? '')) !== '';
+        unset($row['password_hash']);
         return $row;
     }
 

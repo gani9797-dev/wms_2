@@ -194,7 +194,7 @@ function wms_ensure_users_schema(PDO $pdo, string $tbl = 'users'): void
 function wms_users_attach(PDO $pdo): void
 {
     if (wms_use_pgsql()) {
-        wms_ensure_users_schema($pdo);
+        wms_ensure_cached($pdo, 'users', 'wms_ensure_users_schema');
         return;
     }
     $drv = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
@@ -262,7 +262,7 @@ function wms_users_pdo(): PDO
 {
     if (wms_use_pgsql()) {
         $pdo = wms_pg_pdo();
-        wms_ensure_users_schema($pdo);
+        wms_ensure_cached($pdo, 'users', 'wms_ensure_users_schema');
         return $pdo;
     }
     $pdo = new PDO('sqlite:' . wms_users_db_file(), null, null, [
@@ -297,6 +297,8 @@ function wms_ensure_employees_schema(PDO $pdo): void
               department VARCHAR(100) NULL,
               personnel_no VARCHAR(30) NULL,
               pin VARCHAR(10) NULL UNIQUE,
+              login VARCHAR(100) NULL,
+              password_hash VARCHAR(255) NULL,
               photo_path VARCHAR(255) NULL,
               phone_internal VARCHAR(50) NULL,
               phone_mobile VARCHAR(50) NULL,
@@ -336,6 +338,13 @@ function wms_ensure_employees_schema(PDO $pdo): void
               level VARCHAR(20) NOT NULL DEFAULT 'none',
               created_at TIMESTAMP NOT NULL DEFAULT NOW(),
               UNIQUE (role, scope, module_key))",
+            "CREATE TABLE IF NOT EXISTS role_permissions (
+              id BIGSERIAL PRIMARY KEY,
+              role VARCHAR(50) NOT NULL,
+              permission_key VARCHAR(50) NOT NULL,
+              allowed SMALLINT NOT NULL DEFAULT 0,
+              created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+              UNIQUE (role, permission_key))",
             "CREATE TABLE IF NOT EXISTS employee_exits (
               id BIGSERIAL PRIMARY KEY,
               employee_id BIGINT NOT NULL,
@@ -361,6 +370,7 @@ function wms_ensure_employees_schema(PDO $pdo): void
             "CREATE INDEX IF NOT EXISTS idx_emp_fio ON employees (fio)",
             "CREATE INDEX IF NOT EXISTS idx_emp_department ON employees (department)",
             "CREATE INDEX IF NOT EXISTS idx_emp_status ON employees (status)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_emp_login ON employees (LOWER(login)) WHERE login IS NOT NULL AND login <> ''",
             "CREATE INDEX IF NOT EXISTS idx_esch_emp ON employee_schedules (employee_id)",
             "CREATE INDEX IF NOT EXISTS idx_eex_emp ON employee_exits (employee_id)",
             "CREATE INDEX IF NOT EXISTS idx_eatt_emp ON employee_attendance (employee_id)",
@@ -381,6 +391,8 @@ function wms_ensure_employees_schema(PDO $pdo): void
             ['code', 'code VARCHAR(10) NULL', 'code TEXT NULL', 'code VARCHAR(10) NULL'],
             ['department', 'department VARCHAR(100) NULL', 'department TEXT NULL', 'department VARCHAR(100) NULL'],
             ['personnel_no', 'personnel_no VARCHAR(30) NULL', 'personnel_no TEXT NULL', 'personnel_no VARCHAR(30) NULL'],
+            ['login', 'login VARCHAR(100) NULL', 'login TEXT NULL', 'login VARCHAR(100) NULL'],
+            ['password_hash', 'password_hash VARCHAR(255) NULL', 'password_hash TEXT NULL', 'password_hash VARCHAR(255) NULL'],
             ['photo_path', 'photo_path VARCHAR(255) NULL', 'photo_path TEXT NULL', 'photo_path VARCHAR(255) NULL'],
             ['phone_internal', 'phone_internal VARCHAR(50) NULL', 'phone_internal TEXT NULL', 'phone_internal VARCHAR(50) NULL'],
             ['phone_mobile', 'phone_mobile VARCHAR(50) NULL', 'phone_mobile TEXT NULL', 'phone_mobile VARCHAR(50) NULL'],
@@ -399,6 +411,10 @@ function wms_ensure_employees_schema(PDO $pdo): void
         foreach ($cols as [$c, $ddlMysql, $ddlSqlite, $ddlPg]) {
             wms_ensure_column($pdo, 'employees', $c, $ddlMysql, $ddlSqlite, $ddlPg);
         }
+        try {
+            $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_emp_login ON employees (LOWER(login)) WHERE login IS NOT NULL AND login <> ''");
+        } catch (Throwable) {
+        }
         return;
     }
     // SQLite (демо)
@@ -408,6 +424,7 @@ function wms_ensure_employees_schema(PDO $pdo): void
           fio TEXT NOT NULL,
           last_name TEXT, first_name TEXT, middle_name TEXT,
           position TEXT, code TEXT, department TEXT, personnel_no TEXT, pin TEXT,
+          login TEXT, password_hash TEXT,
           photo_path TEXT, phone_internal TEXT, phone_mobile TEXT, email TEXT,
           birth_date TEXT, hired_at TEXT,
           status TEXT DEFAULT 'active', role TEXT DEFAULT 'storekeeper', zone TEXT DEFAULT 'Все зоны',
@@ -431,6 +448,10 @@ function wms_ensure_employees_schema(PDO $pdo): void
           scope TEXT NOT NULL DEFAULT 'wms', module_key TEXT NOT NULL,
           level TEXT NOT NULL DEFAULT 'none',
           created_at TEXT DEFAULT (datetime('now')), UNIQUE(role, scope, module_key))",
+        "CREATE TABLE IF NOT EXISTS role_permissions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL,
+          permission_key TEXT NOT NULL, allowed INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')), UNIQUE(role, permission_key))",
         "CREATE TABLE IF NOT EXISTS employee_exits (
           id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER NOT NULL,
           event_at TEXT NOT NULL, checkpoint TEXT,
@@ -452,12 +473,23 @@ function wms_ensure_employees_schema(PDO $pdo): void
         "CREATE INDEX IF NOT EXISTS idx_eex_emp ON employee_exits(employee_id)",
         "CREATE INDEX IF NOT EXISTS idx_eatt_emp ON employee_attendance(employee_id)",
         "CREATE INDEX IF NOT EXISTS idx_ehist_emp ON employee_history(employee_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_emp_login ON employees(LOWER(login)) WHERE login IS NOT NULL AND login <> ''",
     ];
     foreach ($ddl as $sql) {
         try {
             $pdo->exec($sql);
         } catch (Throwable) {
         }
+    }
+    foreach ([
+        ['login', 'login TEXT NULL', 'login TEXT NULL', 'login VARCHAR(100) NULL'],
+        ['password_hash', 'password_hash TEXT NULL', 'password_hash TEXT NULL', 'password_hash VARCHAR(255) NULL'],
+    ] as [$c, $ddlMysql, $ddlSqlite, $ddlPg]) {
+        wms_ensure_column($pdo, 'employees', $c, $ddlMysql, $ddlSqlite, $ddlPg);
+    }
+    try {
+        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_emp_login ON employees(LOWER(login)) WHERE login IS NOT NULL AND login <> ''");
+    } catch (Throwable) {
     }
 }
 
@@ -467,7 +499,7 @@ function wms_employees_pdo(): PDO
     if (wms_use_pgsql()) {
         $pdo = wms_pg_pdo();
         wms_users_attach($pdo);
-        wms_ensure_employees_schema($pdo);
+        wms_ensure_cached($pdo, 'employees', 'wms_ensure_employees_schema');
         return $pdo;
     }
     $pdo = new PDO('sqlite:' . wms_employees_db_file(), null, null, [
@@ -484,6 +516,15 @@ function wms_employees_pdo(): PDO
 function wms_ensure_shipments_schema(PDO $pdo): void
 {
     $drv = function_exists('wms_driver') ? wms_driver($pdo) : $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    // Партия поставщика в строках наряда и отгрузки — резерв и отбор идут строго по партиям.
+    wms_ensure_column($pdo, 'client_order_items', 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
+    wms_ensure_column($pdo, 'client_order_items', 'wms_code', 'VARCHAR(50) NULL', 'wms_code TEXT', 'VARCHAR(50) NULL');
+    wms_ensure_column($pdo, 'client_order_items', 'barcode', 'VARCHAR(100) NULL', 'barcode TEXT', 'VARCHAR(100) NULL');
+    wms_ensure_column($pdo, 'client_order_items', 'scan_serial', 'TINYINT(1) NOT NULL DEFAULT 0', 'scan_serial INTEGER NOT NULL DEFAULT 0', 'scan_serial SMALLINT NOT NULL DEFAULT 0');
+    wms_ensure_column($pdo, 'client_order_items', 'scan_chz', 'TINYINT(1) NOT NULL DEFAULT 0', 'scan_chz INTEGER NOT NULL DEFAULT 0', 'scan_chz SMALLINT NOT NULL DEFAULT 0');
+    wms_ensure_column($pdo, 'client_order_items', 'owner_contractor_id', 'BIGINT UNSIGNED NULL', 'owner_contractor_id INTEGER NULL', 'owner_contractor_id BIGINT NULL');
+    wms_ensure_column($pdo, 'client_order_items', 'owner_name', 'VARCHAR(255) NULL', 'owner_name TEXT NULL', 'owner_name VARCHAR(255) NULL');
+    wms_ensure_column($pdo, 'shipment_items', 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
     if ($drv === 'pgsql') {
         wms_ensure_column($pdo, 'shipments', 'is_crossdock', 'TINYINT(1) NOT NULL DEFAULT 0', 'is_crossdock INTEGER DEFAULT 0', 'is_crossdock SMALLINT NOT NULL DEFAULT 0');
         wms_ensure_table($pdo, 'shipment_marks', "CREATE TABLE IF NOT EXISTS shipment_marks (
@@ -537,8 +578,8 @@ function wms_receipts_pdo(): PDO
     if (wms_use_pgsql()) {
         $pdo = wms_pg_pdo();
         wms_users_attach($pdo);
-        wms_ensure_receipt_schema($pdo);
-        wms_ensure_ext_schema($pdo);
+        wms_ensure_cached($pdo, 'receipt', 'wms_ensure_receipt_schema');
+        wms_ensure_cached($pdo, 'ext', 'wms_ensure_ext_schema');
         return $pdo;
     }
     $pdo = new PDO('sqlite:' . wms_receipts_db_file(), null, null, [
@@ -556,7 +597,7 @@ function wms_nomenclature_pdo(): PDO
     if (wms_use_pgsql()) {
         $pdo = wms_pg_pdo();
         wms_users_attach($pdo);
-        wms_ensure_ext_schema($pdo);
+        wms_ensure_cached($pdo, 'ext', 'wms_ensure_ext_schema');
         return $pdo;
     }
     $pdo = new PDO('sqlite:' . wms_nomenclature_db_file(), null, null, [
@@ -615,8 +656,8 @@ function wms_storage_pdo(): PDO
     if (wms_use_pgsql()) {
         $pdo = wms_pg_pdo();
         wms_users_attach($pdo);
-        wms_ensure_storage_schema($pdo);
-        wms_ensure_ext_schema($pdo);
+        wms_ensure_cached($pdo, 'storage', 'wms_ensure_storage_schema');
+        wms_ensure_cached($pdo, 'ext', 'wms_ensure_ext_schema');
         return $pdo;
     }
     $pdo = new PDO('sqlite:' . wms_storage_db_file(), null, null, [
@@ -634,8 +675,8 @@ function wms_tasks_pdo(): PDO
     if (wms_use_pgsql()) {
         $pdo = wms_pg_pdo();
         wms_users_attach($pdo);
-        wms_ensure_tasks_schema($pdo);
-        wms_ensure_ext_schema($pdo);
+        wms_ensure_cached($pdo, 'tasks', 'wms_ensure_tasks_schema');
+        wms_ensure_cached($pdo, 'ext', 'wms_ensure_ext_schema');
         return $pdo;
     }
     $pdo = new PDO('sqlite:' . wms_tasks_db_file(), null, null, [
@@ -653,8 +694,8 @@ function wms_shipments_pdo(): PDO
     if (wms_use_pgsql()) {
         $pdo = wms_pg_pdo();
         wms_users_attach($pdo);
-        wms_ensure_shipments_schema($pdo);
-        wms_ensure_ext_schema($pdo);
+        wms_ensure_cached($pdo, 'shipments', 'wms_ensure_shipments_schema');
+        wms_ensure_cached($pdo, 'ext', 'wms_ensure_ext_schema');
         return $pdo;
     }
     $pdo = new PDO('sqlite:' . wms_shipments_db_file(), null, null, [
@@ -784,6 +825,11 @@ function wms_ensure_receipt_schema(PDO $pdo): void
         wms_ensure_column($pdo, 'receipt_items', 'prod_date', 'DATE', 'prod_date TEXT', 'DATE');
         wms_ensure_column($pdo, 'receipt_items', 'supplier_batch', 'VARCHAR(100)', 'supplier_batch TEXT', 'VARCHAR(100)');
         wms_ensure_column($pdo, 'receipt_items', 'deviation', 'VARCHAR(20)', "deviation TEXT", "deviation VARCHAR(20) NULL");
+        wms_ensure_column($pdo, 'receipt_items', 'barcode', 'VARCHAR(100)', 'barcode TEXT', 'barcode VARCHAR(100) NULL');
+        wms_ensure_column($pdo, 'receipt_items', 'scan_serial', 'TINYINT(1) NOT NULL DEFAULT 0', 'scan_serial INTEGER NOT NULL DEFAULT 0', 'scan_serial SMALLINT NOT NULL DEFAULT 0');
+        wms_ensure_column($pdo, 'receipt_items', 'scan_chz', 'TINYINT(1) NOT NULL DEFAULT 0', 'scan_chz INTEGER NOT NULL DEFAULT 0', 'scan_chz SMALLINT NOT NULL DEFAULT 0');
+        wms_ensure_column($pdo, 'receipt_items', 'owner_contractor_id', 'BIGINT UNSIGNED NULL', 'owner_contractor_id INTEGER NULL', 'owner_contractor_id BIGINT NULL');
+        wms_ensure_column($pdo, 'receipt_items', 'owner_name', 'VARCHAR(255) NULL', 'owner_name TEXT NULL', 'owner_name VARCHAR(255) NULL');
         wms_ensure_column($pdo, 'receipts', 'excess_qty', 'DOUBLE DEFAULT 0', 'excess_qty REAL DEFAULT 0', 'excess_qty NUMERIC(14,3) NOT NULL DEFAULT 0');
         wms_ensure_column($pdo, 'receipts', 'shortage_qty', 'DOUBLE DEFAULT 0', 'shortage_qty REAL DEFAULT 0', 'shortage_qty NUMERIC(14,3) NOT NULL DEFAULT 0');
         wms_ensure_column($pdo, 'receipt_operations', 'supplier_batch', 'VARCHAR(100)', 'supplier_batch TEXT', 'VARCHAR(100)');
@@ -825,7 +871,9 @@ function wms_ensure_receipt_schema(PDO $pdo): void
       created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))");
     $pdo->exec("CREATE TABLE IF NOT EXISTS receipt_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT, receipt_id INTEGER NOT NULL, line_no INTEGER DEFAULT 0,
-      code TEXT, sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт',
+      code TEXT, barcode TEXT, scan_serial INTEGER NOT NULL DEFAULT 0, scan_chz INTEGER NOT NULL DEFAULT 0,
+      owner_contractor_id INTEGER, owner_name TEXT,
+      sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт',
       qty REAL NOT NULL, boxes INTEGER DEFAULT 0, price REAL DEFAULT 0, vat_rate INTEGER DEFAULT 20,
       vat_sum_unit REAL DEFAULT 0, price_wvat REAL DEFAULT 0, sum_novat REAL DEFAULT 0,
       vat_sum REAL DEFAULT 0, sum_vat REAL DEFAULT 0, deviation TEXT)");
@@ -889,6 +937,11 @@ function wms_ensure_receipt_schema(PDO $pdo): void
     $ensureCol('receipt_items', 'prod_date', "prod_date TEXT");
     $ensureCol('receipt_items', 'supplier_batch', "supplier_batch TEXT");
     $ensureCol('receipt_items', 'deviation', "deviation TEXT");
+    $ensureCol('receipt_items', 'barcode', "barcode TEXT");
+    $ensureCol('receipt_items', 'scan_serial', "scan_serial INTEGER NOT NULL DEFAULT 0");
+    $ensureCol('receipt_items', 'scan_chz', "scan_chz INTEGER NOT NULL DEFAULT 0");
+    $ensureCol('receipt_items', 'owner_contractor_id', "owner_contractor_id INTEGER");
+    $ensureCol('receipt_items', 'owner_name', "owner_name TEXT");
     $ensureCol('receipts', 'excess_qty', "excess_qty REAL DEFAULT 0");
     $ensureCol('receipts', 'shortage_qty', "shortage_qty REAL DEFAULT 0");
     $ensureCol('receipt_operations', 'supplier_batch', "supplier_batch TEXT");
@@ -914,6 +967,9 @@ function wms_ensure_tasks_schema(PDO $pdo): void
 {
     $drv = function_exists('wms_driver') ? wms_driver($pdo) : $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
     wms_ensure_task_lists_schema($pdo);
+    // Партия в строках задания: ТСД видит, какую именно партию отбирать.
+    wms_ensure_column($pdo, 'task_items', 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
+    wms_ensure_column($pdo, 'wms_task_items', 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
     if ($drv === 'pgsql') return;
     $pdo->exec("CREATE TABLE IF NOT EXISTS warehouses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS tasks (
@@ -929,7 +985,7 @@ function wms_ensure_tasks_schema(PDO $pdo): void
     $pdo->exec("CREATE TABLE IF NOT EXISTS task_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL,
       code TEXT, sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт',
-      cell_from TEXT, cell_to TEXT, pallet TEXT,
+      cell_from TEXT, cell_to TEXT, pallet TEXT, supplier_batch TEXT,
       plan_qty REAL DEFAULT 0, fact_qty REAL DEFAULT 0,
       state TEXT, executor_fio TEXT)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS task_history (
@@ -1242,6 +1298,7 @@ function wms_ensure_ext_schema(PDO $pdo): void
           doc_no VARCHAR(100) NULL,
           sku VARCHAR(50) NULL,
           product_name VARCHAR(255) NULL,
+          supplier_batch VARCHAR(100) NULL,
           qty NUMERIC(14,3) NOT NULL DEFAULT 0,
           pallet VARCHAR(50) NULL,
           sscc VARCHAR(50) NULL,
@@ -1259,7 +1316,7 @@ function wms_ensure_ext_schema(PDO $pdo): void
     } else {
         wms_ensure_table($pdo, $jt, "CREATE TABLE IF NOT EXISTS $jt (
           id INTEGER PRIMARY KEY AUTOINCREMENT, doc_date TEXT NOT NULL, op_type TEXT NOT NULL,
-          doc_type TEXT, doc_no TEXT, sku TEXT, product_name TEXT, qty REAL DEFAULT 0,
+          doc_type TEXT, doc_no TEXT, sku TEXT, product_name TEXT, supplier_batch TEXT, qty REAL DEFAULT 0,
           pallet TEXT, sscc TEXT, cell_from TEXT, cell_to TEXT, zone TEXT,
           user_id INTEGER, user_fio TEXT, comment TEXT,
           quality TEXT DEFAULT 'новый',
@@ -1270,6 +1327,7 @@ function wms_ensure_ext_schema(PDO $pdo): void
     // Старые БД: журнал создан без качества — без этой колонки INSERT журнала
     // молча падал, и операции (приход/размещение/перемещение) не отображались.
     wms_ensure_column($pdo, $jt, 'quality', "VARCHAR(20) NULL DEFAULT 'новый'", "quality TEXT DEFAULT 'новый'", "VARCHAR(20) NULL DEFAULT 'новый'");
+    wms_ensure_column($pdo, $jt, 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
 
     // --- журнал серийных номеров ---
     $sj = wms_ext_table($pdo, 'wms_serial_journal');

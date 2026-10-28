@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS task_items (
   cell_from VARCHAR(50) NULL COMMENT 'Откуда (ячейка отбора)',
   cell_to VARCHAR(50) NULL COMMENT 'Куда',
   pallet VARCHAR(50) NULL,
+  supplier_batch VARCHAR(100) NULL COMMENT 'Партия поставщика',
   plan_qty DECIMAL(14,3) NOT NULL DEFAULT 0,
   fact_qty DECIMAL(14,3) NOT NULL DEFAULT 0,
   state VARCHAR(30) NULL COMMENT 'Состояние строки',

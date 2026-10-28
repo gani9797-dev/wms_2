@@ -42,7 +42,7 @@ function wms_pick_buffer_ready(PDO $pdo): void
     }
     $done[$key] = true;
     try {
-        wms_ensure_ext_schema($pdo);
+        wms_ensure_cached($pdo, 'ext', 'wms_ensure_ext_schema');
     } catch (Throwable) {
     }
 }

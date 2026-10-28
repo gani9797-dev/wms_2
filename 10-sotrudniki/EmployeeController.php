@@ -6,6 +6,7 @@ require_once __DIR__ . '/EmployeeRepository.php';
 require_once __DIR__ . '/EmployeeService.php';
 require_once __DIR__ . '/EmployeeStatus.php';
 require_once __DIR__ . '/EmployeeAccess.php';
+require_once __DIR__ . '/../shared/Roles.php';
 
 // REST-контроллер справочника сотрудников (модуль 10). Маппинг на UI макета:
 //  GET  ?action=list&search=&page=1          -> реестр + «Показано X–Y из Z»
@@ -93,6 +94,7 @@ final class EmployeeController
         $this->json([
             'items' => $data['items'],
             'role' => $data['role'],
+            'roles' => $this->service->roles(),
             'modules' => EmployeeAccess::WMS_MODULES,
             'levels' => EmployeeAccess::levels(),
             'users' => $this->repo->users(),

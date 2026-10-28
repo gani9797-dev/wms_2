@@ -119,7 +119,7 @@ final class ShipmentFilter
         $f->qtyFrom       = $get('qty_from') !== null ? (int)$get('qty_from') : null;
         $f->qtyTo         = $get('qty_to') !== null ? (int)$get('qty_to') : null;
         $f->page          = max(1, (int)($q['page'] ?? 1));
-        $f->perPage       = min(200, max(5, (int)($q['per_page'] ?? 20)));
+        $f->perPage       = wms_per_page($q['per_page'] ?? 20, 20, 200, 5);
         $allowedSort      = ['doc_date', 'doc_no', 'total_with_vat', 'id',
             'vehicle_arrival', 'ship_date', 'consignee', 'vehicle', 'gate',
             'loading_type', 'warehouse', 'status', 'total', 'sku_count',

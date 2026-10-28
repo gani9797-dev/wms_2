@@ -1209,11 +1209,26 @@ final class CellPlacement
             try {
                 require_once __DIR__ . '/../shared/Journal.php';
                 $skus = self::skuList($sku);
+                $batchJ = '';
+                if ($sscc !== null && $sscc !== '' && $skus) {
+                    try {
+                        require_once __DIR__ . '/../shared/db.php';
+                        $ndb = wms_nomenclature_pdo();
+                        $bq = $ndb->prepare(
+                            "SELECT COALESCE(s.supplier_batch,'') FROM product_stock s
+                             JOIN products p ON p.id=s.product_id WHERE s.pallet=:p AND p.sku=:s LIMIT 1"
+                        );
+                        $bq->execute([':p' => $sscc, ':s' => $skus[0]]);
+                        $batchJ = trim((string)($bq->fetchColumn() ?: ''));
+                    } catch (Throwable) {
+                    }
+                }
                 WmsJournal::log(wms_journal_pdo(), [
                     'op_type' => 'размещение',
                     'doc_type' => 'Размещение',
                     'doc_no' => ($sscc !== null && $sscc !== '') ? $sscc : ('РАЗМ-' . date('Ymd-His')),
                     'sku' => $skus ? $skus[0] : null,
+                    'supplier_batch' => $batchJ,
                     'qty' => $qty,
                     'pallet' => $sscc,
                     'sscc' => $sscc,

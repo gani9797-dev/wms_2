@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS wms_journal (
   doc_no VARCHAR(100) NULL COMMENT 'Номер документа',
   sku VARCHAR(50) NULL COMMENT 'Артикул',
   product_name VARCHAR(255) NULL COMMENT 'Наименование товара',
+  supplier_batch VARCHAR(100) NULL COMMENT 'Партия поставщика',
   qty DECIMAL(14,3) NOT NULL DEFAULT 0 COMMENT 'Количество',
   pallet VARCHAR(50) NULL COMMENT 'Номер паллеты',
   sscc VARCHAR(50) NULL COMMENT 'SSCC паллеты',

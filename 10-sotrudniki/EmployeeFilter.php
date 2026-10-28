@@ -60,7 +60,7 @@ final class EmployeeFilter
         $f->isBlocked = $getFlag('is_blocked');
         $f->unplannedExit = $getFlag('unplanned_exit');
         $f->page = max(1, (int)($q['page'] ?? 1));
-        $f->perPage = min(200, max(5, (int)($q['per_page'] ?? 24)));
+        $f->perPage = wms_per_page($q['per_page'] ?? 24, 24, 200, 5);
         $allowed = ['id', 'fio', 'position', 'code', 'department', 'status',
             'hired_at', 'created_at', 'updated_at', 'shift'];
         if (isset($q['sort']) && in_array($q['sort'], $allowed, true)) $f->sort = $q['sort'];

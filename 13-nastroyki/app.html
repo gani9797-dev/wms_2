@@ -161,6 +161,27 @@ tr:hover td{background:#fafaff}
 <div id="gatesSchem" style="display:none"></div>
 </section>
 
+<!-- ПЕРСОНАЛ: РОЛИ И ПРАВА -->
+<section id="v-personnel" class="view">
+<div class="bar"><button class="btn" data-go="hub">← Все настройки</button></div>
+<div class="card">
+<h2 style="margin:0 0 8px">Персонал — роли и права</h2>
+<p class="hint" style="margin-bottom:10px">Права задаются по роли и действуют на всех сотрудников с этой ролью. Здесь же создаются новые роли.</p>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="persNewName" placeholder="Название новой роли" style="flex:1;min-width:220px;padding:9px;border:1px solid var(--line);border-radius:8px"><button class="btn pri" id="persAdd">+ Создать роль</button></div>
+<table style="margin-top:12px"><thead><tr><th>Роль</th><th>Сотрудников</th><th>Статус</th><th></th></tr></thead><tbody id="persRoles"></tbody></table>
+</div>
+<div class="card" id="persRights" style="display:none">
+<h2 id="persRightsTitle" style="margin:0 0 8px">Права роли</h2>
+<div class="sec">Доступ к модулям WMS</div>
+<div id="persWms"></div>
+<div class="sec" style="margin-top:14px">Доступ к ТСД</div>
+<div id="persTsd"></div>
+<div class="sec" style="margin-top:14px">Редактирование документов</div>
+<div id="persDocs"></div>
+<div style="display:flex;gap:8px;margin-top:14px"><button class="btn pri" id="persSaveRights">Сохранить права роли</button><button class="btn" id="persCloseRights">Закрыть</button></div>
+</div>
+</section>
+
 <!-- РОБОТЫ РАЗМЕЩЕНИЯ -->
 <section id="v-robots" class="view">
 <div class="bar"><button class="btn" data-go="hub">← Все настройки</button></div>
@@ -283,7 +304,7 @@ var SECTIONS=[
 {n:'Автоматизация',d:'other:auto',e:'⚡',s:'Накладные, счета',link:'../13.1-avtoformirovanie-nakladnyh/app.html'},
 {n:'Отчеты',d:'other:rep',e:'📊',s:'Перейти в модуль',link:'../11-otchety/app.html'},
 {n:'Журнал изменений',d:'other:log',e:'🕘',s:'История настроек'},
-{n:'Системные параметры',d:'other:sys',e:'🛠️',s:'Константы системы'},{n:'Роботы размещения',d:'robots',e:'🤖',s:'Секционная блокировка типа паллеты, лимиты секции'}];
+{n:'Системные параметры',d:'other:sys',e:'🛠️',s:'Константы системы'},{n:'Персонал',d:'personnel',e:'👥',s:'Роли сотрудников и права доступа'},{n:'Роботы размещения',d:'robots',e:'🤖',s:'Секционная блокировка типа паллеты, лимиты секции'}];
 var OTH_TXT={refs:'Раздел-заглушка: общие справочники ведутся в своих модулях.',nom:'Карточки товаров, штрихкоды, упаковка — в модуле 8.',post:'Правила приёмки и размещение — в модуле 2.',reestr:'Слоты прибытия ТС настраиваются здесь в разделе «Ворота», оперативный реестр — в модуле 1.',zak:'Логика заказов — в модуле 3.1.',otg:'Логика отгрузок — в модуле 3.',zad:'Типы заданий и автопостановка — в модуле 7.',inv:'Параметры инвентаризации — в модуле 6.',per:'Графики, отделы, должности — в модуле 10.',kpi:'Формулы и ставки — в 13.4.',bil:'Тарифы и счета — в 9.1 / 13.2.',doc:'Шаблоны нумерации документов.',ntf:'Каналы и шаблоны — в модуле 12.',tsd:'Шаблоны ШК и префиксы — в модуле ТСД.',int:'Ключи API и вебхуки.',usr:'Пользователи, роли, права.',auto:'Автоправила накладных/счетов — 13.1, 13.2.',rep:'Источники отчётов — в модуле 11.',log:'Полная история — вкладка «История изменений» в «Организации и складах».',sys:'Часовой пояс по умолчанию, единицы измерения, округления.'};
 function renderHub(f){var h=document.getElementById('hub');h.innerHTML='';SECTIONS.filter(function(s){return !f||s.n.toLowerCase().indexOf(f.toLowerCase())>=0}).forEach(function(s){var d=document.createElement('div');d.className='tile'+(s.d==='org'?' hot':'');d.innerHTML=s.e+'<br>'+s.n+'<small>'+s.s+'</small>';d.onclick=function(){go(s.d)};h.appendChild(d)})}
 function go(d){document.querySelectorAll('.view').forEach(function(v){v.classList.remove('on')});
@@ -294,6 +315,7 @@ else if(d==='storage'){document.getElementById('v-storage').classList.add('on');
 else if(d==='cells'){document.getElementById('v-cells').classList.add('on');t.textContent='Ячейки';renderCells()}
 else if(d==='clients'){document.getElementById('v-clients').classList.add('on');t.textContent='Контрагенты';renderClients()}
 else if(d==='gates'){document.getElementById('v-gates').classList.add('on');t.textContent='Ворота и бронирование';renderGates()}
+else if(d==='personnel'){document.getElementById('v-personnel').classList.add('on');t.textContent='Персонал';persLoad()}
 else if(d==='robots'){document.getElementById('v-robots').classList.add('on');t.textContent='Роботы размещения';renderRobots()}
 else if(d.indexOf('other:')===0){document.getElementById('v-other').classList.add('on');var k=d.split(':')[1];var s=SECTIONS.filter(function(x){return x.d===d})[0];document.getElementById('othTitle').textContent=s?s.n:k;document.getElementById('othText').textContent=OTH_TXT[k]||'';var a=document.getElementById('othLink');if(s&&s.link){a.style.display='';a.href=s.link}else{a.style.display='none'}t.textContent=s?s.n:'Настройки'}}
 document.querySelectorAll('[data-go]').forEach(function(b){b.onclick=function(){go(b.getAttribute('data-go'))}});
@@ -512,6 +534,58 @@ return '<tr><td><b>'+esc(o.name||'')+'</b></td><td>'+esc(o.ctype_label||o.ctype|
 document.getElementById('clAdd').onclick=function(){window.open(CP_LINK,'_blank')};
 var clTypeEl=document.getElementById('clType');
 if(clTypeEl)clTypeEl.onchange=renderClients;
+
+/* ---------- Персонал: роли и права ---------- */
+var persRows=[], persRole='', persModules={}, persLevels={}, persItems=[], persPermissions={}, persPermCatalog={};
+function persLoad(){
+ fetch(ZONE_API+'?action=roles_list').then(function(r){return r.json()}).then(function(j){
+  persRows=j.rows||[];var b=document.getElementById('persRoles');b.innerHTML='';
+  persRows.forEach(function(role){
+   var tr=document.createElement('tr');
+   tr.innerHTML='<td><b>'+esc(role.name)+'</b></td><td>'+role.employees+'</td><td>'+(+role.is_active===1?'<span class="st-ok">Активная</span>':'<span class="st-off">Не активная</span>')+'</td>';
+   var td=document.createElement('td');
+   var rights=document.createElement('button');rights.className='btn';rights.textContent='Права';rights.style.marginRight='6px';rights.onclick=function(){persOpen(role.name)};
+   var ren=document.createElement('button');ren.className='btn';ren.textContent='Переименовать';ren.style.marginRight='6px';ren.onclick=function(){var n=prompt('Новое название роли:',role.name);if(!n||n===role.name)return;fetch(ZONE_API+'?action=role_rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:role.id,name:n})}).then(function(r){return r.json()}).then(function(x){toast(x.error?('Ошибка: '+x.error):'Роль переименована');persLoad()})};
+   var del=document.createElement('button');del.className='btn';del.textContent='Удалить';del.onclick=function(){if(!confirm('Удалить роль '+role.name+'?'))return;fetch(ZONE_API+'?action=role_delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:role.id})}).then(function(r){return r.json()}).then(function(x){toast(x.error?('Ошибка: '+x.error):'Роль удалена');persLoad()})};
+   td.appendChild(rights);td.appendChild(ren);td.appendChild(del);tr.appendChild(td);b.appendChild(tr);
+  });
+  if(!persRows.length)b.innerHTML='<tr><td colspan="4" style="color:#999">Ролей пока нет</td></tr>';
+ }).catch(function(){});
+}
+document.getElementById('persAdd').onclick=function(){
+ var n=document.getElementById('persNewName').value.trim();if(!n){toast('Введите название роли');return}
+ fetch(ZONE_API+'?action=role_create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})})
+  .then(function(r){return r.json()}).then(function(x){if(x.error){toast('Ошибка: '+x.error);return}document.getElementById('persNewName').value='';toast('Роль создана');persLoad()});
+};
+function persOpen(role){
+ persRole=role;
+ fetch(ZONE_API+'?action=role_access_get&role='+encodeURIComponent(role)).then(function(r){return r.json()}).then(function(j){
+  persModules=j.modules||{};persLevels=j.levels||{};persItems=j.items||[];
+  persPermissions=j.permissions||{};persPermCatalog=j.permissions_catalog||{};
+  document.getElementById('persRightsTitle').textContent='Права роли: '+role;
+  document.getElementById('persRights').style.display='';
+  document.getElementById('persWms').innerHTML=Object.keys(persModules).map(function(k){
+   var it=persItems.find(function(a){return a.scope==='wms'&&a.module_key===k});var lv=it?it.level:'none';
+   return '<div class="accrow" style="display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid #F0F0F0"><span style="flex:1">'+esc(persModules[k])+'</span><select data-pw="'+esc(k)+'" style="width:220px;padding:7px;border:1px solid var(--line);border-radius:8px">'+Object.keys(persLevels).map(function(v){return '<option value="'+v+'"'+(v===lv?' selected':'')+'>'+esc(persLevels[v])+'</option>'}).join('')+'</select></div>';
+  }).join('');
+  var tsd=persItems.find(function(a){return a.scope==='tsd'});var tlv=tsd?tsd.level:'none';
+  var tsdLevels={full:persLevels.full||'Полный доступ',view:persLevels.view||'Только просмотр'};
+  document.getElementById('persTsd').innerHTML='<div style="display:flex;gap:10px;align-items:center;padding:6px 0"><span style="flex:1">ТСД</span><select id="persTsdSel" style="width:220px;padding:7px;border:1px solid var(--line);border-radius:8px">'+Object.keys(tsdLevels).map(function(v){return '<option value="'+v+'"'+(v===tlv?' selected':'')+'>'+esc(tsdLevels[v])+'</option>'}).join('')+'</select></div>';
+  document.getElementById('persDocs').innerHTML=Object.keys(persPermCatalog).map(function(k){
+   var on=!!persPermissions[k];
+   return '<label class="chk" style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #F0F0F0;font-weight:400"><input type="checkbox" data-pp="'+esc(k)+'"'+(on?' checked':'')+' style="width:auto"> '+esc(persPermCatalog[k])+'</label>';
+  }).join('')||'<div class="hint">Права не настроены</div>';
+ });
+}
+document.getElementById('persCloseRights').onclick=function(){document.getElementById('persRights').style.display='none'};
+document.getElementById('persSaveRights').onclick=function(){
+ var items=[];
+ document.querySelectorAll('#persWms select[data-pw]').forEach(function(s){items.push({scope:'wms',module_key:s.getAttribute('data-pw'),level:s.value})});
+ var ts=document.getElementById('persTsdSel');if(ts)items.push({scope:'tsd',module_key:'tsd',level:ts.value});
+ var permissions={};document.querySelectorAll('#persDocs input[data-pp]').forEach(function(cb){permissions[cb.getAttribute('data-pp')]=cb.checked});
+ fetch(ZONE_API+'?action=role_access_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role:persRole,items:items,permissions:permissions})})
+  .then(function(r){return r.json()}).then(function(x){toast(x.error?('Ошибка: '+x.error):'Права роли сохранены')});
+};
 
 /* ---------- Роботы размещения ---------- */
 var robots=ls('wms13_robots',ROB_DEF);

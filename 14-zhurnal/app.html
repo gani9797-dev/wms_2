@@ -86,6 +86,7 @@ body.navhide main{max-width:none}
 <th data-col="op_type" data-sort="op_type">Тип операции</th>
 <th data-col="doc_no" data-sort="doc_no">Документ</th>
 <th data-col="sku" data-sort="sku">Артикул</th>
+<th data-col="supplier_batch" data-sort="supplier_batch">Партия</th>
 <th>Наименование</th>
 <th data-col="qty" data-sort="qty">Количество</th>
 <th>Паллета</th>
@@ -96,7 +97,7 @@ body.navhide main{max-width:none}
 <th>Пользователь</th>
 <th>Комментарий</th>
 </tr></thead>
-<tbody id="rows"><tr><td colspan="13">Загрузка…</td></tr></tbody></table>
+<tbody id="rows"><tr><td colspan="14">Загрузка…</td></tr></tbody></table>
 <div class="pager"><div><span id="info">…</span> &nbsp; Показывать по <select id="pp"><option>24</option><option selected>50</option><option>100</option><option>200</option></select></div><div class="pg" id="pg"></div></div>
 </div>
 </div>
@@ -228,6 +229,7 @@ function renderStock(rows){
 <td>${opBadge(r.op_type)}</td>
 <td>${r.doc_type?`<span class="hint">${esc(r.doc_type)}</span> `:''}<b>${esc(r.doc_no||'—')}</b></td>
 <td><b>${esc(r.sku||'')}</b></td>
+<td>${esc(r.supplier_batch||'—')}</td>
 <td>${esc(r.product_name||'')}</td>
 <td>${fmtN(r.qty)}</td>
 <td style="color:${palQual?'#B00020':'inherit'};font-weight:${palQual?'700':'400'}">${esc(r.pallet||'—')}${palQual?'  ⚠️ брак':''}</td>
@@ -236,7 +238,7 @@ function renderStock(rows){
 <td>${esc(r.cell_to||'—')}</td>
 <td>${esc(r.zone||'—')}</td>
 <td>${esc(r.user_fio||'—')}</td>
-<td>${esc(r.comment||'')}</td></tr>`}).join('')||'<tr><td colspan="13">Ничего не найдено</td></tr>'}
+<td>${esc(r.comment||'')}</td></tr>`}).join('')||'<tr><td colspan="14">Ничего не найдено</td></tr>'}
 function renderSerial(rows){
   $('rowsSerial').innerHTML=rows.map(r=>`<tr>
 <td>${esc(dFmt(r.doc_date))}</td>

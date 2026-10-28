@@ -5,6 +5,8 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/CsvUpload.php';
 require_once __DIR__ . '/ReceiptExcel.php';
 require_once __DIR__ . '/ShipmentExcel.php';
+require_once __DIR__ . '/Counterparties.php';
+require_once __DIR__ . '/../03-otgruzki/ShipmentService.php';
 require_once __DIR__ . '/../08-nomenklatura/Notifications.php';
 
 /**
@@ -246,6 +248,150 @@ function wms_robot_duplicate_external(string $kind, string $externalNo): bool
     }
 }
 
+/** Ошибка импорта с HTTP-кодом, чтобы API дашборда отдавал 409/422 так же, как робот. */
+final class WmsImportException extends RuntimeException
+{
+    public function __construct(string $message, public int $httpCode = 400)
+    {
+        parent::__construct($message);
+    }
+}
+
+/**
+ * Единый импорт файла прихода (.in) или заказа (.out) — один и тот же конвейер
+ * для робота in/out и для загрузки из дашборда/модулей 02 и 03.
+ *
+ * Поддерживаются те же форматы, что у робота: CSV/TXT (разделитель «;») и
+ * Excel-заявки .xlsx/.xlsm. Разбор — receipt_upload_parse_file /
+ * shipment_upload_parse_file, поэтому набор колонок и шапок полностью совпадает.
+ *
+ * @param array{tmp_name?:string,name?:string,error?:int} $file элемент $_FILES
+ * @param array{check_hash?:bool,hash?:string,check_external?:bool} $opts
+ * @return array<string,mixed>
+ */
+function wms_import_document(string $kind, array $file, int $warehouseId, int $userId = 1, array $opts = []): array
+{
+    $kind = $kind === 'in' ? 'in' : 'out';
+    $warehouseId = max(1, $warehouseId);
+    $userId = max(1, $userId);
+    $name = (string)($file['name'] ?? 'upload');
+    $tmp = (string)($file['tmp_name'] ?? '');
+    $hash = (string)($opts['hash'] ?? '');
+    if ($hash === '' && $tmp !== '' && is_file($tmp)) {
+        $hash = @hash_file('sha256', $tmp) ?: '';
+    }
+
+    // Форматы — тот же список, что настроен для робота in/out (по умолчанию csv, txt, xlsx, xlsm).
+    $formats = wms_robot_settings()['formats'] ?? ['csv', 'txt', 'xlsx', 'xlsm'];
+    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    if ($ext === '' || !in_array($ext, $formats, true)) {
+        throw new WmsImportException(
+            'Формат ' . ($ext !== '' ? '.' . $ext : '(без расширения)') . ' не поддерживается. Доступны: ' . implode(', ', $formats),
+            415
+        );
+    }
+
+    if (!empty($opts['check_hash']) && $hash !== '') {
+        $dup = wms_robot_hash_seen($hash);
+        if ($dup) {
+            throw new WmsImportException(
+                'Дубликат файла. Ранее загружен документ ' . (string)($dup['doc_no'] ?? '') . '.',
+                409
+            );
+        }
+    }
+
+    $parsed = $kind === 'in'
+        ? receipt_upload_parse_file($file)
+        : shipment_upload_parse_file($file);
+    $rows = $parsed['rows'] ?? [];
+    $errors = $parsed['errors'] ?? [];
+    if (!$rows) {
+        throw new WmsImportException(implode('; ', array_slice($errors, 0, 5)) ?: 'Нет корректных строк', 422);
+    }
+    $hdr = $parsed['header'] ?? [];
+    $externalNo = trim((string)($hdr['external_no'] ?? ''));
+    if (!empty($opts['check_external']) && $externalNo !== '' && wms_robot_duplicate_external($kind, $externalNo)) {
+        throw new WmsImportException(
+            ($kind === 'in' ? 'Дубликат прихода по внешнему номеру ' : 'Дубликат заказа по номеру ') . $externalNo,
+            409
+        );
+    }
+
+    if ($kind === 'in') {
+        $rcp = wms_receipts_pdo();
+        $nom = wms_nomenclature_pdo();
+        $sup = csv_upload_resolve_contractor($rcp, (string)($hdr['supplier'] ?? ''));
+        $r = csv_upload_import_receipt($rcp, $nom, $rows, (int)$sup['id'], $warehouseId, $userId, $name, $hdr);
+        try {
+            WmsCounterparties::ensure($rcp, (string)($sup['name'] ?? ''), 'client');
+        } catch (Throwable) {
+        }
+        return [
+            'kind' => 'in',
+            'id' => (int)($r['id'] ?? 0),
+            'doc_no' => (string)($r['doc_no'] ?? ''),
+            'items' => (int)($r['items'] ?? count($rows)),
+            'supplier' => (string)($sup['name'] ?? ''),
+            'supplier_new' => !empty($sup['created']),
+            'external_no' => $externalNo,
+            'format' => (string)($parsed['format'] ?? ''),
+            'new_skus' => (array)($r['new_skus'] ?? []),
+            'barcodes_added' => (int)($r['barcodes_added'] ?? 0),
+            'row_errors' => array_values(array_merge($errors, (array)($r['row_errors'] ?? []))),
+            'hash' => $hash,
+            'file_name' => $name,
+        ];
+    }
+
+    $shp = wms_shipments_pdo();
+    $nom = wms_nomenclature_pdo();
+    $cc = csv_upload_resolve_contractor($shp, (string)($hdr['contractor'] ?? ''));
+    $orderNo = csv_upload_next_order_no($shp);
+    $r = csv_upload_import_orders($shp, $nom, $rows, (int)$cc['id'], $warehouseId, $userId, $name, $orderNo, $hdr);
+    try {
+        WmsCounterparties::ensure($shp, (string)($hdr['consignee'] ?? ''), 'consignee');
+    } catch (Throwable) {
+    }
+
+    $ship = [];
+    try {
+        $service = new ShipmentService($shp);
+        $formId = $service->formFromOrders([(int)($r['id'] ?? 0)], [
+            'warehouse_id' => $warehouseId,
+            'consignee' => ($hdr['consignee'] ?? '') !== '' ? $hdr['consignee'] : null,
+            'delivery_type' => ($hdr['ship_type'] ?? '') !== '' ? $hdr['ship_type'] : null,
+            'plan_shipment_date' => ($hdr['plan_date'] ?? '') !== '' ? $hdr['plan_date'] : null,
+            'comment' => 'Авто: наряд ' . $orderNo,
+        ], $userId);
+        csv_upload_apply_shipment_header($shp, $formId, $hdr);
+        $shipNo = '';
+        try {
+            $st = $shp->prepare('SELECT doc_no FROM shipments WHERE id = :id');
+            $st->execute([':id' => $formId]);
+            $shipNo = (string)($st->fetchColumn() ?: '');
+        } catch (Throwable) {
+        }
+        $ship = ['shipment_id' => $formId, 'shipment_no' => $shipNo];
+    } catch (Throwable) {
+    }
+
+    return [
+        'kind' => 'out',
+        'id' => (int)($r['id'] ?? 0),
+        'doc_no' => (string)($r['doc_no'] ?? $orderNo),
+        'order_no' => (string)($r['order_no'] ?? $r['doc_no'] ?? $orderNo),
+        'items' => (int)($r['items'] ?? count($rows)),
+        'contractor' => (string)($cc['name'] ?? ''),
+        'contractor_new' => !empty($cc['created']),
+        'external_no' => $externalNo,
+        'format' => (string)($parsed['format'] ?? ''),
+        'row_errors' => array_values(array_merge($errors, (array)($r['row_errors'] ?? []))),
+        'hash' => $hash,
+        'file_name' => $name,
+    ] + $ship;
+}
+
 /**
  * Один проход робота по in/out.
  * @return array{processed:array, errors:array, skipped:array, last_run:int}
@@ -285,57 +431,27 @@ function wms_robot_run(): array
                 $docNo = '';
                 $status = 'error';
 
-                $dup = $hash !== '' ? wms_robot_hash_seen($hash) : null;
-                if ($dup) {
-                    $detail = 'Дубликат файла. Ранее загружен документ ' . (string)($dup['doc_no'] ?? '') . '.';
-                } else {
-                    try {
-                        if ($kind === 'in') {
-                            $parsed = receipt_upload_parse_file(['tmp_name' => $path, 'name' => $fn, 'error' => 0]);
-                            if (!empty($parsed['errors'])) {
-                                throw new RuntimeException(implode('; ', array_slice($parsed['errors'], 0, 5)));
-                            }
-                            if (empty($parsed['rows'])) {
-                                throw new RuntimeException('Нет корректных строк для прихода');
-                            }
-                            $hdr = $parsed['header'] ?? [];
-                            if (wms_robot_duplicate_external('in', (string)($hdr['external_no'] ?? ''))) {
-                                throw new RuntimeException('Дубликат прихода по внешнему номеру ' . (string)$hdr['external_no']);
-                            }
-                            $rcp = wms_receipts_pdo();
-                            $nom = wms_nomenclature_pdo();
-                            $sup = csv_upload_resolve_contractor($rcp, (string)($hdr['supplier'] ?? ''));
-                            $r = csv_upload_import_receipt($rcp, $nom, $parsed['rows'], (int)$sup['id'],
-                                (int)$settings['warehouse_id'], 1, $fn, $hdr);
-                            $docNo = (string)($r['doc_no'] ?? '');
-                            $detail = 'Приход ' . $docNo . ' загружен: строк ' . count($parsed['rows']) . '.';
-                            $status = 'success';
-                        } else {
-                            $parsed = shipment_upload_parse_file(['tmp_name' => $path, 'name' => $fn, 'error' => 0]);
-                            if (!empty($parsed['errors'])) {
-                                throw new RuntimeException(implode('; ', array_slice($parsed['errors'], 0, 5)));
-                            }
-                            if (empty($parsed['rows'])) {
-                                throw new RuntimeException('Нет корректных строк для заказа');
-                            }
-                            $hdr = $parsed['header'] ?? [];
-                            if (wms_robot_duplicate_external('out', (string)($hdr['external_no'] ?? ''))) {
-                                throw new RuntimeException('Дубликат заказа по номеру ' . (string)$hdr['external_no']);
-                            }
-                            $shp = wms_shipments_pdo();
-                            $nom = wms_nomenclature_pdo();
-                            $cc = csv_upload_resolve_contractor($shp, (string)($hdr['contractor'] ?? ''));
-                            $orderNo = csv_upload_next_order_no($shp);
-                            $r = csv_upload_import_orders($shp, $nom, $parsed['rows'], (int)$cc['id'],
-                                (int)$settings['warehouse_id'], 1, $fn, $orderNo, $hdr);
-                            $docNo = (string)($r['doc_no'] ?? $orderNo);
-                            $detail = 'Заказ ' . $docNo . ' загружен: строк ' . count($parsed['rows']) . '.';
-                            $status = 'success';
-                        }
-                    } catch (Throwable $e) {
-                        $detail = 'Ошибка: ' . $e->getMessage();
-                        $status = 'error';
+                try {
+                    $imp = wms_import_document($kind, ['tmp_name' => $path, 'name' => $fn, 'error' => 0],
+                        (int)$settings['warehouse_id'], 1, [
+                            'check_hash' => true,
+                            'hash' => $hash,
+                            'check_external' => true,
+                        ]);
+                    $docNo = (string)($imp['doc_no'] ?? '');
+                    $detail = ($kind === 'in' ? 'Приход ' : 'Заказ ') . $docNo
+                        . ' загружен: строк ' . (int)($imp['items'] ?? 0) . '.'
+                        . ($kind === 'out' && !empty($imp['shipment_no'])
+                            ? ' Отгрузка ' . (string)$imp['shipment_no'] . '.' : '');
+                    $rowErrors = (array)($imp['row_errors'] ?? []);
+                    if ($rowErrors) {
+                        $detail .= ' Пропущено строк: ' . count($rowErrors)
+                            . ' (' . implode('; ', array_slice($rowErrors, 0, 3)) . ').';
                     }
+                    $status = 'success';
+                } catch (Throwable $e) {
+                    $detail = 'Ошибка: ' . $e->getMessage();
+                    $status = 'error';
                 }
 
                 $destRoot = $dir . DIRECTORY_SEPARATOR . ($status === 'success' ? 'success' : 'error');

@@ -96,6 +96,16 @@ CREATE TABLE IF NOT EXISTS storage_cell_zones (
   KEY idx_cz_zone (zone)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS storage_cell_extra_zones (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  cell_id BIGINT UNSIGNED NOT NULL,
+  zone VARCHAR(50) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_cez_cell FOREIGN KEY (cell_id) REFERENCES storage_cells (id) ON DELETE CASCADE,
+  UNIQUE KEY uq_cell_extra_zone (cell_id, zone),
+  KEY idx_cez_zone (zone)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- История изменений ячейки (вкладка "История").
 CREATE TABLE IF NOT EXISTS cell_history (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

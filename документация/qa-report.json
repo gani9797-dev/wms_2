@@ -1,0 +1,133 @@
+{
+    "date": "2026-10-28",
+    "php": "8.3.33",
+    "php_lint": {
+        "errors": 0,
+        "scope": "all *.php in project"
+    },
+    "http_smoke": {
+        "pages": 35,
+        "checks": 136,
+        "pass": 136,
+        "fail": 0,
+        "covered": [
+            "all WMS app.html pages",
+            "TSD app\/otbor\/prihod\/sort pages",
+            "shared\/session.php",
+            "shared\/table-tools.js",
+            "shared\/auth-client.js",
+            "list\/refs\/defaults and module-specific read actions of demo_sqlite.php",
+            "follow-up card actions (show\/items\/operations\/history\/etc.)",
+            "TSD read APIs (tasks\/receivers\/docs\/receiving_cells\/otbor\/ship)",
+            "create\/update\/delete receipt and receipt line",
+            "create\/update\/delete order and order line",
+            "create\/delete employee with login\/password",
+            "create\/save\/delete role and role permissions"
+        ],
+        "test_data_cleaned": true
+    },
+    "database": {
+        "tables": 116,
+        "foreign_key_checks": "no orphan rows for enforced FKs",
+        "logical_checks": 40,
+        "findings": [
+            {
+                "severity": "resolved",
+                "area": "tsd_otbor_locks",
+                "summary": "3 stale locks deleted",
+                "details": "shipment_id 2, 3, 7 were absent from shipments; rows removed"
+            },
+            {
+                "severity": "resolved",
+                "area": "receipt_items",
+                "summary": "qty synchronized to qty_fact",
+                "details": [
+                    "A-105106 line 3 SKU G: qty 0 -> 1",
+                    "A-105105 line 1 SKU MK-ASM-1315: qty 18 -> 23",
+                    "A-105108 line 6 SKU MK-ASM-1320: qty 50 -> 70",
+                    "receipt headers 2, 3, 10 recalculated"
+                ]
+            },
+            {
+                "severity": "resolved",
+                "area": "tasks",
+                "summary": "7 orphan picking tasks deleted",
+                "details": "TASK-202610-02463 ... TASK-202610-02469 with task_items and task_history"
+            },
+            {
+                "severity": "architecture",
+                "area": "counterparties",
+                "summary": "two counterparty models are used",
+                "details": "receipts\/client_orders\/shipments use contractors; products\/storage_zones use counterparties; no sync"
+            },
+            {
+                "severity": "architecture",
+                "area": "employees\/users",
+                "summary": "two person directories",
+                "details": "auth\/cards use employees; histories\/notifications use users; no FK"
+            }
+        ]
+    },
+    "cleanup": {
+        "backup": "документация\/cleanup-backup-2026-10-28.json",
+        "stale_locks_deleted": 3,
+        "tasks_deleted": 7,
+        "task_items_deleted": 7,
+        "task_history_deleted": 21,
+        "receipt_items_fixed": 3,
+        "receipts_recalculated": [
+            2,
+            3,
+            10
+        ]
+    },
+    "modules": {
+        "static_placeholders": [
+            "01-reestr-pribytiya-ts",
+            "01.1-spravochnik-ts",
+            "01.2-karta-vorot",
+            "02.1-priem-postupleniy",
+            "03.2-upakovka-zakazov",
+            "03.3-proverka-zakazov",
+            "04-vnutriskladskie-operatsii",
+            "05.1-karta-sklada-3d",
+            "06-inventarizatsiya",
+            "09.1-billing",
+            "10.1-nachisleniya-kpi",
+            "10.2-prosmotr-sdelki",
+            "11-otchety",
+            "13.2-avtoformirovanie-schetov",
+            "13.3-pechat-lineyki",
+            "13.4-nastroyka-kpi"
+        ],
+        "stray": [
+            "с\/app.html (copy of 03.1, not linked in menu)"
+        ],
+        "labels": {
+            "module": "15-etiketki",
+            "label_types": {
+                "shipment": "S-",
+                "receipt": "A-",
+                "picking": "PL-",
+                "stock_sscc": "существующий SSCC"
+            },
+            "max_per_print": 500,
+            "tested": [
+                "templates",
+                "print S\/A\/PL",
+                "unique sequence",
+                "limit 500",
+                "log",
+                "print SSCC from 08.1"
+            ]
+        }
+    },
+    "artifacts": {
+        "architecture_md": "документация\/ARCHITECTURE.md",
+        "drawio": "документация\/wms-architecture.drawio",
+        "overview_svg": "документация\/wms-overview.svg",
+        "table_catalog": "документация\/table-catalog.json",
+        "cleanup_backup": "документация\/cleanup-backup-2026-10-28.json",
+        "labels_schema": "15-etiketki\/schema.sql"
+    }
+}

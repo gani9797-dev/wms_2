@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>15 Этикетки — TiMLog</title>
+<style>
+:root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);display:flex}
+aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14px;position:sticky;top:0;max-height:100vh;overflow:auto}
+aside .logo{font-size:22px;font-weight:700;margin:6px 0 22px}
+aside a{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
+aside a.on{background:var(--vio);color:#fff}
+main{flex:1;padding:18px 22px;min-width:0;max-width:1280px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.top h1{margin:4px 0;font-size:26px}
+.user{display:flex;gap:10px;align-items:center;font-size:14px}
+.ava{width:36px;height:36px;border-radius:50%;background:#CBD5E0;color:#4A5568;display:flex;align-items:center;justify-content:center;font-weight:700}
+.hint{color:var(--mut);font-size:13px;line-height:1.45}
+.tabs{display:flex;gap:18px;border-bottom:2px solid #EDE9FE;margin:18px 0 14px;font-size:15px}
+.tabs span{padding-bottom:8px;cursor:pointer;color:#999}
+.tabs span.on{color:var(--vio);font-weight:700;border-bottom:3px solid var(--vio)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:0 2px 6px rgba(0,0,0,.03)}
+.card h3{margin:0 0 4px;font-size:19px}.card .pref{font-family:monospace;color:var(--vio);font-weight:700}
+.card .row{display:flex;gap:8px;align-items:center;margin-top:14px}
+.card input[type=number]{width:88px;padding:8px;border:1px solid var(--line);border-radius:8px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 14px;cursor:pointer;font-size:14px}
+.btn.pri{background:var(--vio);color:#fff;border-color:var(--vio);font-weight:700}
+.btn.sm{padding:6px 9px;font-size:12px;border-radius:7px}
+.card{cursor:default}
+.card:hover{border-color:#C9B8FF}
+.tblwrap{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+th{color:#6B7280;font-weight:700;background:#FAFAFC}
+.ctx{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:120;min-width:210px;padding:6px 0;font-size:14px}
+.ctx div{padding:9px 16px;cursor:pointer}.ctx div:hover{background:#F4F2FF}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:130}
+.modal.open{display:flex}
+.mbox{background:#fff;border-radius:12px;padding:20px;width:760px;max-width:96vw;max-height:92vh;overflow:auto}
+.mbox.wide{width:980px}.mbox h2{margin:0 0 10px;font-size:19px}
+.mbox label{font-size:12px;color:#4A4A4A;font-weight:700;display:block;margin:10px 0 4px}
+.mbox input,.mbox select,.mbox textarea{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;font:13px/1.35 monospace}
+.mfoot{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.tpl-tabs{display:flex;gap:16px;border-bottom:1px solid var(--line);margin:6px 0 10px}
+.tpl-tabs span{padding:6px 2px;cursor:pointer;color:#888}.tpl-tabs span.on{color:var(--vio);border-bottom:2px solid var(--vio);font-weight:700}
+.codebox{width:100%;min-height:280px}
+pre.zpl{white-space:pre-wrap;background:#0F172A;color:#D7E2F0;padding:12px;border-radius:8px;max-height:340px;overflow:auto;font-size:12px}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:200;max-width:90vw}
+.chip{display:inline-block;background:#F4F0FB;color:#663EB2;border-radius:12px;padding:3px 9px;font-size:12px;margin:1px}
+</style>
+<style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}</style>
+</head>
+<body>
+<aside><nav class="nav">
+<a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a>
+<a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a>
+<a class="mi" href="../03.1-zakazy/app.html">📤 3.1 Заказы</a>
+<a class="mi" href="../03-otgruzki/app.html">📦 3 Отгрузки</a>
+<a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a>
+<a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a>
+<a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a>
+<a class="mi" href="../08.1-tovarny-zapas/app.html">📦 8.1 Товарный запас</a>
+<a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a>
+<a class="mi on" href="../15-etiketki/app.html">🏷️ 15 Этикетки</a>
+</nav></aside>
+<main>
+<div class="top"><h1>Этикетки</h1><div class="user"><span class="ava">?</span><span>Загрузка...</span></div></div>
+<div class="hint">Печать этикеток 58×40 мм. Отгрузка — S-, Приемка — A-, Комплектация — PL-. Не более 500 штук за раз. ПКМ по карточке — редактирование ZPL/SQL.</div>
+<div class="tabs"><span id="tabPrint" class="on">Печать</span><span id="tabLog">Логирование этикеток</span></div>
+
+<section id="vPrint">
+  <div class="cards" id="cards">Загрузка...</div>
+</section>
+
+<section id="vLog" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div class="hint">Кто, когда, какую этикетку и сколько напечатал.</div>
+    <button class="btn" id="logRefresh">Обновить</button>
+  </div>
+  <div class="tblwrap"><table><thead><tr><th>Дата</th><th>Этикетка</th><th>Кол-во</th><th>Пользователь</th><th>Логин</th><th>Коды</th><th></th></tr></thead><tbody id="logRows"><tr><td colspan="7">Загрузка...</td></tr></tbody></table></div>
+</section>
+</main>
+
+<div class="ctx" id="ctx"><div data-a="edit">Редактировать ZPL / SQL</div><div data-a="print">Печать</div></div>
+
+<div class="modal" id="tplModal"><div class="mbox wide">
+  <div style="display:flex;justify-content:space-between;align-items:center"><h2 id="tplTitle">Шаблон этикетки</h2><span class="linkish" id="tplClose" style="cursor:pointer;color:var(--vio);font-size:20px">✕</span></div>
+  <div class="tpl-tabs"><span id="tplTabZpl" class="on">ZPL</span><span id="tplTabSql">SQL запрос</span></div>
+  <div id="tplZplPane"><textarea id="tplZpl" class="codebox"></textarea></div>
+  <div id="tplSqlPane" style="display:none"><textarea id="tplSql" class="codebox"></textarea><div class="hint" style="margin-top:6px">SQL показывает, как формируются коды (по дате и последовательности).</div></div>
+  <div class="mfoot"><button class="btn" id="tplCancel">Отмена</button><button class="btn pri" id="tplSave">Сохранить</button></div>
+</div></div>
+
+<div class="modal" id="resModal"><div class="mbox wide">
+  <div style="display:flex;justify-content:space-between;align-items:center"><h2 id="resTitle">Печать</h2><span id="resClose" style="cursor:pointer;color:var(--vio);font-size:20px">✕</span></div>
+  <div class="hint" id="resInfo"></div>
+  <label>Коды (SSCC)</label>
+  <div id="resCodes" style="max-height:120px;overflow:auto;background:#FAFAFC;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:monospace;font-size:12px"></div>
+  <label>ZPL</label>
+  <pre class="zpl" id="resZpl"></pre>
+  <div class="mfoot"><button class="btn" id="resCopy">Скопировать ZPL</button><button class="btn pri" id="resDownload">Скачать .zpl</button><button class="btn" id="resDone">Готово</button></div>
+</div></div>
+<div id="toast"></div>
+
+<script>
+const API='demo_sqlite.php';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
+let templates={},ctxType='',tplType='',lastResult=null;
+const ORDER=['shipment','receipt','picking'];
+
+async function loadTemplates(){
+  const r=await fetch(API+'?action=templates');const j=await r.json();
+  templates={};for(const x of (j.rows||[]))templates[x.label_type]=x;
+  $('cards').innerHTML=ORDER.map(t=>{const x=templates[t]||{label_name:t,title:t,prefix:t};return `<div class="card" data-type="${t}">
+    <h3>${esc(x.label_name||t)}</h3><div class="pref">${esc(x.prefix||'')}</div>
+    <div class="hint">${esc(x.title||'')} · 58×40 мм</div>
+    <div class="row"><input type="number" min="1" max="500" value="1" data-qty="${t}"><button class="btn pri" data-print="${t}">Печать</button><span class="hint">до 500 шт.</span></div>
+  </div>`}).join('');
+  document.querySelectorAll('[data-print]').forEach(b=>b.onclick=e=>{e.stopPropagation();printType(b.dataset.print)});
+  document.querySelectorAll('.card[data-type]').forEach(c=>{
+    c.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();ctxType=c.dataset.type;const m=$('ctx');m.style.display='block';m.style.left=Math.min(e.clientX,innerWidth-240)+'px';m.style.top=Math.min(e.clientY,innerHeight-100)+'px';};
+  });
+}
+async function printType(type){
+  const inp=document.querySelector(`[data-qty="${type}"]`);const qty=inp?Math.max(1,Math.min(500,parseInt(inp.value||1,10))):1;
+  if(inp)inp.value=qty;
+  const r=await fetch(API+'?action=print',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,qty})});
+  const j=await r.json();if(!r.ok){toast('Ошибка: '+(j.error||''));return}
+  showResult(j);
+}
+function showResult(j){
+  lastResult=j;
+  $('resTitle').textContent='Печать: '+(j.label_name||j.type||'');
+  $('resInfo').innerHTML=`Количество: <b>${j.qty||0}</b> · Логин: <b>${esc((window.WMS_USER&&window.WMS_USER.login)||'')}</b> · Партия #${j.batch_id||''}`;
+  $('resCodes').innerHTML=(j.codes||[]).map(c=>`<div>${esc(c)}</div>`).join('');
+  $('resZpl').textContent=j.zpl||'';
+  $('resModal').classList.add('open');
+  loadLog();
+}
+function downloadZpl(){
+  if(!lastResult||!lastResult.zpl){toast('Нет ZPL');return}
+  const blob=new Blob([lastResult.zpl],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='labels_'+lastResult.type+'_'+(lastResult.batch_id||Date.now())+'.zpl';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
+async function openTemplate(type){
+  tplType=type;const r=await fetch(API+'?action=template&type='+encodeURIComponent(type));const j=await r.json();
+  if(!r.ok){toast('Ошибка: '+(j.error||''));return}
+  const row=j.row||{};
+  $('tplTitle').textContent='Шаблон: '+(row.label_name||type);
+  $('tplZpl').value=row.zpl_template||'';$('tplSql').value=row.sql_query||'';
+  setTplTab('zpl');$('tplModal').classList.add('open');
+}
+function setTplTab(t){$('tplTabZpl').classList.toggle('on',t==='zpl');$('tplTabSql').classList.toggle('on',t==='sql');$('tplZplPane').style.display=t==='zpl'?'':'none';$('tplSqlPane').style.display=t==='sql'?'':'none'}
+async function saveTemplate(){
+  const r=await fetch(API+'?action=template_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:tplType,zpl:$('tplZpl').value,sql:$('tplSql').value})});
+  const j=await r.json();toast(r.ok?'Шаблон сохранён':'Ошибка: '+(j.error||''));if(r.ok){$('tplModal').classList.remove('open');loadTemplates()}
+}
+async function loadLog(){
+  const r=await fetch(API+'?action=log');const j=await r.json();const rows=j.rows||[];
+  $('logRows').innerHTML=rows.map(x=>`<tr><td>${esc((x.created_at||'').slice(0,19).replace('T',' '))}</td><td>${esc(x.label_name||'')}</td><td>${esc(x.qty)}</td><td>${esc(x.user_fio||'—')}</td><td>${esc(x.user_login||'—')}</td><td>${esc(x.code_from||'')}${x.code_to&&x.code_to!==x.code_from?' — '+esc(x.code_to):''}</td><td><button class="btn sm" data-codes="${x.id}">Коды</button></td></tr>`).join('')||'<tr><td colspan="7">Пока пусто</td></tr>';
+  document.querySelectorAll('[data-codes]').forEach(b=>b.onclick=async()=>{const rr=await fetch(API+'?action=codes&batch_id='+b.dataset.codes);const jj=await rr.json();toast((jj.rows||[]).join(', '))});
+}
+$('tabPrint').onclick=()=>{$('tabPrint').classList.add('on');$('tabLog').classList.remove('on');$('vPrint').style.display='';$('vLog').style.display='none'};
+$('tabLog').onclick=()=>{$('tabLog').classList.add('on');$('tabPrint').classList.remove('on');$('vPrint').style.display='none';$('vLog').style.display='';loadLog()};
+$('logRefresh').onclick=loadLog;
+$('ctx').onclick=e=>{const a=e.target.dataset.a;if(!a)return;$('ctx').style.display='none';if(a==='edit')openTemplate(ctxType);else if(a==='print')printType(ctxType)};
+document.addEventListener('click',e=>{if(!$('ctx').contains(e.target))$('ctx').style.display='none'});
+$('tplClose').onclick=$('tplCancel').onclick=()=>$('tplModal').classList.remove('open');
+$('tplTabZpl').onclick=()=>setTplTab('zpl');$('tplTabSql').onclick=()=>setTplTab('sql');$('tplSave').onclick=saveTemplate;
+$('resClose').onclick=$('resDone').onclick=()=>$('resModal').classList.remove('open');
+$('resDownload').onclick=downloadZpl;
+$('resCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('resZpl').textContent);toast('ZPL скопирован')}catch(e){toast('Не удалось скопировать')}};
+loadTemplates();loadLog();
+</script>
+</body>
+</html>

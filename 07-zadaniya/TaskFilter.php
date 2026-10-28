@@ -91,7 +91,7 @@ final class TaskFilter
             }
         }
         $f->page        = max(1, (int)($q['page'] ?? 1));
-        $f->perPage     = min(200, max(5, (int)($q['per_page'] ?? 20)));
+        $f->perPage     = wms_per_page($q['per_page'] ?? 20, 20, 200, 5);
         $allowedSort    = ['created_at', 'doc_no', 'progress', 'priority', 'id',
             'type', 'status', 'warehouse', 'goods', 'cell', 'pallet', 'sku',
             'name', 'cells', 'doc_ref', 'executor', 'flags', 'list'];

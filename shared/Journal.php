@@ -35,7 +35,7 @@ function wms_journal_pdo(): PDO
         // досоздаём сквозной схемой (идемпотентно).
         try {
             if (!wms_has_column($pdo, 'wms_journal', 'id') || !wms_has_column($pdo, 'wms_serial_journal', 'id')) {
-                wms_ensure_ext_schema($pdo);
+                wms_ensure_cached($pdo, 'ext', 'wms_ensure_ext_schema');
             }
             // Старые базы: без quality INSERT в журнал падал и операции не
             // отображались. Дотягиваем колонку при каждом подключении (дёшево).
@@ -60,7 +60,7 @@ final class WmsJournal
 
     /**
      * Записать движение в журнал склада.
-     * @param array $r op_type, doc_type, doc_no, sku, product_name, qty, pallet,
+     * @param array $r op_type, doc_type, doc_no, sku, product_name, supplier_batch, qty, pallet,
      *                 sscc, cell_from, cell_to, zone, user_id, user_fio, comment, doc_date, quality
      */
     public static function log(PDO $pdo, array $r): int
@@ -75,9 +75,9 @@ final class WmsJournal
             }
             $t = wms_ext_table($pdo, 'wms_journal');
             $st = $pdo->prepare(
-                "INSERT INTO $t (doc_date, op_type, doc_type, doc_no, sku, product_name, qty,
+                "INSERT INTO $t (doc_date, op_type, doc_type, doc_no, sku, product_name, supplier_batch, qty,
                         pallet, sscc, cell_from, cell_to, zone, user_id, user_fio, comment, quality)
-                 VALUES (:d, :op, :dt, :dn, :sku, :pn, :q, :pal, :sscc, :cf, :ct, :z, :uid, :uf, :cm, :ql)"
+                 VALUES (:d, :op, :dt, :dn, :sku, :pn, :sb, :q, :pal, :sscc, :cf, :ct, :z, :uid, :uf, :cm, :ql)"
             );
             $st->execute([
                 ':d' => trim((string)($r['doc_date'] ?? '')) !== '' ? (string)$r['doc_date'] : date('Y-m-d H:i:s'),
@@ -86,6 +86,7 @@ final class WmsJournal
                 ':dn' => self::s($r['doc_no'] ?? null),
                 ':sku' => self::s($r['sku'] ?? null),
                 ':pn' => self::s($r['product_name'] ?? null),
+                ':sb' => self::s($r['supplier_batch'] ?? null),
                 ':q' => (float)($r['qty'] ?? 0),
                 ':pal' => self::s($r['pallet'] ?? null),
                 ':sscc' => self::s($r['sscc'] ?? null),
@@ -158,7 +159,7 @@ final class WmsJournal
         $total = (int)$cnt->fetchColumn();
 
         $page = max(1, (int)($f['page'] ?? 1));
-        $perPage = min(500, max(5, (int)($f['per_page'] ?? 50)));
+        $perPage = wms_per_page($f['per_page'] ?? 50, 50, 500, 5);
         $sortMap = [
             'doc_date' => ['doc_date', 'd'], 'op_type' => ['op_type', 't'],
             'doc_no' => ['doc_no', 't'], 'sku' => ['sku', 't'],
@@ -191,7 +192,7 @@ final class WmsJournal
         $total = (int)$cnt->fetchColumn();
 
         $page = max(1, (int)($f['page'] ?? 1));
-        $perPage = min(500, max(5, (int)($f['per_page'] ?? 50)));
+        $perPage = wms_per_page($f['per_page'] ?? 50, 50, 500, 5);
         $sortMap = ['doc_date' => ['doc_date', 'd'], 'serial_no' => ['serial_no', 't'],
             'sku' => ['sku', 't'], 'pallet' => ['pallet', 't'], 'op_type' => ['op_type', 't']];
         $orderBy = wms_order_by($pdo, (string)($f['sort'] ?? 'doc_date'), (string)($f['dir'] ?? 'DESC'), $sortMap, 'doc_date', 'd');

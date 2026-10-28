@@ -399,6 +399,11 @@ function wms_csv_read_grid(string $tmpPath): array
     if (!preg_match('//u', $raw)) {
         if (function_exists('mb_convert_encoding')) {
             $raw = mb_convert_encoding($raw, 'UTF-8', 'Windows-1251');
+        } elseif (function_exists('iconv')) {
+            $conv = @iconv('Windows-1251', 'UTF-8//IGNORE', $raw);
+            if ($conv !== false) {
+                $raw = $conv;
+            }
         }
     }
     $raw = str_replace(["\r\n", "\r"], "\n", $raw);

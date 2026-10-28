@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
@@ -116,7 +116,7 @@ body.navhide main{max-width:none}
 <button class="btn" id="fbtn">Фильтры<span class="badge" id="fbadge" style="display:none">0</span></button>
 <button class="btn" id="imp">Импорт</button>
 <button class="btn" id="exp">Экспорт</button>
-<button class="btn pri" id="mk">+ Создать</button>
+<button class="btn pri" id="mk" data-perm="doc_edit_receipt">+ Создать наряд</button>
 </div>
 <div class="chips" id="chips"></div>
 <div class="card" style="overflow:auto">
@@ -158,7 +158,7 @@ body.navhide main{max-width:none}
 <label><input type="checkbox" value="cancelled"> Отменено</label>
 </div>
 <label>Поставщик</label><select id="sup"><option value="">Выбрать</option><option value="1">ООО «СпортОпт»</option><option value="2">ООО «Мяч-Сервис»</option><option value="3">ООО «Восток»</option><option value="4">ИП Смирнов В.В.</option><option value="6">ООО «ТоргСнаб»</option><option value="7">ООО «ФиТрейд»</option><option value="8">ИП Козлов К.К.</option></select>
-<label>Склад</label><select id="wh"><option value="">Все склады</option><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select>
+<label>Склад</label><select id="wh"><option value="">Все склады</option><option value="1">Основной склад</option></select>
 <label>ТС</label><input id="veh" type="text" placeholder="А221ВА77">
 <label>Ворота</label><input id="gate" type="text" placeholder="11">
 <label>Тип разгрузки</label><select id="ult"><option value="">Выбрать</option><option>Внавал</option><option>Паллеты</option></select>
@@ -206,9 +206,9 @@ body.navhide main{max-width:none}
 <div data-a="del">Удалить</div>
 </div>
 
-<div class="modal" id="mm"><div class="mbox"><h3 style="margin-top:0">Новое поступление</h3>
+<div class="modal" id="mm"><div class="mbox"><h3 style="margin-top:0">Новый наряд на приемку</h3>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Поставщик *</label><select id="ns"><option value="1">ООО «СпортОпт»</option><option value="2">ООО «Мяч-Сервис»</option><option value="3">ООО «Восток»</option><option value="7">ООО «ФиТрейд»</option></select></div>
-<div style="flex:1"><label>Склад *</label><select id="nw"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select></div></div>
+<div style="flex:1"><label>Склад *</label><select id="nw"><option value="1">Основной склад</option></select></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Документ № (внешний)</label><input id="next2" type="text" placeholder="АСН223697"></div>
 <div style="flex:1"><label>Дата поставки, план *</label><input id="np" type="date" value="2025-06-22"></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Тип поступления *</label><select id="nrt"><option value="supply">Поставка на склад</option><option value="return">Возврат</option></select></div>
@@ -265,7 +265,7 @@ body.navhide main{max-width:none}
 <div id="toast"></div>
 <input type="file" id="impfile" accept=".csv,.txt,.xlsx,.xlsm" style="display:none">
 <div class="modal" id="im"><div class="mbox"><h3 style="margin-top:0">Импорт поступления из файла</h3>
-<label>Склад *</label><select id="iw"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select>
+<label>Склад *</label><select id="iw"><option value="1">Основной склад</option></select>
 <label>Файл *</label><input id="if" type="file" accept=".csv,.txt,.xlsx,.xlsm">
 <div class="hint">CSV (<code>;</code>) или Excel-заявка <code>.xlsx</code>: «Заявка на приемку» с шапкой (номер заказа, дата прибытия ТС, поставщик) и таблицей груза (артикул, наименование, количество, ед. изм., <b>партия</b>). Форматы гибкие: заголовок таблицы ищем по словам «Артикул» + «Количество». Партия сохраняется в позицию и показывается на ТСД после скана ШК (при нескольких — выбор).</div>
 <div id="ires" style="font-size:13px;margin-top:8px"></div>
@@ -351,15 +351,103 @@ await loadOps(id);
 $('dr').classList.add('open')}
 async function loadTab(){const id=curId;let h='';
 if(curTab==='goods'){const r=await (await fetch(`${API}?action=items&id=${id}`)).json();
-h=`<h3>Товары по поступлению (${r.length})</h3><table class="mini"><tr><th data-sort="n">п/п</th><th data-sort="code">Код</th><th data-sort="sku">Артикул</th><th data-sort="name">Наименование</th><th data-sort="unit">Ед</th><th data-sort="qty">Кол-во</th><th data-sort="batch">Партия поставщика</th><th data-sort="price">Цена</th><th data-sort="vat">НДС%</th><th data-sort="sum_novat">Сумма без НДС</th><th data-sort="sum_vat">Сумма НДС</th><th data-sort="sum_vat_all">Сумма с НДС</th></tr>`+r.map((t,i)=>`<tr><td>${t.line_no||i+1}</td><td>${t.code||''}</td><td>${t.sku}</td><td>${t.name}</td><td>${t.unit}</td><td>${t.qty}</td><td>${t.supplier_batch||'—'}</td><td>${t.price}</td><td>${t.vat_rate}</td><td>${t.sum_novat}</td><td>${t.vat_sum}</td><td>${t.sum_vat}</td></tr>`).join('')+'</table>'}
-else if(curTab==='stockin'){await loadStockin(id);return}
+const canEdit=!!(window.WMS_PERMS&&window.WMS_PERMS.doc_edit_receipt);
+h=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Товары по поступлению (${r.length})</h3><button class="btn sm pri" id="addItemBtn" data-perm="doc_edit_receipt">+ Добавить строку</button></div><div style="overflow:auto"><table class="mini" id="goodsTable"><thead><tr><th>п/п</th><th>Код WMS</th><th>Штрихкод</th><th>Артикул</th><th>Наименование</th><th>Ед</th><th>Кол-во</th><th>Контроль с/н</th><th>Контроль ч/з</th><th>Владелец</th><th>Партия</th><th>Цена</th><th>НДС%</th><th>Сумма без НДС</th><th>Сумма НДС</th><th>Сумма с НДС</th>${canEdit?'<th></th>':''}</tr></thead><tbody>`+r.map((t,i)=>{const proc=Number(t.processed_qty||t.qty_fact||0);return `<tr><td>${t.line_no||i+1}</td><td>${t.wms_code||t.code||''}</td><td>${t.barcode||''}</td><td>${t.sku}</td><td>${t.name}</td><td>${t.unit}</td><td><input type="number" step="0.001" min="${proc}" value="${t.qty}" data-receipt-qty="${t.id}" ${canEdit?'':'disabled'} style="width:86px;padding:4px;border:1px solid var(--line);border-radius:6px"><div class="hint" style="font-size:10px">принято: ${proc}</div></td><td>${Number(t.scan_serial)===1?'✓':''}</td><td>${Number(t.scan_chz)===1?'✓':''}</td><td>${t.owner_name||''}</td><td>${t.supplier_batch||'—'}</td><td>${t.price}</td><td>${t.vat_rate}</td><td>${t.sum_novat}</td><td>${t.vat_sum}</td><td>${t.sum_vat}</td>${canEdit?`<td><button class="btn sm" data-del-item="${t.id}" data-perm="doc_edit_receipt" ${proc>0?'disabled data-locked="1" title="Нельзя удалить: уже принято"':'title="Удалить строку"'}>✕</button></td>`:''}</tr>`}).join('')+`</tbody></table></div>`}else if(curTab==='stockin'){await loadStockin(id);return}
 else if(curTab==='docs'){const r=await (await fetch(`${API}?action=documents&id=${id}`)).json();
 h=`<h3>Вложенные документы (${r.length})</h3><table class="mini"><tr><th data-sort="n">п/п</th><th data-sort="name">Наименование</th><th data-sort="format">Формат</th><th data-sort="pages">Страниц</th></tr>`+r.map((d,i)=>`<tr><td>${i+1}</td><td>${d.name}</td><td>${d.format}</td><td>${d.pages}</td></tr>`).join('')+'</table>'}
 else if(curTab==='hist'){const r=await (await fetch(`${API}?action=history&id=${id}`)).json();
 h=`<h3>История документа (${r.length})</h3><table class="mini"><tr><th data-sort="created_at">Дата</th><th data-sort="field">Что изменилось</th><th data-sort="old_value">Было</th><th data-sort="new_value">Стало</th><th data-sort="user_fio">Пользователь</th></tr>`+r.map(x=>`<tr><td>${x.created_at||''}</td><td>${x.field||x.action}</td><td>${x.old_value||x.old_status||''}</td><td>${x.new_value||x.new_status||''}</td><td>${x.user_fio||''}</td></tr>`).join('')+'</table>'}
 else if(curTab==='flags'){const r=await (await fetch(`${API}?action=flags&id=${id}`)).json();
 h=`<h3>Сканирование маркировок ЧЗ / серийники (${r.length})</h3><table class="mini"><tr><th data-sort="n">п/п</th><th data-sort="sku">Артикул</th><th data-sort="marking_code">Маркировка КИ</th><th data-sort="receiver">Приемщик</th><th data-sort="flag_date">Дата</th></tr>`+r.map((f,i)=>`<tr><td>${i+1}</td><td>${f.sku||''}</td><td style="max-width:320px;overflow:hidden;text-overflow:ellipsis">${f.marking_code||f.serial_no||''}</td><td>${f.receiver||''}</td><td>${f.flag_date||''}</td></tr>`).join('')+'</table>'}
-$('db').innerHTML=h}
+$('db').innerHTML=h;
+if(curTab==='goods')bindReceiptItems()}
+function bindReceiptItems(){
+ const add=$('addItemBtn');
+ if(add)add.onclick=()=>{
+  if(!(window.WMS_PERMS&&window.WMS_PERMS.doc_edit_receipt)){toast('Нет прав на редактирование приходных документов');return}
+  addReceiptInlineRow();
+ };
+ document.querySelectorAll('[data-del-item]').forEach(b=>b.onclick=async()=>{
+  if(!confirm('Удалить строку из прихода?'))return;
+  const r=await fetch(`${API}?action=item_delete&id=${curId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item_id:+b.dataset.delItem})});
+  const j=await r.json();
+  if(!r.ok){toast('Ошибка: '+(j.error||''));return}
+  toast('Строка удалена');load();open(curId,'goods');
+ });
+ document.querySelectorAll('[data-receipt-qty]').forEach(inp=>{
+  const save=async()=>{
+   const val=Number(inp.value||0),min=Number(inp.min||0);
+   if(val+0.0001<min){toast('Нельзя указать меньше принятого: '+min);inp.value=inp.defaultValue;return}
+   const r=await fetch(`${API}?action=item_update&id=${curId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item_id:+inp.dataset.receiptQty,qty:inp.value})});
+   const j=await r.json();
+   if(!r.ok){toast('Ошибка: '+(j.error||''));open(curId,'goods');return}
+   toast('Количество сохранено');load();open(curId,'goods');
+  };
+  inp.onchange=save;
+  inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();inp.blur()}};
+ });
+ if(window.wmsApplyPerms)window.wmsApplyPerms();
+}
+function addReceiptInlineRow(){
+ const tbl=$('goodsTable');
+ if(!tbl||!tbl.tBodies[0])return;
+ const old=tbl.querySelector('.receipt-new-row');
+ if(old){const f=old.querySelector('[data-new-sku]');if(f)f.focus();return}
+ const tr=document.createElement('tr');tr.className='receipt-new-row';
+ tr.innerHTML=`<td>+</td>
+  <td><input data-new-wms readonly style="width:80px;padding:4px;border:1px solid var(--line);border-radius:6px;background:#F7FAFC"></td>
+  <td><input data-new-barcode placeholder="штрихкод" style="width:130px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
+  <td><input data-new-sku placeholder="артикул" list="wmsSkuList" style="width:120px;padding:4px;border:1px solid var(--line);border-radius:6px"><datalist id="wmsSkuList"></datalist></td>
+  <td><input data-new-name readonly style="width:190px;padding:4px;border:1px solid var(--line);border-radius:6px;background:#F7FAFC"></td>
+  <td><input data-new-unit readonly style="width:54px;padding:4px;border:1px solid var(--line);border-radius:6px;background:#F7FAFC"></td>
+  <td><input data-new-qty type="number" step="0.001" min="0.001" value="1" style="width:78px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
+  <td style="text-align:center"><input data-new-serial type="checkbox" disabled></td>
+  <td style="text-align:center"><input data-new-chz type="checkbox" disabled></td>
+  <td><span data-new-owner style="font-size:12px"></span></td>
+  <td><input data-new-batch placeholder="партия" style="width:100px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
+  <td><input data-new-price type="number" step="0.01" min="0" value="0" style="width:76px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
+  <td><input data-new-vat type="number" min="0" max="100" value="20" style="width:56px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
+  <td colspan="3" class="hint">авто</td>
+  <td><button class="btn sm pri" data-new-save data-perm="doc_edit_receipt">✓</button> <button class="btn sm" data-new-cancel>✕</button></td>`;
+ tbl.tBodies[0].appendChild(tr);
+ const q=(s)=>tr.querySelector(s);
+ const fill=async(input)=>{
+  const val=(input.value||'').trim();if(!val)return;
+  const isBc=input.matches('[data-new-barcode]');
+  try{
+   const r=await fetch(`${API}?action=product_lookup&q=${encodeURIComponent(val)}`);
+   const j=await r.json();const p=j.product;
+   if(!p){toast('Товар не найден: '+val);return}
+   q('[data-new-wms]').value=p.wms_code||'';
+   q('[data-new-sku]').value=p.sku||'';
+   q('[data-new-name]').value=p.name||'';
+   q('[data-new-unit]').value=p.unit||'шт';
+   if(!isBc||!q('[data-new-barcode]').value)q('[data-new-barcode]').value=p.barcode||(isBc?val:'');
+   q('[data-new-serial]').checked=!!Number(p.scan_serial_in);
+   q('[data-new-chz]').checked=!!Number(p.scan_chz);
+   q('[data-new-owner]').textContent=p.owner_name||'';
+   tr.dataset.ownerId=p.owner_contractor_id||'';
+   tr.dataset.ownerName=p.owner_name||'';
+  }catch(e){toast('Ошибка поиска товара')}
+ };
+ q('[data-new-sku]').onchange=()=>fill(q('[data-new-sku]'));
+ q('[data-new-barcode]').onchange=()=>fill(q('[data-new-barcode]'));
+ q('[data-new-cancel]').onclick=()=>tr.remove();
+ q('[data-new-save]').onclick=async()=>{
+  const sku=q('[data-new-sku]').value.trim(),name=q('[data-new-name]').value.trim(),qty=Number(q('[data-new-qty]').value||0);
+  if(!sku){toast('Укажите артикул');return}
+  if(!name){toast('Товар не найден по артикулу — проверьте артикул');return}
+  if(!q('[data-new-barcode]').value.trim()){toast('Укажите штрихкод');return}
+  if(qty<=0){toast('Количество должно быть больше нуля');return}
+  const body={wms_code:q('[data-new-wms]').value,barcode:q('[data-new-barcode]').value,sku:sku,name:name,unit:q('[data-new-unit]').value||'шт',qty:qty,
+   scan_serial:q('[data-new-serial]').checked?1:0,scan_chz:q('[data-new-chz]').checked?1:0,
+   owner_contractor_id:tr.dataset.ownerId||0,owner_name:tr.dataset.ownerName||'',
+   supplier_batch:q('[data-new-batch]').value,price:q('[data-new-price]').value,vat_rate:q('[data-new-vat]').value};
+  const r=await fetch(`${API}?action=item_add&id=${curId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j=await r.json();if(!r.ok){toast('Ошибка: '+(j.error||''));return}
+  toast('Строка добавлена');load();open(curId,'goods');
+ };
+}
 // --- Вкладка "Оприходования": № паллеты, артикул, наименование, кол-во со знаком.
 // Принята -> плюс, отменена во время приемки -> минус. Сортировка кликом по шапке А↔Я (shared/sort.js).
 let stockinRows=[];
@@ -375,11 +463,12 @@ $('db').innerHTML=`<h3>Оприходования (${r.length})</h3>
 <th data-sort="changed_at">Дата изменения</th>
 <th data-sort="pallet">№ паллеты</th>
 <th data-sort="sku">Артикул</th>
+<th data-sort="supplier_batch">Партия</th>
 <th data-sort="name">Наименование</th>
 <th data-sort="qty" style="text-align:right">Кол-во, шт</th>
 </tr>`+r.map(x=>{const q=+x.qty||0;const c=q<0?'color:#C62828;font-weight:700':'color:#2E7D32;font-weight:700';
 const txt=(q>0?'+':'')+q;
-return `<tr><td>${esc((x.changed_at||'').slice(0,16).replace('T',' '))}</td><td style="color:${(x.accept_status||'')==='Брак'?'#B00020':'inherit'};font-weight:${(x.accept_status||'')==='Брак'?'700':'400'}">${esc(x.pallet||'—')}${(x.accept_status||'')==='Брак'?'  ⚠️ брак':''}</td><td>${esc(x.sku)}</td><td style="white-space:normal;min-width:220px">${esc(x.name||'—')}</td><td style="text-align:right;${c}">${txt}</td></tr>`}).join('')+`</table>
+return `<tr><td>${esc((x.changed_at||'').slice(0,16).replace('T',' '))}</td><td style="color:${(x.accept_status||'')==='Брак'?'#B00020':'inherit'};font-weight:${(x.accept_status||'')==='Брак'?'700':'400'}">${esc(x.pallet||'—')}${(x.accept_status||'')==='Брак'?'  ⚠️ брак':''}</td><td>${esc(x.sku)}</td><td>${esc(x.supplier_batch||'—')}</td><td style="white-space:normal;min-width:220px">${esc(x.name||'—')}</td><td style="text-align:right;${c}">${txt}</td></tr>`}).join('')+`</table>
 <div class="kv" style="max-width:320px;margin-top:8px"><i>Итого оприходовано, шт</i><b>${tot}</b></div>`}
 document.querySelectorAll('#tabs [data-t]').forEach(el=>el.onclick=()=>{curTab=el.dataset.t;open(curId)});
 $('fbtn').onclick=()=>$('fp').classList.add('open');
@@ -392,7 +481,7 @@ $('chall').onchange=e=>{document.querySelectorAll('#rows input[type=checkbox][da
 $('mk').onclick=()=>$('mm').classList.add('open');
 if($('mok'))$('mok').onclick=async()=>{const body={supplier_id:+$('ns').value,warehouse_id:+$('nw').value,external_no:$('next2').value,plan_delivery_date:$('np').value,receipt_type:$('nrt').value,accept_type:$('nat').value,unload_type:$('nut').value,cargo_places_plan:+$('ncp').value};
 const r=await fetch(API+'?action=store',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-const j=await r.json();$('mm').classList.remove('open');toast(r.ok?'Создано '+j.doc_no:'Ошибка: '+(j.error||''));load()};
+const j=await r.json();$('mm').classList.remove('open');toast(r.ok?'Создано '+j.doc_no:'Ошибка: '+(j.error||''));load();if(r.ok&&j.id)open(+j.id,'goods')};
 function openAttrs(id){const o=(lastRows||[]).find(x=>x.id===id)||curData||{};
 $('atitle').textContent='Поступление '+(o.doc_no||('#'+id));
 const av=(o.arrival_date||'');$('aarr').value=av.length>=16?av.slice(0,16).replace(' ','T'):(av.length>=10?av.slice(0,10)+'T00:00':'');

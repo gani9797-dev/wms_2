@@ -427,15 +427,16 @@ function csv_upload_ensure_order_items_table(PDO $pdo): void
               id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, order_id BIGINT UNSIGNED NOT NULL,
               sku VARCHAR(50) NOT NULL, name VARCHAR(255) NOT NULL,
               unit VARCHAR(10) NOT NULL DEFAULT 'шт', qty DECIMAL(12,3) NOT NULL,
-              prod_date DATE NULL,
+              supplier_batch VARCHAR(100) NULL, prod_date DATE NULL,
               KEY idx_coi_order (order_id), KEY idx_coi_sku (sku)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         } else {
             $pdo->exec("CREATE TABLE IF NOT EXISTS client_order_items (
               id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL,
               sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт',
-              qty REAL NOT NULL, prod_date TEXT)");
+              qty REAL NOT NULL, supplier_batch TEXT, prod_date TEXT)");
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_coi_order ON client_order_items(order_id)");
         }
+        wms_ensure_column($pdo, 'client_order_items', 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
     } catch (Throwable) {
     }
 }
@@ -719,6 +720,7 @@ function csv_upload_import_shipment(PDO $shp, ?PDO $nom, array $rows, int $contr
 {
     csv_upload_ensure_columns($shp, 'shipment_items', [
         'prod_date' => ['DATE NULL', 'prod_date TEXT'],
+        'supplier_batch' => ['VARCHAR(100) NULL', 'supplier_batch TEXT'],
     ]);
     if ($contractorId <= 0) {
         throw new RuntimeException('Не найден контрагент из CSV (таблица contractors недоступна)');
@@ -764,8 +766,8 @@ function csv_upload_import_shipment(PDO $shp, ?PDO $nom, array $rows, int $contr
         ]);
         $sid = (int)$shp->lastInsertId();
         $ins = $shp->prepare(
-            "INSERT INTO shipment_items (shipment_id,sku,name,unit,qty,price," . wms_quote_ident($shp, 'sum') . ",prod_date)
-             VALUES (:s,:sku,:name,:unit,:qty,0,0,:pd)"
+            "INSERT INTO shipment_items (shipment_id,sku,name,unit,qty,price," . wms_quote_ident($shp, 'sum') . ",prod_date,supplier_batch)
+             VALUES (:s,:sku,:name,:unit,:qty,0,0,:pd,:b)"
         );
         $qtyTotal = 0.0;
         $skus = [];
@@ -787,6 +789,7 @@ function csv_upload_import_shipment(PDO $shp, ?PDO $nom, array $rows, int $contr
                 ':name' => function_exists('mb_substr') ? mb_substr($name, 0, 255, 'UTF-8') : substr($name, 0, 255),
                 ':unit' => function_exists('mb_substr') ? mb_substr($unit, 0, 10, 'UTF-8') : substr($unit, 0, 10),
                 ':qty' => $r['qty'], ':pd' => $r['prod_date'] ?? null,
+                ':b' => trim((string)($r['batch'] ?? '')) ?: null,
             ]);
             $qtyTotal += (float)$r['qty'];
             $skus[$r['sku']] = true;
@@ -885,8 +888,8 @@ function csv_upload_import_orders(PDO $shp, ?PDO $nom, array $rows, int $contrac
         ]);
         $oid = (int)$shp->lastInsertId();
         $ins = $shp->prepare(
-            "INSERT INTO client_order_items (order_id,sku,name,unit,qty,prod_date)
-             VALUES (:o,:sku,:name,:unit,:qty,:pd)"
+            "INSERT INTO client_order_items (order_id,sku,name,unit,qty,supplier_batch,prod_date)
+             VALUES (:o,:sku,:name,:unit,:qty,:b,:pd)"
         );
         $qtyTotal = 0.0;
         foreach ($rows as $r) {
@@ -906,7 +909,8 @@ function csv_upload_import_orders(PDO $shp, ?PDO $nom, array $rows, int $contrac
                 ':o' => $oid, ':sku' => $r['sku'],
                 ':name' => function_exists('mb_substr') ? mb_substr($name, 0, 255, 'UTF-8') : substr($name, 0, 255),
                 ':unit' => function_exists('mb_substr') ? mb_substr($unit, 0, 10, 'UTF-8') : substr($unit, 0, 10),
-                ':qty' => $r['qty'], ':pd' => $r['prod_date'] ?? null,
+                ':qty' => $r['qty'], ':b' => trim((string)($r['batch'] ?? '')) ?: null,
+                ':pd' => $r['prod_date'] ?? null,
             ]);
             $qtyTotal += (float)$r['qty'];
         }

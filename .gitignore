@@ -41,3 +41,6 @@ out/error/*
 !out/success/.gitkeep
 !out/error/.gitkeep
 
+# Local SQLite data (not published)
+*.sqlite
+документация/cleanup-backup-*.json

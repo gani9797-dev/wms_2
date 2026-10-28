@@ -336,7 +336,7 @@ final class ShipmentService
             // Позиции: копируем ВСЕ поля строки (код, единица, наряд, этикетка,
             // дата производства) — раньше терялись code/unit/order_id/check_label.
             $itemCols = ['code', 'order_id', 'sku', 'name', 'unit', 'qty', 'price', 'check_label',
-                'warehouse_id', 'comment', 'prod_date'];
+                'warehouse_id', 'comment', 'prod_date', 'supplier_batch'];
             $has = wms_table_columns($this->pdo, 'shipment_items');
             $cols = [];
             foreach ($itemCols as $c) {
@@ -728,10 +728,13 @@ final class ShipmentService
             // уже вставленные строки наряда.
             $hasProdDate = function_exists('wms_has_column')
                 ? wms_has_column($this->pdo, 'shipment_items', 'prod_date') : true;
+            $hasBatch = function_exists('wms_has_column')
+                ? (wms_has_column($this->pdo, 'shipment_items', 'supplier_batch')
+                    && wms_has_column($this->pdo, 'client_order_items', 'supplier_batch')) : false;
             try {
                 $ins = $this->pdo->prepare(
-                    "INSERT INTO shipment_items (shipment_id,order_id,sku,name,unit,qty,price," . wms_quote_ident($this->pdo, 'sum') . ($hasProdDate ? ',prod_date' : '') . ")
-                     SELECT :s, order_id, sku, name, unit, qty, 0, 0" . ($hasProdDate ? ', prod_date' : '') . "
+                    "INSERT INTO shipment_items (shipment_id,order_id,sku,name,unit,qty,price," . wms_quote_ident($this->pdo, 'sum') . ($hasProdDate ? ',prod_date' : '') . ($hasBatch ? ',supplier_batch' : '') . ")
+                     SELECT :s, order_id, sku, name, unit, qty, 0, 0" . ($hasProdDate ? ', prod_date' : '') . ($hasBatch ? ', supplier_batch' : '') . "
                      FROM client_order_items WHERE order_id=:o"
                 );
                 foreach ($orderIds as $oid) {

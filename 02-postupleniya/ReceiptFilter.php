@@ -78,7 +78,7 @@ final class ReceiptFilter
         $f->qtyFrom      = $get('qty_from') !== null ? (int)$get('qty_from') : null;
         $f->qtyTo        = $get('qty_to') !== null ? (int)$get('qty_to') : null;
         $f->page         = max(1, (int)($q['page'] ?? 1));
-        $f->perPage      = min(200, max(5, (int)($q['per_page'] ?? 20)));
+        $f->perPage      = wms_per_page($q['per_page'] ?? 20, 20, 200, 5);
         $allowed         = ['doc_date', 'doc_no', 'total_with_vat', 'id',
             'external_no', 'arrival_date', 'accept_date', 'place_date', 'supplier',
             'vehicle', 'gate', 'unload_type', 'warehouse', 'status', 'total',

@@ -2,13 +2,17 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/CellStatus.php';
+require_once __DIR__ . '/../shared/CellZones.php';
 
 // Сервис ячеек: создание / редактирование / копирование / блокировка / архив / перемещение / экспорт / импорт.
 // Каждое изменение значимого поля пишется в cell_history, движения товара — в cell_movements.
 
 final class CellService
 {
-    public function __construct(private PDO $pdo) {}
+    public function __construct(private PDO $pdo)
+    {
+        wms_cell_extra_zones_ensure($pdo);
+    }
 
     private const EDITABLE = [
         'code', 'warehouse_id', 'zone', 'cell_type', 'category', 'capacity',
@@ -63,6 +67,50 @@ final class CellService
         $z = trim($zone);
         if ($z === '' || !in_array($z, $this->zoneCodes(), true)) {
             throw new RuntimeException('Недопустимая зона: ' . implode('/', $this->zoneCodes()));
+        }
+    }
+
+    public function extraZones(int $cellId): array
+    {
+        $map = wms_cell_extra_zones_map($this->pdo, [$cellId]);
+        return $map[$cellId] ?? [];
+    }
+
+    private function normalizeZoneList(mixed $v): array
+    {
+        $raw = [];
+        if (is_array($v)) {
+            $raw = $v;
+        } elseif (is_string($v) && trim($v) !== '') {
+            $raw = preg_split('/[,\s;]+/u', trim($v)) ?: [];
+        }
+        $allowed = $this->zoneCodes();
+        $out = [];
+        foreach ($raw as $z) {
+            $z = trim((string)$z);
+            if ($z !== '' && in_array($z, $allowed, true) && !in_array($z, $out, true)) {
+                $out[] = $z;
+            }
+        }
+        return $out;
+    }
+
+    public function setZones(int $cellId, string $primary, mixed $allZones, int $userId, string $userFio = 'Иванов И.И.', bool $hist = true): void
+    {
+        $primary = trim($primary);
+        $this->assertZone($primary);
+        $zones = $this->normalizeZoneList($allZones);
+        if (!$zones) {
+            $zones = [$primary];
+        }
+        if (!in_array($primary, $zones, true)) {
+            $zones[] = $primary;
+        }
+        $extra = array_values(array_filter($zones, static fn($z) => $z !== $primary));
+        $oldExtra = $this->extraZones($cellId);
+        wms_cell_extra_zones_replace($this->pdo, $cellId, $extra);
+        if ($hist && array_values($oldExtra) !== array_values($extra)) {
+            $this->hist($cellId, $userId, $userFio, 'zones', 'Зоны', implode(', ', $oldExtra), implode(', ', $extra));
         }
     }
 
@@ -161,6 +209,7 @@ final class CellService
         }
         $id = (int)$this->pdo->lastInsertId();
         $this->hist($id, $userId, $userFio, 'create', 'Создание', null, $code);
+        $this->setZones($id, $zone, $b['zones'] ?? [$zone], $userId, $userFio, false);
         // Дополнительные зоны отбора (ручной отбор / отбор водителем) — несколько на ячейку.
         $this->setPickZones($id, CellStatus::normalizePickZones($b['pick_zones'] ?? []), $userId, $userFio);
         return $id;
@@ -253,6 +302,15 @@ final class CellService
         if ($set) {
             $this->pdo->prepare('UPDATE storage_cells SET ' . implode(', ', $set) . ' WHERE id = :id')->execute($params);
         }
+        if (array_key_exists('zones', $b) || array_key_exists('zone', $b)) {
+            $primary = array_key_exists('zone', $b)
+                ? trim((string)$b['zone'])
+                : trim((string)($old['zone'] ?? 'storage'));
+            $all = array_key_exists('zones', $b)
+                ? $b['zones']
+                : array_merge($this->extraZones($id), [$primary]);
+            $this->setZones($id, $primary, $all, $userId, $userFio);
+        }
         // Дополнительные зоны отбора (несколько зон у ячейки).
         if (array_key_exists('pick_zones', $b)) {
             $this->setPickZones($id, CellStatus::normalizePickZones($b['pick_zones']), $userId, $userFio);
@@ -288,8 +346,10 @@ final class CellService
         $st->execute($old);
         $nid = (int)$this->pdo->lastInsertId();
         $this->hist($nid, $userId, $userFio, 'copy', 'Копирование', (string)$id, $old['code']);
-        // Копия наследует зоны отбора.
+        // Копия наследует зоны отбора и дополнительные зоны.
         $this->setPickZones($nid, $this->pickZones($id), $userId, $userFio, false);
+        $this->setZones($nid, (string)($old['zone'] ?? 'storage'),
+            array_merge($this->extraZones($id), [(string)($old['zone'] ?? 'storage')]), $userId, $userFio, false);
         return $nid;
     }
 
@@ -346,7 +406,7 @@ final class CellService
         if ((float)($row['qty'] ?? 0) != 0.0 || (float)($row['reserved_qty'] ?? 0) != 0.0) {
             throw new RuntimeException('Нельзя удалить: в ячейке есть товар или резерв (' . ($row['code'] ?? $id) . '). Сначала переместите его.');
         }
-        foreach (['cell_content', 'cell_history', 'cell_movements', 'storage_cell_zones'] as $t) {
+        foreach (['cell_content', 'cell_history', 'cell_movements', 'storage_cell_zones', 'storage_cell_extra_zones'] as $t) {
             try {
                 $this->pdo->prepare("DELETE FROM $t WHERE cell_id = :id")->execute([':id' => $id]);
             } catch (Throwable) {
@@ -804,7 +864,9 @@ final class CellService
                     throw $e;
                 }
                 $created++;
-                $this->hist((int)$this->pdo->lastInsertId(), $userId, $userFio, 'create', 'Создание', null, $c['code']);
+                $newId = (int)$this->pdo->lastInsertId();
+                $this->hist($newId, $userId, $userFio, 'create', 'Создание', null, $c['code']);
+                $this->setZones($newId, $zone, $b['zones'] ?? [$zone], $userId, $userFio, false);
                 $existing[$c['code']] = true;
             }
             $this->pdo->commit();

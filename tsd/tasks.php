@@ -159,7 +159,22 @@ function tt_move_stock_to_cell(string $sscc, string $cell, array $moves, int $wa
         }
     } catch (Throwable) {
     }
-    // Тип тары — с ячейки резерва, иначе из карточки, иначе euro.
+    // Дата создания паллеты (SSCC) — в строку запаса, чтобы в 08.1 была «Дата паллеты».
+    $palletDate = null;
+    if ($sscc !== '') {
+        try {
+            $pq = $rdb->prepare("SELECT created_at FROM tsd_pallets WHERE sscc=:s ORDER BY id DESC LIMIT 1");
+            $pq->execute([':s' => $sscc]);
+            $pv = $pq->fetchColumn();
+            if ($pv !== false && $pv !== null && trim((string)$pv) !== '') {
+                $palletDate = substr(trim((string)$pv), 0, 10);
+            }
+        } catch (Throwable) {
+        }
+    }
+    if ($palletDate === null) {
+        $palletDate = date('Y-m-d');
+    }
     $ptype = 'euro';
     try {
         $sdb = wms_storage_pdo();
@@ -196,7 +211,7 @@ function tt_move_stock_to_cell(string $sscc, string $cell, array $moves, int $wa
             $pid = (int)$prod['id'];
             // Уже размещено этой паллетой? — не дублируем (повторный confirm).
             $tq = $ndb->prepare(
-                'SELECT id, qty FROM product_stock WHERE product_id=:p AND warehouse_id=:w AND cell=:c AND '
+                'SELECT id, qty, COALESCE(supplier_batch,\'\') AS supplier_batch, prod_date, quality, pallet_date FROM product_stock WHERE product_id=:p AND warehouse_id=:w AND cell=:c AND '
                 . ($sscc !== '' ? 'pallet=:pal' : "COALESCE(pallet,'')=''") . ' LIMIT 1'
             );
             $tp = [':p' => $pid, ':w' => $warehouseId, ':c' => $cell];
@@ -213,7 +228,7 @@ function tt_move_stock_to_cell(string $sscc, string $cell, array $moves, int $wa
             $src = null;
             if ($receiptId) {
                 $sq = $ndb->prepare(
-                    "SELECT id, qty FROM product_stock WHERE product_id=:p AND warehouse_id=:w
+                    "SELECT id, qty, COALESCE(supplier_batch,'') AS supplier_batch, prod_date, quality, pallet_date FROM product_stock WHERE product_id=:p AND warehouse_id=:w
                      AND receipt_id=:r AND COALESCE(pallet,'')=:pal AND qty > 0 ORDER BY id LIMIT 1"
                 );
                 try {
@@ -228,7 +243,7 @@ function tt_move_stock_to_cell(string $sscc, string $cell, array $moves, int $wa
                 // Любая строка ячейки приёмки (зона receiving) с этим товаром.
                 try {
                     $sq = $ndb->prepare(
-                        "SELECT id, qty FROM product_stock WHERE product_id=:p AND warehouse_id=:w
+                        "SELECT id, qty, COALESCE(supplier_batch,'') AS supplier_batch, prod_date, quality, pallet_date FROM product_stock WHERE product_id=:p AND warehouse_id=:w
                          AND cell IN (SELECT code FROM storage_cells WHERE zone='receiving') AND qty > 0 ORDER BY id LIMIT 1"
                     );
                     $sq->execute([':p' => $pid, ':w' => $warehouseId]);
@@ -239,7 +254,7 @@ function tt_move_stock_to_cell(string $sscc, string $cell, array $moves, int $wa
             }
             if (!$src) {
                 $sq = $ndb->prepare(
-                    "SELECT id, qty FROM product_stock WHERE product_id=:p AND warehouse_id=:w
+                    "SELECT id, qty, COALESCE(supplier_batch,'') AS supplier_batch, prod_date, quality, pallet_date FROM product_stock WHERE product_id=:p AND warehouse_id=:w
                      AND cell='ЗОНА-ПРИЕМКИ' AND qty > 0 ORDER BY id LIMIT 1"
                 );
                 $sq->execute([':p' => $pid, ':w' => $warehouseId]);
@@ -275,13 +290,20 @@ function tt_move_stock_to_cell(string $sscc, string $cell, array $moves, int $wa
                 $skipped[] = $sku . ': остаток в приёмке нулевой';
                 continue;
             }
+            // Переносим партию/дату производства/качество/дату паллеты из строки-источника.
+            $srcBatch = trim((string)($src['supplier_batch'] ?? ''));
+            $srcProd = $src['prod_date'] ?? null;
+            $srcQuality = trim((string)($src['quality'] ?? 'новый')) ?: 'новый';
+            $srcPalletDate = $src['pallet_date'] ?? $palletDate;
             $ins = $ndb->prepare(
                 'INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,pallet_type,qty' .
-                ($receiptId ? ',receipt_id' : '') . ') VALUES (:p,:w,:c,:pal,:pt,:q' .
-                ($receiptId ? ',:r' : '') . ')'
+                ($receiptId ? ',receipt_id' : '') . ',pallet_date,supplier_batch,prod_date,quality) VALUES (:p,:w,:c,:pal,:pt,:q' .
+                ($receiptId ? ',:r' : '') . ',:pdt,:sb,:pd,:ql)'
             );
             $ip = [':p' => $pid, ':w' => $warehouseId, ':c' => $cell,
-                ':pal' => ($sscc !== '' ? $sscc : null), ':pt' => $ptype, ':q' => $movedQty];
+                ':pal' => ($sscc !== '' ? $sscc : null), ':pt' => $ptype, ':q' => $movedQty,
+                ':pdt' => $srcPalletDate, ':sb' => ($srcBatch !== '' ? $srcBatch : null),
+                ':pd' => $srcProd, ':ql' => $srcQuality];
             if ($receiptId) {
                 $ip[':r'] = $receiptId;
             }
@@ -290,10 +312,12 @@ function tt_move_stock_to_cell(string $sscc, string $cell, array $moves, int $wa
             } catch (Throwable) {
                 // Старая схема без receipt_id.
                 $ndb->prepare(
-                    'INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,pallet_type,qty)
-                     VALUES (:p,:w,:c,:pal,:pt,:q)'
+                    'INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,pallet_type,qty,pallet_date,supplier_batch,prod_date,quality)
+                     VALUES (:p,:w,:c,:pal,:pt,:q,:pdt,:sb,:pd,:ql)'
                 )->execute([':p' => $pid, ':w' => $warehouseId, ':c' => $cell,
-                    ':pal' => ($sscc !== '' ? $sscc : null), ':pt' => $ptype, ':q' => $movedQty]);
+                    ':pal' => ($sscc !== '' ? $sscc : null), ':pt' => $ptype, ':q' => $movedQty,
+                    ':pdt' => $srcPalletDate, ':sb' => ($srcBatch !== '' ? $srcBatch : null),
+                    ':pd' => $srcProd, ':ql' => $srcQuality]);
             }
             try {
                 $ndb->prepare(
@@ -1707,12 +1731,23 @@ if ($action === 'place_confirm' && $method === 'POST') {
                 if ($qtyM <= 0) {
                     continue;
                 }
+                $batchJ = '';
+                try {
+                    $bq = $ndb->prepare(
+                        "SELECT COALESCE(s.supplier_batch,'') FROM product_stock s
+                         JOIN products p ON p.id=s.product_id WHERE p.sku=:s AND s.pallet=:p LIMIT 1"
+                    );
+                    $bq->execute([':s' => $skuM, ':p' => $sscc]);
+                    $batchJ = trim((string)($bq->fetchColumn() ?: ''));
+                } catch (Throwable) {
+                }
                 WmsJournal::log($jd, [
                     'op_type' => 'размещение',
                     'doc_type' => 'Задание',
                     'doc_no' => (string)($head['doc_no'] ?? ''),
                     'sku' => $skuM,
                     'product_name' => $nameBySku[$skuM] ?? $skuM,
+                    'supplier_batch' => $batchJ,
                     'qty' => $qtyM,
                     'pallet' => $sscc,
                     'sscc' => $sscc,
@@ -2147,12 +2182,23 @@ if ($action === 'move_confirm' && $method === 'POST') {
                 if ($skuJ === '' || $qtyJ <= 0) {
                     continue;
                 }
+                $batchJ = '';
+                try {
+                    $bq = $ndb->prepare(
+                        "SELECT COALESCE(s.supplier_batch,'') FROM product_stock s
+                         JOIN products p ON p.id=s.product_id WHERE p.sku=:s AND s.pallet=:p LIMIT 1"
+                    );
+                    $bq->execute([':s' => $skuJ, ':p' => $sscc]);
+                    $batchJ = trim((string)($bq->fetchColumn() ?: ''));
+                } catch (Throwable) {
+                }
                 WmsJournal::log($jd, [
                     'op_type' => 'перемещение',
                     'doc_type' => 'Задание',
                     'doc_no' => $docNo,
                     'sku' => $skuJ,
                     'product_name' => (string)($ln['name'] ?? $skuJ),
+                    'supplier_batch' => $batchJ,
                     'qty' => $qtyJ,
                     'pallet' => $sscc,
                     'sscc' => $sscc,

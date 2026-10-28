@@ -104,13 +104,14 @@ body.navhide main{max-width:none}
 <input id="q" type="text" placeholder="Поиск по адресу, категории...">
 <button class="btn" id="fbtn">Фильтры<span class="badge" id="fbadge" style="display:none">0</span></button>
 <button class="btn" id="massbtn">Массовое изменение</button>
+<button class="btn" id="selunlocked" title="Отметить только ячейки без блокировки">Выбрать не заблокированные</button>
 <button class="btn" id="imp">Импорт</button>
 <button class="btn" id="exp">Экспорт</button>
 <button class="btn pri" id="mk">+ Создать</button>
 </div>
 <div class="chips" id="chips"></div>
 <div class="card" style="overflow:auto">
-<table data-sort-mode="server"><thead><tr><th><input type="checkbox" id="chall"></th><th data-sort="code">Адрес</th><th data-sort="zone">Зона</th><th>Зоны отбора</th><th data-sort="cell_type">Тип ячейки</th><th data-sort="beam">Балка</th><th data-sort="height">Высота</th><th data-sort="pallet_types">Тара</th><th data-sort="category">Категория</th><th data-sort="status">Статус</th><th data-sort="fill">Заполненность</th><th data-sort="qty">В ячейке, шт</th><th data-sort="reserved">Резерв</th><th data-sort="stock">Остаток, шт</th><th data-sort="pallets">Паллет</th><th data-sort="temp">Темп. режим</th><th data-sort="lock">Блокировка</th><th title="Робот настраивает тару по секции. Если в секции снята галка — секция пропускается">Робот. Настройка тар</th><th>⋮ <span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
+<table data-sort-mode="server"><thead><tr><th><input type="checkbox" id="chall"></th><th data-sort="code">Адрес</th><th data-sort="zone">Зоны</th><th>Зоны отбора</th><th data-sort="cell_type">Тип ячейки</th><th data-sort="beam">Балка</th><th data-sort="height">Высота</th><th data-sort="pallet_types">Тара</th><th data-sort="category">Категория</th><th data-sort="status">Статус</th><th data-sort="fill">Заполненность</th><th data-sort="qty">В ячейке, шт</th><th data-sort="reserved">Резерв</th><th data-sort="stock">Остаток, шт</th><th data-sort="pallets">Паллет</th><th data-sort="temp">Темп. режим</th><th data-sort="lock">Блокировка</th><th title="Робот настраивает тару по секции. Если в секции снята галка — секция пропускается">Робот. Настройка тар</th><th>⋮ <span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
 <tbody id="rows"><tr><td colspan="19">Загрузка...</td></tr></tbody></table>
 <div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
 <select id="pp"><option>5</option><option>9</option><option selected>14</option><option>20</option></select></div>
@@ -120,7 +121,7 @@ body.navhide main{max-width:none}
 
 <div class="fpanel" id="fp">
 <h2 style="margin:0">Фильтры <span class="badge" id="fbadge2" style="position:static;display:inline-flex">0</span></h2>
-<label>Зона</label><select id="fzone"><option value="">Все зоны</option><option value="storage">Хранение</option><option value="shipment">Отгрузка</option><option value="receiving">Приёмка</option></select>
+<label>Зона</label><select id="fzone"><option value="">Все зоны</option></select>
 <label>Зона отбора</label><select id="fpickzone"><option value="">Все зоны отбора</option><option value="manual">Ручной отбор</option><option value="driver">Отбор водителем</option></select>
 <label>Тип ячейки</label><select id="ftype"><option value="">Все типы</option><option value="pallet">Паллетная</option><option value="box">Коробочная</option></select>
 <label>Статус</label>
@@ -134,13 +135,13 @@ body.navhide main{max-width:none}
 <label>Температурный режим</label><div class="frow"><input id="ftf" type="number" placeholder="От"><input id="ftt" type="number" placeholder="До"></div>
 <label>Заполненность, %</label><div class="frow"><input id="fff" type="number" placeholder="От"><input id="fft" type="number" placeholder="До"></div><small style="color:var(--mut)">Безразмерные ячейки (вместимость 0) в этот фильтр не попадают</small>
 <label>Разрешено</label><input id="fal" type="text" placeholder="Все">
-<label>Блокировка</label><select id="flk"><option value="all">Все</option><option value="yes">Да</option><option value="no">Нет</option></select>
+<label>Блокировка (Нет = не заблокированные)</label><select id="flk"><option value="all">Все</option><option value="yes">Да</option><option value="no">Нет</option></select>
 <label>Есть товар</label><select id="fhg"><option value="all">Все</option><option value="yes">Да</option><option value="no">Нет</option></select>
 <label>Разные товары в ячейке</label><select id="fmg"><option value="all">Все</option><option value="yes">Разрешены</option><option value="no">Запрещены</option></select>
 <label>Типы паллет в ячейке</label><select id="fmp"><option value="all">Все</option><option value="yes">Несколько типов</option><option value="no">Один тип</option></select>
 <label>Паллет</label><div class="frow"><input id="fpf" type="number" placeholder="От"><input id="fpt" type="number" placeholder="До"></div>
 <label>Остаток, шт</label><div class="frow"><input id="fqf" type="number" placeholder="От"><input id="fqt" type="number" placeholder="До"></div>
-<label>Склад</label><select id="fwh"><option value="">Все склады</option><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select>
+<label>Склад</label><select id="fwh"><option value="">Все склады</option><option value="1">Основной склад</option></select>
 <div style="display:flex;gap:10px;margin-top:16px"><button class="btn" id="fclr">Сбросить фильтры</button><button class="btn pri" id="fok">Применить</button><button class="btn" id="fclose">Отмена</button></div>
 <p style="color:var(--mut);font-size:13px">Активные фильтры: <span id="factive">0</span> · <a href="#" id="freset">Сбросить все</a></p>
 </div>
@@ -160,18 +161,19 @@ body.navhide main{max-width:none}
 
 <div class="modal" id="mm"><div class="mbox"><h3 style="margin-top:0">Создание ячеек</h3>
 <div style="font-size:12px;color:var(--mut);margin-bottom:6px">Формат адреса: <b>{Буква}{Ряд}-{Секция}-{Уровень}-{Ячейка}</b>, например A01-01-01-01. Нули сохраняются по вводу: «01»→2 знака, «001»→3 знака.</div>
-<div style="display:flex;gap:10px"><div style="flex:1"><label>Склад *</label><select id="nw"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Склад *</label><select id="nw"><option value="1">Основной склад</option></select></div>
 <div style="flex:1"><label>Буква (необязательно, 1 буква)</label><input id="nlt" type="text" maxlength="1" placeholder="A" style="text-transform:uppercase"></div></div>
-<div style="display:flex;gap:10px"><div style="flex:1"><label>Зона *</label><select id="nz"><option value="storage">Хранение</option><option value="shipment">Отгрузка</option><option value="receiving">Приёмка</option></select></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Зона *</label><select id="nz"></select></div>
 <div style="flex:1"><label>Тип *</label><select id="nt"><option value="pallet">Паллетная</option><option value="box">Коробочная</option></select></div></div>
+<div><label>Дополнительные зоны (можно несколько)</label><div id="nzones" style="display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px"></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Ряд, от *</label><input id="nrf" type="text" inputmode="numeric" maxlength="3" placeholder="01"></div>
 <div style="flex:1"><label>Ряд, до *</label><input id="nrt" type="text" inputmode="numeric" maxlength="3" placeholder="02"></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Ширина балки, м * (одна на всё создание)</label><select id="nbm"><option value="3.2">3,2 — 3 евро / 2 фин</option><option value="3.6">3,6 — 4 евро / 3 фин</option></select></div>
 <div style="flex:1"><label>Высота ячейки, мм</label><input id="nhh" type="number" min="1" placeholder="напр. 1500"></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Типы тары (какие паллеты можно ставить)</label><select id="npt2"><option value="euro,fin">Евро + Фин</option><option value="euro">Только Евро</option><option value="fin">Только Фин</option></select></div>
 <div style="flex:1"><label style="font-weight:400;font-size:11px;color:var(--mut)">Правило секции (Ряд+Секция): 3,2 — хоть один евро ⇒ вся секция под евро; 3,6 — 3 фин на ярусе, следующая ячейка блокируется с причиной «(Фин секция)». Подбор на ТСД добивает непустые секции.</label></div></div>
-<div style="display:flex;gap:10px"><div style="flex:1"><label style="font-weight:400;font-size:12px"><input type="checkbox" id="namp" checked style="width:auto"> Разрешено несколько типов паллет</label><br>
-<label style="font-weight:400;font-size:12px"><input type="checkbox" id="namg" checked style="width:auto"> Разрешено хранить разные товары в одной ячейке</label></div>
+<div style="display:flex;gap:10px"><div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-weight:400;font-size:12px;color:#4A4A4A">Разрешено несколько типов паллет</span><input type="checkbox" id="namp" checked style="width:auto"></div>
+<div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-weight:400;font-size:12px;color:#4A4A4A">Разрешено хранить разные товары в одной ячейке</span><input type="checkbox" id="namg" checked style="width:auto"></div></div>
 <div style="flex:1"><label>Закреплённый тип тары (когда галка снята)</label><select id="napt"><option value="euro">Евро</option><option value="fin">Фин</option></select></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Секция, от *</label><input id="nsf" type="text" inputmode="numeric" maxlength="3" placeholder="01"></div>
 <div style="flex:1"><label>Секция, до *</label><input id="nst" type="text" inputmode="numeric" maxlength="3" placeholder="03"></div></div>
@@ -191,9 +193,10 @@ body.navhide main{max-width:none}
 
 <div class="modal" id="em"><div class="mbox"><h3 style="margin-top:0">Редактировать ячейку</h3>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Адрес</label><input id="ec" type="text"></div>
-<div style="flex:1"><label>Склад</label><select id="ew"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select></div></div>
-<div style="display:flex;gap:10px"><div style="flex:1"><label>Зона</label><select id="ez"><option value="storage">Хранение</option><option value="shipment">Отгрузка</option><option value="receiving">Приёмка</option></select></div>
+<div style="flex:1"><label>Склад</label><select id="ew"><option value="1">Основной склад</option></select></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Зона</label><select id="ez"></select></div>
 <div style="flex:1"><label>Тип</label><select id="et"><option value="pallet">Паллетная</option><option value="box">Коробочная</option></select></div></div>
+<div><label>Дополнительные зоны (можно несколько)</label><div id="ezones" style="display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px"></div></div>
 <label>Зоны отбора (можно несколько)</label>
 <div><label style="display:inline"><input type="checkbox" id="epzManual" style="width:auto"> Ручной отбор (роль Кладовщик)</label>
 <label style="display:inline"><input type="checkbox" id="epzDriver" style="width:auto"> Отбор водителем (роль Водитель)</label></div>
@@ -209,12 +212,12 @@ body.navhide main{max-width:none}
 <div style="flex:1"><label>Стоит паллета (факт)</label><select id="eptf"><option value="">—</option><option value="euro">Евро</option><option value="fin">Фин</option></select></div></div>
 <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:8px">
 <div style="font-size:12px;color:#4A4A4A;font-weight:700;margin-bottom:6px">Настройки ячейки (робот. настройка тар)</div>
-<label style="display:inline;font-weight:400;font-size:13px"><input type="checkbox" id="eamp" style="width:auto"> Разрешено несколько типов паллет</label><br>
-<label style="display:inline;font-weight:400;font-size:13px"><input type="checkbox" id="eamg" style="width:auto"> Разрешено хранить разные товары в одной ячейке</label>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #F5F5F5"><span style="font-size:13px;color:#4A4A4A">Разрешено несколько типов паллет</span><input type="checkbox" id="eamp" style="width:auto"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #F5F5F5"><span style="font-size:13px;color:#4A4A4A">Разрешено хранить разные товары в одной ячейке</span><input type="checkbox" id="eamg" style="width:auto"></div>
 <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><div style="flex:1"><label>Закреплённый тип тары</label><select id="eapt"><option value="euro">Евро</option><option value="fin">Фин</option></select></div>
 <div style="flex:1;font-size:11px;color:var(--mut)" id="eaptHint">Галка снята — в ячейке допустим только один тип паллет (евро/фин).</div></div>
 <div style="font-size:11px;color:var(--mut);margin-top:6px">Если снять любую из галок, робот по автоматической настройке тар пропускает всю секцию (Ряд + Секция) до восстановления галки.</div>
-<label style="display:block;margin-top:10px;border-top:1px solid var(--line);padding-top:8px;font-weight:700;font-size:13px"><input type="checkbox" id="eqLock" style="width:auto"> Только новый товар (брак в ячейку нельзя размещать)</label>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;border-top:1px solid var(--line);padding-top:8px"><span style="font-weight:700;font-size:13px;color:#4A4A4A">Только новый товар (брак в ячейку нельзя размещать)</span><input type="checkbox" id="eqLock" style="width:auto"></div>
 <div style="font-size:11px;color:var(--mut);margin-top:4px">Если включено: при размещении и перемещении паллета с качеством «Брак» в эту ячейку не попадёт.</div>
 </div>
 <label>Комментарий</label><input id="ecm" type="text">
@@ -293,7 +296,7 @@ if($('fhg').value!=='all')p.set('has_goods',$('fhg').value);
 document.querySelectorAll('#sts input:checked').forEach(c=>p.append('status[]',c.value));
 Sort.params(p);
 return p}
-function chips(){const c=[];if($('fwh').value==='1')c.push('Основной склад');else if($('fwh').value==='2')c.push('Холодильный склад');
+function chips(){const c=[];if($('fwh').value)c.push($('fwh').selectedOptions[0].textContent);
 if($('fzone')&&$('fzone').value)c.push('Зона: '+($('fzone').selectedOptions[0]?$('fzone').selectedOptions[0].textContent:$('fzone').value));
 if($('q').value)c.push('Поиск: '+$('q').value);
 if($('fpickzone').value)c.push('Зона отбора: '+($('fpickzone').value==='manual'?'Ручной отбор':'Отбор водителем'));
@@ -305,7 +308,7 @@ async function load(){const r=await fetch(API+'?'+params());const j=await r.json
 $('info').textContent=`Показано ${j.from}–${j.to} из ${j.total}`;
 const n=j.active_filters||0;$('fbadge').style.display=n?'flex':'none';$('fbadge').textContent=n;$('fbadge2').textContent=n;$('factive').textContent=n;chips();
 $('rows').innerHTML=lastRows.map(o=>`<tr data-id="${o.id}"><td><input type="checkbox" data-id="${o.id}"></td>
-<td><a class="num" href="#" data-id="${o.id}">${esc(o.code)}</a></td><td>${esc(o.zone_label)}</td><td>${esc(o.pick_zones_label||'—')}</td><td>${esc(o.type_label)}</td><td>${esc(o.beam_label||'3,2 м')}</td><td>${esc(o.height_label||'—')}</td><td>${esc(o.pallet_types_label||'Евро + Фин')}</td><td>${esc(o.category||'—')}</td>
+<td><a class="num" href="#" data-id="${o.id}">${esc(o.code)}</a></td><td>${esc(o.zones_label||o.zone_label)}</td><td>${esc(o.pick_zones_label||'—')}</td><td>${esc(o.type_label)}</td><td>${esc(o.beam_label||'3,2 м')}</td><td>${esc(o.height_label||'—')}</td><td>${esc(o.pallet_types_label||'Евро + Фин')}</td><td>${esc(o.category||'—')}</td>
 <td><span class="st st-${o.status}">${esc(o.status_label)}</span></td>
 <td>${o.is_unlimited ? '<span title="Безразмерная ячейка (вместимость 0)" style="font-weight:700">∞</span> <small style="color:var(--mut)">без лимита</small>' : `${fillBar(o.fill_pct)}<small style="color:var(--mut)">${o.fill_pct}%</small>`}</td>
 <td>${o.qty}</td><td>${o.reserved_qty}</td><td>${o.qty}</td><td>${o.pallet_count}</td>
@@ -320,20 +323,33 @@ function selIds(){return [...document.querySelectorAll('#rows input[type=checkbo
 function setZoneVal(sel,zone){const el=$(sel);if(!el)return;const v=zone||'storage';
   if(![...el.options].some(o=>o.value===v)){const o=document.createElement('option');o.value=v;o.textContent=v;el.appendChild(o)}
   el.value=v}
-// Зоны склада: подтягиваем из справочника storage_zones, чтобы фильтр и формы
-// ячейки знали про все зоны (в т.ч. «Карантин»), а не только про базовые.
+let zonesAll=[];
+function renderExtraZones(containerId,primary,selected){
+  const el=$(containerId);if(!el)return;
+  const set=new Set((selected||[]).filter(z=>z&&z!==primary));
+  el.innerHTML=zonesAll.filter(z=>z[0]!==primary).map(z=>`<label style="display:inline-flex;align-items:center;gap:4px"><input type="checkbox" value="${String(z[0]).replace(/"/g,'&quot;')}" ${set.has(z[0])?'checked':''} style="width:auto"> ${esc(z[1]||z[0])}</label>`).join('')||'<span style="color:var(--mut)">Нет дополнительных зон</span>';
+}
+function extraZonesFrom(containerId,primary){
+  const el=$(containerId);if(!el)return [];
+  return [...el.querySelectorAll('input[type=checkbox]:checked')].map(x=>x.value).filter(z=>z&&z!==primary);
+}
 async function loadZones(){
   let rows=[];
   try{const j=await (await fetch(API+'?action=zones')).json();rows=(j&&j.rows)||[]}catch(e){rows=[]}
-  const all=[['storage','Хранение'],['shipment','Отгрузка'],['receiving','Приёмка'],['quarantine','Карантин']];
-  (rows||[]).forEach(z=>{if(z&&z.code&&!all.some(x=>x[0]===z.code))all.push([z.code,z.name||z.code])});
+  zonesAll=(rows||[]).filter(z=>z&&z.code).map(z=>[z.code,z.name||z.code]);
   const fill=(id,emptyLabel)=>{
     const el=$(id);if(!el)return;const cur=el.value;
-    el.innerHTML=(emptyLabel?`<option value="">${emptyLabel}</option>`:'')+all.map(z=>`<option value="${String(z[0]).replace(/"/g,'&quot;')}">${esc(z[1]||z[0])}</option>`).join('');
+    el.innerHTML=(emptyLabel?`<option value="">${emptyLabel}</option>`:'')+zonesAll.map(z=>`<option value="${String(z[0]).replace(/"/g,'&quot;')}">${esc(z[1]||z[0])}</option>`).join('');
     if(cur&&[...el.options].some(o=>o.value===cur))el.value=cur;
-    else if(!emptyLabel&&all.length)el.value=(all.some(z=>z[0]==='storage')?'storage':all[0][0]);
+    else if(!emptyLabel&&zonesAll.length)el.value=(zonesAll.some(z=>z[0]==='storage')?'storage':zonesAll[0][0]);
   };
   fill('fzone','Все зоны');fill('nz',null);fill('ez',null);
+  renderExtraZones('nzones',$('nz')?$('nz').value:'',[]);
+  renderExtraZones('ezones',$('ez')?$('ez').value:'',[]);
+  [['nz','nzones'],['ez','ezones']].forEach(([sel,box])=>{
+    const s=$(sel);if(!s)return;
+    s.onchange=()=>{const keep=extraZonesFrom(box,s.value);renderExtraZones(box,s.value,keep)};
+  });
 }
 async function open(id,tab){curId=id;if(tab)curTab=tab;
 const r=await fetch(`${API}?action=show&id=${id}`);const s=await r.json();
@@ -344,7 +360,7 @@ document.querySelectorAll('#tabs [data-t]').forEach(el=>{const on=el.dataset.t==
 if(curTab==='main'){
 $('db').innerHTML=`<div style="margin-bottom:8px"><span class="st st-${s.status}">${esc(s.status_label)}</span></div>
 <div class="grid2"><div class="box"><h3>Основная информация</h3>
-<div class="kv"><i>Адрес</i><b>${esc(s.code)}</b></div><div class="kv"><i>Зона</i><span>${esc(s.zone_label)}</span></div>
+<div class="kv"><i>Адрес</i><b>${esc(s.code)}</b></div><div class="kv"><i>Зоны</i><span>${esc(s.zones_label||s.zone_label)}</span></div>
 <div class="kv"><i>Зоны отбора</i><span>${esc(s.pick_zones_label||'—')}</span></div>
 <div class="kv"><i>Тип ячейки</i><span>${esc(s.type_label)}</span></div>
 <div class="kv"><i>Категория</i><span>${esc(s.category||'—')}</span></div>
@@ -387,8 +403,8 @@ h=`<div class="grid2"><div class="box"><h3>Вместимость</h3>
 <div class="kv"><i>Разные товары в ячейке</i><span>${s.allow_mixed_goods==1?'Разрешено':'Запрещено'}</span></div>
 <div class="kv"><i>Срок годности, дни</i><span>—</span></div></div></div>
 <div class="box"><h3>Настройки ячейки (робот. настройка тар)</h3>
-<label style="display:inline;font-size:13px;font-weight:400"><input type="checkbox" id="drAmp" style="width:auto"> Разрешено несколько типов паллет</label><br>
-<label style="display:inline;font-size:13px;font-weight:400"><input type="checkbox" id="drAmg" style="width:auto"> Разрешено хранить разные товары в одной ячейке</label>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #F5F5F5"><span style="font-size:13px;color:#4A4A4A">Разрешено несколько типов паллет</span><input type="checkbox" id="drAmp" style="width:auto"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #F5F5F5"><span style="font-size:13px;color:#4A4A4A">Разрешено хранить разные товары в одной ячейке</span><input type="checkbox" id="drAmg" style="width:auto"></div>
 <div style="display:flex;gap:10px;align-items:flex-end;margin-top:10px"><div style="flex:1"><label>Закреплённый тип тары</label><select id="drApt"><option value="euro">Евро</option><option value="fin">Фин</option></select></div>
 <div style="flex:1"><button class="btn pri" id="drSave">Сохранить настройки</button></div></div>
 <div class="hint" id="drTareHint" style="margin-top:8px"></div>
@@ -456,7 +472,7 @@ const ex=[];for(let r=+v.rf;r<=+v.rt&&ex.length<5;r++)for(let s=+v.sf;s<=+v.st&&
 box.innerHTML=`Будет создано: <b>${total}</b>${total>5000?' — <b style="color:#C62828">больше лимита 5000, сузьте диапазоны</b>':''}<br>Примеры: ${ex.map(esc).join(', ')}${total>ex.length?' …':''}`;
 return {v,total}}
 bulkIds.forEach(id=>{$(id).addEventListener('input',()=>{if(id==='nlt')$('nlt').value=letterOnly($('nlt').value);else $(id).value=$(id).value.replace(/\D/g,'').slice(0,3);bulkPreview()})});
-$('mk').onclick=()=>{$('mm').classList.add('open');bulkPreview();syncNewTare()};
+$('mk').onclick=()=>{$('mm').classList.add('open');renderExtraZones('nzones',$('nz').value,[]);bulkPreview();syncNewTare()};
 // Галка «Несколько типов паллет» в карточке создания: включена — оба типа тары.
 function syncNewTare(){const multi=$('namp')&&$('namp').checked;
 if($('napt'))$('napt').disabled=multi;
@@ -466,13 +482,13 @@ if($('napt'))$('napt').onchange=syncNewTare;
 $('mok').onclick=async()=>{const pv=bulkPreview();if(!pv){return}
 if(pv.total>5000){toast('Слишком много: '+pv.total+' (лимит 5000)');return}
 if($('ncap').value!==''&&+$('ncap').value<0){toast('Ошибка: вместимость не может быть отрицательной (0 — безразмерная)');return}
-const body={letter:pv.v.letter,row_from:pv.v.rf,row_to:pv.v.rt,sec_from:pv.v.sf,sec_to:pv.v.st,level_from:pv.v.lf,level_to:pv.v.lt,place_from:pv.v.pf,place_to:pv.v.pt,warehouse_id:+$('nw').value,zone:$('nz').value,cell_type:$('nt').value,category:$('ncat').value||null,capacity:$('ncap').value==='' ?0:+$('ncap').value,temp_from:$('ntf').value==='' ?null:+$('ntf').value,temp_to:$('ntt').value==='' ?null:+$('ntt').value,comment:$('ncm').value||null,beam_width:parseFloat(($('nbm')||{value:'3.2'}).value)||3.2,cell_height_mm:$('nhh').value==='' ?null:+$('nhh').value,allowed_pallet_types:($('namp')&&$('namp').checked)?'euro,fin':(($('napt')&&$('napt').value)||'euro'),allow_multi_pallet_types:($('namp')&&$('namp').checked)?1:0,allow_mixed_goods:($('namg')&&$('namg').checked)?1:0};
+const body={letter:pv.v.letter,row_from:pv.v.rf,row_to:pv.v.rt,sec_from:pv.v.sf,sec_to:pv.v.st,level_from:pv.v.lf,level_to:pv.v.lt,place_from:pv.v.pf,place_to:pv.v.pt,warehouse_id:+$('nw').value,zone:$('nz').value,cell_type:$('nt').value,category:$('ncat').value||null,capacity:$('ncap').value==='' ?0:+$('ncap').value,temp_from:$('ntf').value==='' ?null:+$('ntf').value,temp_to:$('ntt').value==='' ?null:+$('ntt').value,comment:$('ncm').value||null,beam_width:parseFloat(($('nbm')||{value:'3.2'}).value)||3.2,cell_height_mm:$('nhh').value==='' ?null:+$('nhh').value,allowed_pallet_types:($('namp')&&$('namp').checked)?'euro,fin':(($('napt')&&$('napt').value)||'euro'),allow_multi_pallet_types:($('namp')&&$('namp').checked)?1:0,allow_mixed_goods:($('namg')&&$('namg').checked)?1:0,zones:[$('nz').value,...extraZonesFrom('nzones',$('nz').value)]};
 const r=await fetch(API+'?action=bulk_create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const j=await r.json();
 if(r.ok){$('mm').classList.remove('open');toast(`Создано: ${j.created} из ${j.total}`+(j.skipped?` (пропущено дубликатов: ${j.skipped})`:''))}
 else toast('Ошибка: '+(j.error||''));load()};
 function openEdit(){if(!curData)return;const s=curData;
-$('ec').value=s.code||'';$('ew').value=s.warehouse_id||1;setZoneVal('ez',s.zone||'storage');$('et').value=s.cell_type||'pallet';
+$('ec').value=s.code||'';$('ew').value=s.warehouse_id||1;setZoneVal('ez',s.zone||'storage');renderExtraZones('ezones',s.zone||'storage',s.zones||[]);$('et').value=s.cell_type||'pallet';
 $('ecat').value=s.category||'';$('ecap').value=s.capacity??0;$('etf').value=s.temp_from??'';$('ett').value=s.temp_to??'';
 $('eal').value=s.allowed_goods||'Все';$('emp').value=s.max_pallets??'';$('ecm').value=s.comment||'';
 $('ebm').value=String(s.beam_width??'3.2');$('ehh').value=s.cell_height_mm??'';$('eptf').value=s.pallet_type||'';
@@ -494,7 +510,7 @@ if($('eamp'))$('eamp').onchange=syncTareFields;
 if($('eapt'))$('eapt').onchange=syncTareFields;
 $('dedit').onclick=openEdit;
 $('eok').onclick=async()=>{if(!curId)return;const cap=$('ecap').value==='' ?0:+$('ecap').value;if(cap<0){toast('Ошибка: вместимость не может быть отрицательной (0 — безразмерная)');return}
-const body={code:$('ec').value.trim(),warehouse_id:+$('ew').value,zone:$('ez').value,cell_type:$('et').value,category:$('ecat').value||null,capacity:cap,temp_from:$('etf').value==='' ?null:+$('etf').value,temp_to:$('ett').value==='' ?null:+$('ett').value,allowed_goods:$('eal').value||'Все',max_pallets:$('emp').value==='' ?null:+$('emp').value,comment:$('ecm').value||null,beam_width:parseFloat($('ebm').value)||3.2,cell_height_mm:$('ehh').value==='' ?null:+$('ehh').value,allowed_pallet_types:$('eamp').checked?'euro,fin':$('eapt').value,pallet_type:$('eptf').value||null,allow_multi_pallet_types:$('eamp').checked?1:0,allow_mixed_goods:$('eamg').checked?1:0,quality_lock:$('eqLock').checked?1:0,pick_zones:[($('epzManual').checked?'manual':''),($('epzDriver').checked?'driver':'')].filter(Boolean)};
+const body={code:$('ec').value.trim(),warehouse_id:+$('ew').value,zone:$('ez').value,cell_type:$('et').value,category:$('ecat').value||null,capacity:cap,temp_from:$('etf').value==='' ?null:+$('etf').value,temp_to:$('ett').value==='' ?null:+$('ett').value,allowed_goods:$('eal').value||'Все',max_pallets:$('emp').value==='' ?null:+$('emp').value,comment:$('ecm').value||null,beam_width:parseFloat($('ebm').value)||3.2,cell_height_mm:$('ehh').value==='' ?null:+$('ehh').value,allowed_pallet_types:$('eamp').checked?'euro,fin':$('eapt').value,pallet_type:$('eptf').value||null,allow_multi_pallet_types:$('eamp').checked?1:0,allow_mixed_goods:$('eamg').checked?1:0,quality_lock:$('eqLock').checked?1:0,zones:[$('ez').value,...extraZonesFrom('ezones',$('ez').value)],pick_zones:[($('epzManual').checked?'manual':''),($('epzDriver').checked?'driver':'')].filter(Boolean)};
 const r=await fetch(API+'?action=update&id='+curId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const j=await r.json();$('em').classList.remove('open');toast(r.ok?'Сохранено':'Ошибка: '+(j.error||''));if(r.ok)open(curId);load()};
 // Печать PDF: сервер формирует документ, браузер сразу открывает.
@@ -537,6 +553,7 @@ const j=await r.json();$('mv').classList.remove('open');toast(r.ok?('Перем�
 const MSVALS={status:[['free','Свободна'],['busy','Занята'],['reserved','Зарезервирована'],['blocked','Заблокирована']],zone:[['storage','Хранение'],['shipment','Отгрузка'],['receiving','Приёмка'],['quarantine','Карантин']],cell_type:[['pallet','Паллетная'],['box','Коробочная']],category:[['КГТ','КГТ'],['Спорт инвентарь','Спорт инвентарь'],['Косметика','Косметика'],['Бытовая химия','Бытовая химия']],allowed_goods:[['Все','Все']],is_locked:[['0','Нет'],['1','Да']]};
 $('mspar').onchange=()=>{const k=$('mspar').value;$('msval').innerHTML=(MSVALS[k]||[['','—']]).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')};
 $('massbtn').onclick=()=>{const ids=selIds();if(!ids.length){toast('Отметь ячейки чек-боксами');return}$('mscnt').textContent='Выбрано элементов: '+ids.length;$('ms').classList.add('open')};
+$('selunlocked').onclick=()=>{const ids=new Set(lastRows.filter(o=>+o.is_locked!==1).map(o=>+o.id));document.querySelectorAll('#rows input[type=checkbox][data-id]').forEach(cb=>{cb.checked=ids.has(+cb.dataset.id)});toast('Выбрано не заблокированных: '+ids.size)};
 $('msok').onclick=async()=>{const ids=selIds();const patch={};patch[$('mspar').value]=$('msval').value;
 const r=await fetch(API+'?action=mass',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,patch})});
 const j=await r.json();$('ms').classList.remove('open');toast(r.ok?('Обновлено: '+j.updated):'Ошибка: '+(j.error||''));if($('msntf').checked)toast('Уведомление отправлено (демо)');load()};

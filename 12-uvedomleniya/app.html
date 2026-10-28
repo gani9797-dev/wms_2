@@ -132,7 +132,7 @@ $('dmeta').textContent=m.t+' · '+fmtD(x.created_at)+' '+fmtT(x.created_at);
 $('dtitle').textContent=x.title||'';
 if(!+x.is_read&&!keep){fetch(API+'?action=notif_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}).then(load)}
 if(x.sku){try{const p=await (await fetch(`${API}?action=show&id=`+encodeURIComponent(await idBySku(x.sku)))).json();
-const wh=p.warehouse_id==2?'Холодильный':'Основной';
+const wh='Основной';
 $('dkv').innerHTML=[['Код',p.code||''],['Артикул','<span style="color:#7C3AED">'+(p.sku||x.sku||'')+'</span>'],['Категория',p.category||''],['Бренд',p.brand||''],['Владелец',p.owner||''],['Склад',wh]].map(([k,v])=>`<div class="kv"><div class="k">${k}</div><div class="v">${v||'—'}</div></div>`).join('');
 try{const h=await (await fetch(`${API}?action=history&id=${p.id}&limit=5`)).json();const last=(h||[])[0];
 $('dhist').innerHTML=last?`<tr><td>${(last.created_at||'').slice(0,16).replace('T',' ')}</td><td>${last.user_fio||''}</td><td>${last.field_label||last.field||''}</td><td>${last.old_value||''}</td><td>${last.new_value||''}</td></tr>`:`<tr><td colspan="5">${x.body||'—'}</td></tr>`}catch(e){$('dhist').innerHTML=`<tr><td colspan="5">${x.body||'—'}</td></tr>`}

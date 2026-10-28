@@ -160,7 +160,7 @@ body.navhide main{max-width:none}
 <h2 style="margin:0">Фильтры (<span id="fbadge2">0</span>) <a href="#" id="freset" style="font-size:13px;font-weight:400">Сбросить все</a></h2>
 <label>Дата создания</label><div class="frow"><input type="date" id="f_cf"><input type="date" id="f_ct"></div>
 <label>Дата редактирования</label><div class="frow"><input type="date" id="f_uf"><input type="date" id="f_ut"></div>
-<label>Склад</label><select id="f_wh"><option value="">Все склады</option><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select>
+<label>Склад</label><select id="f_wh"><option value="">Все склады</option><option value="1">Основной склад</option></select>
 <label>Категория</label><select id="f_cat"><option value="">Выбрать</option><option>Мячи</option><option>Обувь</option><option>Одежда</option><option>Инвентарь</option></select>
 <label>Владелец</label><select id="f_owner"><option value="">Выбрать</option><option>ООО «Эталон»</option><option>ИП Смирнов</option><option>ООО Мяч-Сервис</option></select>
 <label>Бренд</label><select id="f_brand"><option value="">Выбрать</option><option>Wilson</option><option>Nike</option><option>Adidas</option></select>
@@ -254,7 +254,7 @@ body.navhide main{max-width:none}
 <div><label>Бренд <span class="req">*</span></label><select id="c_brand"><option value="">Выбрать</option><option>Wilson</option><option>Nike</option><option>Adidas</option></select></div>
 <div><label>Владелец <span class="req">*</span></label><select id="c_owner"><option value="">Выбрать</option><option>ООО «Эталон»</option><option>ИП Смирнов</option><option>ООО Мяч-Сервис</option></select></div>
 </div>
-<div><label>Склад <span class="req">*</span></label><select id="c_wh"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select></div>
+<div><label>Склад <span class="req">*</span></label><select id="c_wh"><option value="1">Основной склад</option></select></div>
 <div><label>Описание</label><textarea id="c_descr" rows="2" placeholder="Мяч баскетбольный Wilson NCAA Replica. Для игры в зале и на улице"></textarea></div>
 <div class="grid2">
 <div><label>Изображение</label><div class="imgprev" id="imgprev">🖼<br>Загрузить</div><input type="file" id="c_img" accept="image/*" style="margin-top:6px"></div>
@@ -344,7 +344,7 @@ body.navhide main{max-width:none}
 <div class="modal" id="massmodal"><div class="mbox"><h3 style="margin-top:0">Массовое редактирование (<span id="massn">0</span>)</h3>
 <label>Поле</label><select id="massfield"><option value="category">Категория</option><option value="brand">Бренд</option><option value="owner">Владелец</option><option value="unit">Единица измерения</option><option value="warehouse_id">Склад</option><option value="storage_strategy">Стратегия хранения</option><option value="pick_strategy">Стратегия отбора</option><option value="placement_strategy">Стратегия размещения</option><option value="need_pack">Требуется упаковка заказа</option><option value="need_check">Требуется проверка после отбора</option><option value="allow_partial_pick">Разрешить частичный отбор</option><option value="auto_replenish">Автопополнение</option><option value="is_danger">Опасный груз</option><option value="is_active">Статус (1-активный, 0-не активный)</option></select>
 <label>Значение</label><input id="massval" type="text" placeholder="Мячи / Wilson / 1 / 0 ...">
-<div class="hint">Для флагов: 1 — да, 0 — нет. Для склада: 1 — Основной, 2 — Холодильный.</div>
+<div class="hint">Для флагов: 1 — да, 0 — нет. Для склада: 1 — Основной.</div>
 <div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="masscancel">Отмена</button><button class="btn pri" id="massok">Применить</button></div>
 </div></div>
 
@@ -358,7 +358,7 @@ body.navhide main{max-width:none}
 <div class="hint">Подставляются в форму «+ Создать» на уровне интерфейса.</div>
 <label>Ед. измерения</label><select id="d_unit"><option>шт</option><option>кор</option></select>
 <label>Категория</label><select id="d_cat"><option>Мячи</option><option>Обувь</option><option>Одежда</option><option>Инвентарь</option></select>
-<label>Склад</label><select id="d_wh"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select>
+<label>Склад</label><select id="d_wh"><option value="1">Основной склад</option></select>
 <div class="frow"><div><label>Хранение</label><select id="d_stor"><option>FIFO</option><option selected>FEFO</option><option>LIFO</option></select></div><div><label>Отбор</label><select id="d_pick"><option>FIFO</option><option selected>FEFO</option><option>LIFO</option></select></div></div>
 <label>Размещение</label><select id="d_place"><option>FIFO</option><option selected>FEFO</option><option>LIFO</option></select>
 <div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="defcancel">Отмена</button><button class="btn pri" id="defok">Сохранить</button></div>

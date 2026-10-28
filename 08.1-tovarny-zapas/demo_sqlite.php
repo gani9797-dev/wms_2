@@ -347,7 +347,7 @@ function stock_reserve_map(PDO $tpdo, array $skus): array
 
 if ($action === 'list') {
     $page = max(1, (int)($_GET['page'] ?? 1));
-    $perPage = min(100, max(1, (int)($_GET['per_page'] ?? 20)));
+    $perPage = wms_per_page($_GET['per_page'] ?? 20, 20, 100, 1);
     $w = ['1=1'];
     $p = [];
     if (!empty($_GET['search'])) {
@@ -595,6 +595,7 @@ if ($action === 'list') {
                 'doc_no' => (string)($row['pallet'] ?? ''),
                 'sku' => (string)($row['sku'] ?? ''),
                 'product_name' => (string)($row['product_name'] ?? ''),
+                'supplier_batch' => $batch,
                 'qty' => (float)($row['qty'] ?? 0),
                 'pallet' => (string)($row['pallet'] ?? ''),
                 'sscc' => (string)($row['pallet'] ?? ''),

@@ -63,7 +63,7 @@ final class CellFilter
         $f->mixedGoods  = $get('mixed_goods');
         $f->multiPallet = $get('multi_pallet_types');
         $f->page        = max(1, (int)($q['page'] ?? 1));
-        $f->perPage     = min(200, max(5, (int)($q['per_page'] ?? 14)));
+        $f->perPage     = wms_per_page($q['per_page'] ?? 14, 14, 200, 5);
         $allowed        = ['code', 'qty', 'capacity', 'id',
             'zone', 'cell_type', 'beam', 'height', 'pallet_types', 'category',
             'status', 'fill', 'reserved', 'stock', 'pallets', 'temp', 'lock'];

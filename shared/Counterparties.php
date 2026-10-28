@@ -94,7 +94,7 @@ final class WmsCounterparties
         // Таблица справочника может ещё не существовать (демо/чистая БД).
         if (function_exists('wms_ensure_ext_schema')) {
             try {
-                wms_ensure_ext_schema($pdo);
+                wms_ensure_cached($pdo, 'ext', 'wms_ensure_ext_schema');
             } catch (Throwable) {
             }
         }

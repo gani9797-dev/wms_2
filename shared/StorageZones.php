@@ -66,6 +66,76 @@ function wms_storage_zones_ensure(PDO $pdo): void
         wms_ensure_column($pdo, 'storage_zones', 'affects_reservation', 'TINYINT(1) NOT NULL DEFAULT 0', 'affects_reservation INTEGER NOT NULL DEFAULT 0', 'SMALLINT NOT NULL DEFAULT 0');
         wms_ensure_column($pdo, 'storage_zones', 'contractor_id', 'BIGINT UNSIGNED NULL', 'contractor_id INTEGER', 'BIGINT NULL');
         wms_ensure_column($pdo, 'storage_zones', 'is_virtual', 'TINYINT(1) NOT NULL DEFAULT 0', 'is_virtual INTEGER NOT NULL DEFAULT 0', 'SMALLINT NOT NULL DEFAULT 0');
+        wms_storage_zones_canonicalize($pdo);
+    } catch (Throwable) {
+    }
+}
+
+function wms_storage_zones_canonicalize(PDO $pdo): void
+{
+    static $ran = [];
+    $key = spl_object_id($pdo);
+    if (isset($ran[$key])) {
+        return;
+    }
+    $ran[$key] = true;
+    try {
+        $rows = [];
+        foreach ($pdo->query("SELECT id, code, name FROM storage_zones") as $r) {
+            $r['code'] = trim((string)($r['code'] ?? ''));
+            if ($r['code'] === '') {
+                continue;
+            }
+            $rows[strtolower($r['code'])] = $r;
+        }
+        $aliases = ['accept' => 'receiving', 'ship' => 'shipment'];
+        foreach ($aliases as $alias => $target) {
+            if (!isset($rows[$alias])) {
+                continue;
+            }
+            $old = $rows[$alias];
+            $hasTarget = isset($rows[$target]);
+            try {
+                $pdo->prepare("UPDATE storage_cells SET zone = :t WHERE LOWER(TRIM(zone)) = :a")
+                    ->execute([':t' => $target, ':a' => $alias]);
+            } catch (Throwable) {
+            }
+            try {
+                $ids = $pdo->prepare("SELECT DISTINCT cell_id FROM storage_cell_extra_zones WHERE LOWER(TRIM(zone)) = :a");
+                $ids->execute([':a' => $alias]);
+                foreach ($ids->fetchAll(PDO::FETCH_COLUMN) as $cellId) {
+                    try {
+                        $pdo->prepare("INSERT INTO storage_cell_extra_zones (cell_id, zone) VALUES (:c, :z)")
+                            ->execute([':c' => (int)$cellId, ':z' => $target]);
+                    } catch (Throwable) {
+                    }
+                    $pdo->prepare("DELETE FROM storage_cell_extra_zones WHERE cell_id = :c AND LOWER(TRIM(zone)) = :a")
+                        ->execute([':c' => (int)$cellId, ':a' => $alias]);
+                }
+            } catch (Throwable) {
+            }
+            if ($hasTarget) {
+                $pdo->prepare("DELETE FROM storage_zones WHERE id = :id")->execute([':id' => (int)$old['id']]);
+            } else {
+                $pdo->prepare("UPDATE storage_zones SET code = :t WHERE id = :id")
+                    ->execute([':t' => $target, ':id' => (int)$old['id']]);
+                $old['code'] = $target;
+                $rows[$target] = $old;
+            }
+            unset($rows[$alias]);
+        }
+        if (!$rows) {
+            $base = [
+                ['receiving', 'Приемка'],
+                ['storage', 'Хранение'],
+                ['shipment', 'Отгрузка'],
+                ['quarantine', 'Карантин'],
+            ];
+            $st = $pdo->prepare("INSERT INTO storage_zones (code, name, is_active) VALUES (:c, :n, 1)");
+            foreach ($base as [$code, $name]) {
+                $st->execute([':c' => $code, ':n' => $name]);
+            }
+        }
     } catch (Throwable) {
     }
 }
@@ -101,11 +171,19 @@ function wms_storage_zone_rows(PDO $pdo, bool $activeOnly = false): array
         // Сколько ячеек реально используют зону (для «пустышки»).
         foreach ($out as &$z) {
             try {
-                $st = $pdo->prepare("SELECT COUNT(*) FROM storage_cells WHERE LOWER(zone)=:z");
+                $sql = "SELECT COUNT(*) FROM storage_cells c WHERE LOWER(c.zone)=:z
+                        OR EXISTS (SELECT 1 FROM storage_cell_extra_zones ez WHERE ez.cell_id=c.id AND LOWER(ez.zone)=:z)";
+                $st = $pdo->prepare($sql);
                 $st->execute([':z' => strtolower($z['code'])]);
                 $z['cells_count'] = (int)$st->fetchColumn();
             } catch (Throwable) {
-                $z['cells_count'] = 0;
+                try {
+                    $st = $pdo->prepare("SELECT COUNT(*) FROM storage_cells WHERE LOWER(zone)=:z");
+                    $st->execute([':z' => strtolower($z['code'])]);
+                    $z['cells_count'] = (int)$st->fetchColumn();
+                } catch (Throwable) {
+                    $z['cells_count'] = 0;
+                }
             }
         }
         unset($z);

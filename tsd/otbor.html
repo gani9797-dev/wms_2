@@ -258,7 +258,7 @@ async function openPickTask(id){
   const sh=st.shipment||{};
   DOC={id,doc_no:st.head.doc_no,consignee:sh.consignee||st.head.doc_ref,gate:sh.gate||'—',
        shipment_doc_no:sh.doc_no||st.head.doc_ref,status:st.head.status,_pick:st.head,lists:st.lists||[],buffer:st.buffer||null};
-  ITEMS=(st.items||[]).map(i=>({sku:i.sku,code:i.code,name:i.name,unit:i.unit,plan_qty:i.plan_qty,fact_qty:i.fact_qty,need:Math.max(0,(+i.plan_qty||0)-(+i.fact_qty||0)),cell:i.cell_from||i.cell||'',barcodes:i.barcodes||[],_pickItem:i}));
+  ITEMS=(st.items||[]).map(i=>({sku:i.sku,code:i.code,name:i.name,unit:i.unit,plan_qty:i.plan_qty,fact_qty:i.fact_qty,need:Math.max(0,(+i.plan_qty||0)-(+i.fact_qty||0)),cell:i.cell_from||i.cell||'',supplier_batch:i.supplier_batch||'',barcodes:i.barcodes||[],_pickItem:i}));
   ITEMS=ITEMS.filter(i=>i.need>1e-9);
   if(!ITEMS.length){toast('По заданию всё отобрано');go('mode',scrMode);return}
   IDX=0;PALLET=null;go('head',()=>scrHead(true));
@@ -376,7 +376,7 @@ function scrHead(){
   <div class="mut">Промежуточная ячейка: <b>${esc(vcell())}</b> — ${esc(bufLine(h.buffer))}</div>
   ${(h.lists&&h.lists.length)?`<div class="mut">Список заданий: <b>${h.lists.map(l=>esc(l.code)).join(', ')}</b>${h.lists.length===1?(' · '+esc(h.lists[0].name||'')):''}</div>`:''}
   <table class="mini"><tr><th>Ячейка</th><th>Артикул / Наименование</th><th>Кол-во</th></tr>
-  ${ITEMS.map((i,n)=>`<tr style="${n===IDX?'background:#EDE7FF':''}"><td>${i.cell}</td><td><b>${i.sku}</b><br><span class="mut">${i.name||''} · ${i.code||''}</span><br>📦 фото</td><td>${i.fact_qty||0} / ${i.plan_qty} ${i.unit||'шт'}<br><span class="mut">паллет: ${PALLET||'—'}</span></td></tr>`).join('')}</table>
+  ${ITEMS.map((i,n)=>`<tr style="${n===IDX?'background:#EDE7FF':''}"><td>${i.cell}</td><td><b>${i.sku}</b><br><span class="mut">${i.name||''} · ${i.code||''}${i.supplier_batch?(' · партия '+i.supplier_batch):''}</span><br>📦 фото</td><td>${i.fact_qty||0} / ${i.plan_qty} ${i.unit||'шт'}<br><span class="mut">паллет: ${PALLET||'—'}</span></td></tr>`).join('')}</table>
   <div class="row2"><button class="ghost" id="exit">Выйти из задания</button><button id="go" class="green">Отобрать строку →</button></div></div>`;
   $('exit').onclick=async()=>{if(DOC._pick){await postPick('release',{task_id:DOC.id,user_id:uid()})}else{await post('release',{shipment_id:DOC.id,user_id:uid()})}toast('Статус: в ожидании (2 мин)');go('mode',scrMode)};
   $('go').onclick=()=>go('cell',scrCell);
@@ -512,7 +512,7 @@ async function scrAfterLine(){
   $('y').onclick=async()=>{
     if(isPick){
       const st=await (await apiPick('?action=task&id='+DOC.id)).json();
-      ITEMS=(st.items||[]).map(x=>({sku:x.sku,code:x.code,name:x.name,unit:x.unit,plan_qty:x.plan_qty,fact_qty:x.fact_qty,need:Math.max(0,(+x.plan_qty||0)-(+x.fact_qty||0)),cell:x.cell_from||x.cell||'',barcodes:x.barcodes||[]})).filter(x=>x.need>1e-9);
+      ITEMS=(st.items||[]).map(x=>({sku:x.sku,code:x.code,name:x.name,unit:x.unit,plan_qty:x.plan_qty,fact_qty:x.fact_qty,need:Math.max(0,(+x.plan_qty||0)-(+x.fact_qty||0)),cell:x.cell_from||x.cell||'',supplier_batch:x.supplier_batch||'',barcodes:x.barcodes||[]})).filter(x=>x.need>1e-9);
     }else{
       const st=await (await api('?action=task&id='+DOC.id)).json();
       ITEMS=(st.items||[]).filter(i=>(+i.plan_qty||0)-(+i.fact_qty||0)>1e-9);

@@ -15,7 +15,7 @@ require_once __DIR__ . '/../shared/Counterparties.php';
 // PostgreSQL (основной режим) — общая БД WMS; SQLite-демо — общая БД номенклатуры
 // (в ней сквозные таблицы counterparties/consignees подключены как wms_common.*).
 $pdo = wms_use_pgsql() ? wms_pg_pdo() : wms_nomenclature_pdo();
-wms_ensure_ext_schema($pdo);
+wms_ensure_cached($pdo, 'ext', 'wms_ensure_ext_schema');
 
 $CP = wms_ext_table($pdo, 'counterparties');
 $CSG = wms_ext_table($pdo, 'consignees');
@@ -217,7 +217,7 @@ try {
         $ctype = trim((string)($_GET['ctype'] ?? ''));
         $isActive = trim((string)($_GET['is_active'] ?? ''));
         $page = max(1, (int)($_GET['page'] ?? 1));
-        $perPage = min(200, max(1, (int)($_GET['per_page'] ?? 20)));
+        $perPage = wms_per_page($_GET['per_page'] ?? 20, 20, 200, 1);
         $sort = (string)($_GET['sort'] ?? 'name');
         $dir = strtoupper((string)($_GET['dir'] ?? 'ASC'));
 

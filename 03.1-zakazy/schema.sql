@@ -27,10 +27,17 @@ CREATE TABLE IF NOT EXISTS client_orders (
 CREATE TABLE IF NOT EXISTS client_order_items (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   order_id BIGINT UNSIGNED NOT NULL COMMENT 'Наряд client_orders.id',
+  wms_code VARCHAR(50) NULL COMMENT 'Код WMS',
+  barcode VARCHAR(100) NULL COMMENT 'Штрихкод',
+  scan_serial TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Контроль с/н',
+  scan_chz TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Контроль ч/з',
+  owner_contractor_id BIGINT UNSIGNED NULL COMMENT 'Владелец',
+  owner_name VARCHAR(255) NULL,
   sku VARCHAR(50) NOT NULL COMMENT 'Артикул',
   name VARCHAR(255) NOT NULL COMMENT 'Наименование',
   unit VARCHAR(10) NOT NULL DEFAULT 'шт',
   qty DECIMAL(12,3) NOT NULL COMMENT 'Количество',
+  supplier_batch VARCHAR(100) NULL COMMENT 'Партия поставщика',
   prod_date DATE NULL COMMENT 'Дата производства',
   CONSTRAINT fk_coi_order FOREIGN KEY (order_id)
     REFERENCES client_orders (id) ON DELETE CASCADE,

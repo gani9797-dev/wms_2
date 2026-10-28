@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS employees (
   department VARCHAR(100) NULL COMMENT 'Отдел',
   personnel_no VARCHAR(30) NULL COMMENT 'Табельный номер',
   pin VARCHAR(10) NULL COMMENT 'PIN для ТСД',
+  login VARCHAR(100) NULL COMMENT 'Логин для входа в WMS',
+  password_hash VARCHAR(255) NULL COMMENT 'bcrypt-хэш пароля',
   photo_path VARCHAR(255) NULL,
   phone_internal VARCHAR(50) NULL COMMENT 'Телефон (внутренний)',
   phone_mobile VARCHAR(50) NULL COMMENT 'Мобильный телефон',
@@ -32,6 +34,7 @@ CREATE TABLE IF NOT EXISTS employees (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_emp_pin (pin),
+  UNIQUE KEY uq_emp_login (login),
   KEY idx_emp_fio (fio),
   KEY idx_emp_department (department),
   KEY idx_emp_status (status),
@@ -64,6 +67,15 @@ CREATE TABLE IF NOT EXISTS employee_access (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------- История выходов по СКУД (вкладка «История выходов») ----------
+CREATE TABLE IF NOT EXISTS role_permissions (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  role VARCHAR(50) NOT NULL,
+  permission_key VARCHAR(50) NOT NULL,
+  allowed TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_role_permission (role, permission_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS role_access (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   role VARCHAR(50) NOT NULL,

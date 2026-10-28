@@ -26,7 +26,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS warehouses (id INTEGER PRIMARY KEY AUTOIN
 $pdo->exec("CREATE TABLE IF NOT EXISTS contractors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
 // users — единый справочник сотрудников (shared/wms_users.sqlite), подключён в shared/db.php.
 $pdo->exec("CREATE TABLE IF NOT EXISTS client_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, doc_no TEXT NOT NULL UNIQUE, contractor_id INTEGER, consignee TEXT, address TEXT, phone TEXT, status TEXT DEFAULT 'created', warehouse_id INTEGER, total REAL DEFAULT 0, comment TEXT, created_at TEXT DEFAULT (datetime('now')))");
-$pdo->exec("CREATE TABLE IF NOT EXISTS client_order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт', qty REAL NOT NULL, prod_date TEXT)");
+$pdo->exec("CREATE TABLE IF NOT EXISTS client_order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, wms_code TEXT, barcode TEXT, scan_serial INTEGER NOT NULL DEFAULT 0, scan_chz INTEGER NOT NULL DEFAULT 0, owner_contractor_id INTEGER, owner_name TEXT, sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт', qty REAL NOT NULL, supplier_batch TEXT, prod_date TEXT)");
 $pdo->exec("CREATE INDEX IF NOT EXISTS idx_coi_order ON client_order_items(order_id)");
 $pdo->exec("CREATE TABLE IF NOT EXISTS shipments (
   id INTEGER PRIMARY KEY AUTOINCREMENT, doc_no TEXT NOT NULL UNIQUE, doc_date TEXT NOT NULL,
@@ -51,7 +51,7 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS shipment_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT, shipment_id INTEGER NOT NULL, order_id INTEGER,
   code TEXT, sku TEXT NOT NULL, name TEXT NOT NULL, unit TEXT DEFAULT 'шт',
   qty REAL NOT NULL, price REAL NOT NULL, \"sum\" REAL NOT NULL,
-  check_label TEXT, warehouse_id INTEGER, comment TEXT)");
+  check_label TEXT, warehouse_id INTEGER, comment TEXT, supplier_batch TEXT)");
 try {
     $has = false;
     foreach ($pdo->query("PRAGMA table_info(shipment_items)")->fetchAll(PDO::FETCH_ASSOC) as $c) {
@@ -134,7 +134,7 @@ foreach ([
 
 // --- Сид из макета, если пусто ---
 if ((int)$pdo->query("SELECT COUNT(*) FROM shipments")->fetchColumn() === 0) {
-    $pdo->exec("INSERT INTO warehouses (id,name) VALUES (1,'Основной склад'),(2,'Холодильный склад'),(3,'Склад А'),(4,'Склад Б')");
+    $pdo->exec("INSERT INTO warehouses (id,name) VALUES (1,'Основной склад')");
     $pdo->exec("INSERT INTO contractors (id,name) VALUES (1,'ООО \"Ромашка\"'),(2,'ИП Савинов М.Г.'),(3,'ООО «СпортОпт»'),(4,'ИП Петров А.С.')");
     // Сотрудники — в общей базе (shared/wms_users.sqlite), сиды там.
     // Заказы TML* из макета вкладки Заказы (9)
@@ -158,10 +158,10 @@ if ((int)$pdo->query("SELECT COUNT(*) FROM shipments")->fetchColumn() === 0) {
         // doc_no, doc_date, order_id, contractor, consignee, contract, wh, status, total, total_with_vat, paid, debt, items, sku, qty, plan, fact, vehicle, gate, loading, priority, readiness
         ['S-205107', '2025-06-21 18:23', 1, 1, 'Почта России', 'Договор №813 от 01.01.2025', 1, 'packing', 125400, 125400, 125400, 0, 12, 4, 12, '2025-06-22', '2025-06-23', 'А221ВА77', '11', 'Внавал', 'normal', 100],
         ['S-205106', '2025-06-21 17:10', 2, 1, 'ПЭК', null, 1, 'assembling', 0, 0, 0, 0, 5, 1, 100, '2025-06-23', null, 'Е658УК77', '5', 'Внавал', 'normal', 30],
-        ['S-205105', '2025-06-21 12:05', 3, 2, 'ТК КИТ', null, 2, 'assembling', 230000, 230000, 0, 230000, 18, 2, 18, '2025-06-23', null, null, null, 'Паллеты', 'high', 0],
+        ['S-205105', '2025-06-21 12:05', 3, 2, 'ТК КИТ', null, 1, 'assembling', 230000, 230000, 0, 230000, 18, 2, 18, '2025-06-23', null, null, null, 'Паллеты', 'high', 0],
         ['S-205104', '2025-06-21 10:00', 4, 2, 'Деловые Линии', null, 1, 'cancelled', 0, 0, 0, 0, 1, 1, 3, '2025-06-23', null, null, null, 'Паллеты', 'normal', 0],
         ['S-205103', '2025-06-21 09:00', 5, 1, 'ПЭК', null, 1, 'draft', 0, 0, 0, 0, 0, 0, 0, '2025-06-23', null, null, null, 'Паллеты', 'low', 0],
-        ['S-205102', '2025-06-21 01:12', 6, 1, 'CDEK', null, 2, 'on_check', 65120, 65120, 0, 65120, 7, 1, 7, '2025-06-22', null, 'А775ЕЕ33', '7', 'Внавал', 'normal', 89],
+        ['S-205102', '2025-06-21 01:12', 6, 1, 'CDEK', null, 1, 'on_check', 65120, 65120, 0, 65120, 7, 1, 7, '2025-06-22', null, 'А775ЕЕ33', '7', 'Внавал', 'normal', 89],
         ['S-205101', '2025-06-21 19:34', 7, 1, 'Байкал Сервис', null, 1, 'created', 143800, 143800, 0, 143800, 14, 2, 14, '2025-06-22', null, 'Н911НО199', '5', 'Паллеты', 'normal', 0],
         ['S-205108', '2025-06-22 10:35', 1, 3, 'ООО «СпортОпт»', 'Договор поставки №15 от 01.01.2025', 1, 'delivering', 125400, 125400, 125400, 0, 12, 4, 12, '2025-06-23', null, 'А221ВА77', '11', 'Внавал', 'normal', 100],
     ];
@@ -417,6 +417,7 @@ if ($action === 'list') {
     // ПКМ «Ручное резервирование»: товарный запас по позиции (ячейки/паллеты).
     $sid = (int)($_GET['shipment_id'] ?? $_GET['id'] ?? 0);
     $sku = trim((string)($_GET['sku'] ?? ''));
+    $batch = trim((string)($_GET['batch'] ?? ''));
     try {
         require_once __DIR__ . '/../shared/PickIssue.php';
         require_once __DIR__ . '/../shared/db.php';
@@ -429,7 +430,7 @@ if ($action === 'list') {
         }
         $nom = wms_nomenclature_pdo();
         $storage = wms_storage_pdo();
-        $res = wms_pick_reserve_candidates($pdo, $nom, $storage, $taskPdos[0], $sid, $sku);
+        $res = wms_pick_reserve_candidates($pdo, $nom, $storage, $taskPdos[0], $sid, $sku, $batch !== '' ? $batch : null);
         echo json_encode(['ok' => true] + $res, JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(400);
@@ -553,52 +554,25 @@ if ($action === 'list') {
         echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
     }
 } elseif ($action === 'csv_orders' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Загрузка расхода как наряда: CSV или Excel-заявка (.xlsx).
-    // Контрагент — из колонки «Контрагент» файла либо из шапки заявки (нового добавляем в справочник).
-    // Номер наряда — случайный внутренний or_XXXXXX, один файл = один наряд.
-    // Зеркалим во вторую базу отгрузок, чтобы наряд был виден в обоих реестрах.
+    // Загрузка расхода как наряда — тот же конвейер и форматы, что у робота in/out:
+    // CSV/TXT (разделитель «;», UTF-8) или Excel-заявка .xlsx/.xlsm.
+    // Один файл = один наряд; отгрузка по наряду формируется автоматически.
+    require_once __DIR__ . '/../shared/ImportRobot.php';
     try {
-        require_once __DIR__ . '/../shared/db.php';
-        $parsed = shipment_upload_parse_file($_FILES['file'] ?? []);
-        if (!$parsed['rows']) {
-            http_response_code(422);
-            echo json_encode(['error' => implode('; ', $parsed['errors']) ?: 'Нет корректных строк'], JSON_UNESCAPED_UNICODE);
-        } else {
-            try {
-                $nom = wms_nomenclature_pdo();
-            } catch (Throwable) {
-                $nom = null;
-            }
-            $wh = (int)($_POST['warehouse_id'] ?? 0);
-            $fname = (string)($_FILES['file']['name'] ?? 'upload.csv');
-            $hdr = $parsed['header'] ?? [];
-            $cc = csv_upload_resolve_contractor($pdo, (string)($hdr['contractor'] ?? ''));
-            $orderNo = csv_upload_next_order_no($pdo);
-            $r = csv_upload_import_orders($pdo, $nom, $parsed['rows'], $cc['id'], $wh, 1, $fname, $orderNo, $hdr);
-            // Грузополучатель из отгрузки автоматически попадает в справочник (тип «грузополучатель»).
-            WmsCounterparties::ensure($pdo, (string)($hdr['consignee'] ?? ''), 'consignee');
-            $r += ['contractor' => $cc['name'], 'contractor_new' => $cc['created'],
-                'format' => ($parsed['format'] ?? '')];
-            // Отгрузка из наряда формируется автоматически — вручную не нужно.
-            $ship = [];
-            try {
-                $formId = $service->formFromOrders([$r['id']], [
-                    'warehouse_id' => $wh,
-                    'consignee' => ($hdr['consignee'] ?? '') !== '' ? $hdr['consignee'] : null,
-                    'delivery_type' => ($hdr['ship_type'] ?? '') !== '' ? $hdr['ship_type'] : null,
-                    'plan_shipment_date' => ($hdr['plan_date'] ?? '') !== '' ? $hdr['plan_date'] : null,
-                    'comment' => 'Авто: наряд ' . $orderNo,
-                ], 1);
-                csv_upload_apply_shipment_header($pdo, $formId, $hdr);
-                $ship = ['shipment_id' => $formId,
-                    'shipment_no' => (string)$pdo->query('SELECT doc_no FROM shipments WHERE id=' . $formId)->fetchColumn()];
-            } catch (Throwable) {
-            }
-            // Зеркало удалено: единая БД отгрузок (wms_shipments_pdo) — писать дважды больше не нужно.
-            http_response_code(201);
-            $flags = JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR;
-            echo json_encode($r + ['row_errors' => $parsed['errors']] + $ship, $flags);
+        $res = wms_import_document('out', $_FILES['file'] ?? [], (int)($_POST['warehouse_id'] ?? 0), 1, [
+            'check_hash' => true,
+            'check_external' => true,
+        ]);
+        if (($res['doc_no'] ?? '') !== '') {
+            wms_robot_log_add('web', (string)($res['file_name'] ?? ''), (string)($res['hash'] ?? ''),
+                'success', (string)$res['doc_no'],
+                'Заказ ' . $res['doc_no'] . ' загружен из веб-интерфейса: строк ' . (int)($res['items'] ?? 0) . '.');
         }
+        http_response_code(201);
+        echo json_encode($res, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+    } catch (WmsImportException $e) {
+        http_response_code($e->httpCode);
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(400);
         echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

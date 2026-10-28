@@ -165,6 +165,18 @@ function wms_table_columns(PDO $pdo, string $table): array
  * В отличие от голого PRAGMA table_info() работает на всех драйверах —
  * PRAGMA на PostgreSQL роняет соединение синтаксической ошибкой.
  */
+function wms_per_page(mixed $value, int $default, int $max, int $min = 1): int
+{
+    $v = (int)$value;
+    if ($v === 0) {
+        return 1000000; // 0 = показать все строки
+    }
+    if ($v <= 0) {
+        $v = $default;
+    }
+    return max($min, min($max, $v));
+}
+
 function wms_has_column(PDO $pdo, string $table, string $col): bool
 {
     return in_array($col, wms_table_columns($pdo, $table), true);
@@ -315,9 +327,73 @@ function wms_load_env(): void
     }
 }
 
+/**
+ * Кэш «схема уже проверена» для PostgreSQL.
+ * Раньше каждый запрос к каждому модулю заново прогонял десятки ALTER/информационных
+ * запросов (200-800 мс). Теперь после первого успешного прогона ставим маркер в temp
+ * и пропускаем миграции. При изменении db/schema-pg.sql mtime меняется — кэш сам сбросится.
+ * При изменении рантайм-DDL без schema-pg.sql — увеличьте WMS_SCHEMA_CACHE_VERSION.
+ */
+const WMS_SCHEMA_CACHE_VERSION = '2026-10-27.1';
+
+function wms_schema_cache_key(PDO $pdo, string $part): ?string
+{
+    try {
+        if (wms_driver($pdo) !== 'pgsql') {
+            return null;
+        }
+    } catch (Throwable) {
+        return null;
+    }
+    $db = (string)(getenv('PG_DB') ?: 'wms');
+    $url = getenv('DATABASE_URL');
+    if ($url) {
+        $u = parse_url($url);
+        if (is_array($u) && !empty($u['path'])) {
+            $db = ltrim((string)$u['path'], '/');
+        }
+    }
+    $schema = dirname(__DIR__) . '/db/schema-pg.sql';
+    $mtime = is_file($schema) ? (string)filemtime($schema) : '0';
+    // Рантайм-DDL живёт в shared/db.php: его изменение тоже сбрасывает кэш.
+    $ddlFile = __DIR__ . '/db.php';
+    $ddlMtime = is_file($ddlFile) ? (string)filemtime($ddlFile) : '0';
+    $key = md5($db . '|' . WMS_SCHEMA_CACHE_VERSION . '|' . $mtime . '|' . $ddlMtime);
+    $part = preg_replace('/[^a-z0-9_]+/i', '_', $part) ?: 'part';
+    return rtrim(sys_get_temp_dir(), "\\/") . DIRECTORY_SEPARATOR . 'wms_schema_' . $key . '_' . $part . '.ok';
+}
+
+function wms_schema_is_ready(PDO $pdo, string $part): bool
+{
+    $key = wms_schema_cache_key($pdo, $part);
+    return $key !== null && is_file($key);
+}
+
+function wms_schema_mark_ready(PDO $pdo, string $part): void
+{
+    $key = wms_schema_cache_key($pdo, $part);
+    if ($key !== null) {
+        @file_put_contents($key, date('c'));
+    }
+}
+
+/** Выполнить миграцию один раз; на PostgreSQL — с межзапросным кэшем. */
+function wms_ensure_cached(PDO $pdo, string $part, callable $fn): void
+{
+    if (wms_schema_is_ready($pdo, $part)) {
+        return;
+    }
+    $fn($pdo);
+    wms_schema_mark_ready($pdo, $part);
+}
+
 /** Подключение к PostgreSQL по env. */
 function wms_pg_pdo(): PDO
 {
+    static $pdo = null;
+    if ($pdo instanceof PDO) {
+        return $pdo;
+    }
     wms_load_env();
     $url = getenv('DATABASE_URL');
     if ($url) {
@@ -341,7 +417,17 @@ function wms_pg_pdo(): PDO
     $pdo = new PDO($dsn, $user, $pass, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        // Переиспользуем соединение между запросами встроенного PHP-сервера:
+        // локально это экономит ~50 мс на каждый API-запрос.
+        PDO::ATTR_PERSISTENT => true,
     ]);
+    // Защита от «протёкшей» транзакции с предыдущего запроса.
+    try {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+    } catch (Throwable) {
+    }
     // Единый updated_at без MySQL-триггера ON UPDATE: обновляем вручную в коде.
     // Для совместимости: created_at/updated_at по умолчанию NOW().
     return $pdo;

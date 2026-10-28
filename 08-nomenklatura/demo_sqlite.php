@@ -103,7 +103,7 @@ try {
 
 // --- Сид из макета 8, если пусто ---
 if ((int)$pdo->query("SELECT COUNT(*) FROM products")->fetchColumn() === 0) {
-    $pdo->exec("INSERT INTO warehouses (id,name) VALUES (1,'Основной склад'),(2,'Холодильный склад')");
+    $pdo->exec("INSERT INTO warehouses (id,name) VALUES (1,'Основной склад')");
     // Сотрудники — в общей базе (shared/wms_users.sqlite), сиды там.
     $pdo->exec("INSERT INTO product_defaults (field_name,field_value) VALUES ('unit','шт'),('category','Мячи'),('warehouse_id','1'),('storage_strategy','FEFO'),('pick_strategy','FEFO'),('placement_strategy','FEFO')");
 

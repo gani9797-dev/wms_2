@@ -5,6 +5,7 @@ require_once __DIR__ . '/CellStatus.php';
 require_once __DIR__ . '/CellFilter.php';
 require_once __DIR__ . '/CellPlacement.php';
 require_once __DIR__ . '/../shared/pg.php';
+require_once __DIR__ . '/../shared/CellZones.php';
 
 // Репозиторий реестра "Ячейки хранения". PDO, MySQL + SQLite (демо).
 // Заполненность считается на лету: qty / capacity.
@@ -90,10 +91,13 @@ final class CellRepository
         $st->bindValue(':off', $offset, PDO::PARAM_INT);
         $st->execute();
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-        $zones = $this->pickZonesByCell(array_map(fn($r) => (int)$r['id'], $rows));
+        $ids = array_map(fn($r) => (int)$r['id'], $rows);
+        $zones = $this->pickZonesByCell($ids);
+        $extraZones = wms_cell_extra_zones_map($this->pdo, $ids);
         foreach ($rows as &$r) {
             $this->decorate($r);
             $this->decoratePickZones($r, $zones);
+            $this->decorateZones($r, $extraZones);
         }
         unset($r);
 
@@ -117,6 +121,7 @@ final class CellRepository
         $this->decorate($row);
         $zones = $this->pickZonesByCell([(int)$row['id']]);
         $this->decoratePickZones($row, $zones);
+        $this->decorateZones($row, wms_cell_extra_zones_map($this->pdo, [(int)$row['id']]));
         return $row;
     }
 
@@ -138,6 +143,7 @@ final class CellRepository
         $this->decorate($row);
         $zones = $this->pickZonesByCell([(int)$row['id']]);
         $this->decoratePickZones($row, $zones);
+        $this->decorateZones($row, wms_cell_extra_zones_map($this->pdo, [(int)$row['id']]));
         return $row;
     }
 
@@ -181,6 +187,23 @@ final class CellRepository
         $r['pick_zones'] = $list;
         $r['pick_zones_label'] = $list
             ? implode(', ', array_map(fn($z) => CellStatus::pickZoneLabel($z), $list))
+            : '—';
+    }
+
+    private function decorateZones(array &$r, array $extraMap): void
+    {
+        $primary = trim((string)($r['zone'] ?? ''));
+        $extra = $extraMap[(int)($r['id'] ?? 0)] ?? [];
+        $all = [];
+        foreach (array_merge([$primary], $extra) as $z) {
+            $z = trim((string)$z);
+            if ($z !== '' && !in_array($z, $all, true)) {
+                $all[] = $z;
+            }
+        }
+        $r['zones'] = $all;
+        $r['zones_label'] = $all
+            ? implode(', ', array_map(fn($z) => $this->zoneName($z), $all))
             : '—';
     }
 
@@ -369,7 +392,7 @@ final class CellRepository
             $p[':wh'] = $f->warehouseId;
         }
         if ($f->zone) {
-            $w[] = 'c.zone = :zone';
+            $w[] = '(c.zone = :zone OR EXISTS (SELECT 1 FROM storage_cell_extra_zones ez WHERE ez.cell_id = c.id AND ez.zone = :zone))';
             $p[':zone'] = $f->zone;
         }
         // Доп. зона отбора (ручной отбор / отбор водителем) — у ячейки может быть несколько зон.

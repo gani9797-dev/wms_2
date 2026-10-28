@@ -138,6 +138,8 @@ body.navhide main{max-width:none}
 <div id="collist" style="margin:6px 0;max-height:50vh;overflow:auto"></div>
 <div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="colreset">Сбросить</button><button class="btn pri" id="colclose">Готово</button></div>
 </div>
+<style>.ctx{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:120;min-width:210px;padding:6px 0;font-size:14px}.ctx div{padding:9px 16px;cursor:pointer}.ctx div:hover{background:#F4F2FF}</style>
+<div class="ctx" id="ctx"><div data-a="print_sscc">Печатать SSCC</div></div>
 <div id="toast"></div>
 <div class="fpanel" id="fp">
 <h2 style="margin:0">Фильтры (<span id="fbadge2">0</span>) <a href="#" id="freset" style="font-size:13px;font-weight:400">Сбросить все</a></h2>
@@ -266,10 +268,28 @@ document.querySelectorAll('.pal-link').forEach(a=>a.onclick=e=>{e.preventDefault
 document.querySelectorAll('.cell-link').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openCellDrawer(a.dataset.cell,a.dataset.wh)});
 document.querySelectorAll('.prod-link').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openProductDrawer(a.dataset.code,a.dataset.sku)});
 document.querySelectorAll('.ship-link').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openShipmentDrawer(a.dataset.doc)});
-document.querySelectorAll('#rows tr[data-idx]').forEach(tr=>{tr.onclick=e=>{if(e.target.closest&&e.target.closest('a'))return;document.querySelectorAll('#rows tr.sel').forEach(x=>x.classList.remove('sel'));tr.classList.add('sel')}});
+document.querySelectorAll('#rows tr[data-idx]').forEach(tr=>{tr.onclick=e=>{if(e.target.closest&&e.target.closest('a'))return;document.querySelectorAll('#rows tr.sel').forEach(x=>x.classList.remove('sel'));tr.classList.add('sel')};tr.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();ctxRowIdx=+tr.dataset.idx;document.querySelectorAll('#rows tr.sel').forEach(x=>x.classList.remove('sel'));tr.classList.add('sel');const c=$('ctx');c.style.display='block';c.style.left=Math.min(e.clientX,innerWidth-230)+'px';c.style.top=Math.min(e.clientY,innerHeight-80)+'px'}});
 const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
 for(let i=1;i<=Math.min(pages,5);i++)h+=`<button class="${i===page?'on':''}" data-p="${i}">${i}</button>`;
 $('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{page=+b.dataset.p;load()})}catch(e){lastRows=[];$('info').textContent='—';$('pg').innerHTML='';$('rows').innerHTML=`<tr><td colspan="20" style="color:#B00020">Ошибка загрузки товарного запаса: ${esc(e&&e.message||e)}</td></tr>`}}
+let ctxRowIdx=-1;
+document.addEventListener('click',e=>{const c=$('ctx');if(c&&!c.contains(e.target))c.style.display='none'});
+$('ctx').onclick=async e=>{const a=e.target.dataset.a;if(!a)return;$('ctx').style.display='none';if(a==='print_sscc')await printStockSscc(ctxRowIdx)};
+async function printStockSscc(idx){
+ const o=lastRows[idx];if(!o){toast('Строка не найдена');return}
+ if(!o.pallet){toast('У выбранной строки нет SSCC/паллеты');return}
+ try{
+  const r=await fetch('../15-etiketki/demo_sqlite.php?action=print_sscc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stock_id:o.id})});
+  const j=await r.json();if(!r.ok){toast('Ошибка: '+(j.error||''));return}
+  downloadZpl(j.zpl||'', 'sscc_'+(j.codes&&j.codes[0]?j.codes[0]:o.pallet)+'.zpl');
+  toast('SSCC '+(j.codes&&j.codes[0]?j.codes[0]:o.pallet)+' — ZPL сформирован');
+ }catch(err){toast('Ошибка сети')}
+}
+function downloadZpl(zpl,name){
+ if(!zpl){toast('Нет ZPL');return}
+ const blob=new Blob([zpl],{type:'text/plain;charset=utf-8'});
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name||'label.zpl';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
 let palId=null;
 function openPalModal(id){const o=lastRows.find(x=>+x.id===+id);if(!o){toast('Строка не найдена');return}palId=id;
 $('palm_num').value=o.pallet||('без номера · '+o.cell);
@@ -314,7 +334,7 @@ $('dcell-edit').onclick=()=>dCellEdit(s)}
 else if(dTab==='content'){const r=await (await fetch(`${CELL_API}?action=content&id=${dId}`)).json();$('db').innerHTML=`<h3>Содержимое ячейки (${(r||[]).length})</h3><table class="mini"><tr><th>Код</th><th>Артикул</th><th>Наименование</th><th>Кол-во</th><th>Резерв</th></tr>`+(r||[]).map(t=>`<tr><td>${esc(t.product_code||'')}</td><td>${esc(t.sku||'')}</td><td>${esc(t.name||'')}</td><td>${esc(t.qty)}</td><td>${esc(t.reserved_qty??'')}</td></tr>`).join('')+'</table>'}
 else{const r=await (await fetch(`${CELL_API}?action=history&id=${dId}`)).json();$('db').innerHTML=`<h3>История (${(r||[]).length})</h3><table class="mini"><tr><th>Дата</th><th>Поле</th><th>Было</th><th>Стало</th></tr>`+(r||[]).map(x=>`<tr><td>${esc(x.created_at||'')}</td><td>${esc(x.field_label||x.field||'')}</td><td>${esc(x.old_value||'')}</td><td>${esc(x.new_value||'')}</td></tr>`).join('')+'</table>'}}catch(e){$('db').innerHTML='Ошибка: '+e.message}}
 function dCellEdit(s){const p=$('deditpane');p.style.display='block';p.innerHTML=`<h3 style="margin-top:0">Редактирование ячейки (как в модуле 5)</h3>
-<div style="display:flex;gap:10px"><div style="flex:1"><label>Адрес</label><input id="dec" type="text" value="${esc(s.code||'')}"></div><div style="flex:1"><label>Склад</label><select id="dew"><option value="1">Основной склад</option><option value="2">Холодильный склад</option></select></div></div>
+<div style="display:flex;gap:10px"><div style="flex:1"><label>Адрес</label><input id="dec" type="text" value="${esc(s.code||'')}"></div><div style="flex:1"><label>Склад</label><select id="dew"><option value="1">Основной склад</option></select></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Зона</label><select id="dez"><option value="storage">Хранение</option><option value="shipment">Отгрузка</option><option value="receiving">Приёмка</option></select></div><div style="flex:1"><label>Тип</label><select id="det"><option value="pallet">Паллетная</option><option value="box">Коробочная</option></select></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Категория</label><input id="decat" type="text" value="${esc(s.category||'')}"></div><div style="flex:1"><label>Вместимость, шт</label><input id="decap" type="number" min="0" value="${esc(s.capacity??0)}"></div></div>
 <div style="display:flex;gap:10px"><div style="flex:1"><label>Темп. от</label><input id="detf" type="number" value="${esc(s.temp_from??'')}"></div><div style="flex:1"><label>Темп. до</label><input id="dett" type="number" value="${esc(s.temp_to??'')}"></div></div>

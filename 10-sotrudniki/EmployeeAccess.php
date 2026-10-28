@@ -40,6 +40,7 @@ final class EmployeeAccess
         'notif' => 'Уведомления',
         'settings' => 'Настройки',
         'journal' => 'Журнал',
+        'labels' => 'Этикетки',
     ];
 
     /** Уровни доступа: ключ => подпись. */

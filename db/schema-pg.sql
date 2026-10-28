@@ -111,6 +111,8 @@ CREATE TABLE IF NOT EXISTS employees (
   department VARCHAR(100) NULL,
   personnel_no VARCHAR(30) NULL,
   pin VARCHAR(10) NULL UNIQUE,
+  login VARCHAR(100) NULL,
+  password_hash VARCHAR(255) NULL,
   photo_path VARCHAR(255) NULL,
   phone_internal VARCHAR(50) NULL,
   phone_mobile VARCHAR(50) NULL,
@@ -131,6 +133,7 @@ CREATE TABLE IF NOT EXISTS employees (
 CREATE INDEX IF NOT EXISTS idx_emp_fio ON employees USING gin (fio gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_emp_department ON employees (department);
 CREATE INDEX IF NOT EXISTS idx_emp_status ON employees (status);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_emp_login ON employees (LOWER(login)) WHERE login IS NOT NULL AND login <> '';
 -- Дотягиваем карточку на уже созданной БД (идемпотентно).
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS last_name VARCHAR(100) NULL;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS first_name VARCHAR(100) NULL;
@@ -138,6 +141,8 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS middle_name VARCHAR(100) NULL;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS code VARCHAR(10) NULL;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS department VARCHAR(100) NULL;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS personnel_no VARCHAR(30) NULL;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS login VARCHAR(100) NULL;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) NULL;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS photo_path VARCHAR(255) NULL;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS phone_internal VARCHAR(50) NULL;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS phone_mobile VARCHAR(50) NULL;
@@ -177,6 +182,81 @@ CREATE TABLE IF NOT EXISTS employee_access (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   UNIQUE (employee_id, scope, module_key)
 );
+
+-- Справочник ролей сотрудников (модули 10 и 13). Раньше создавался только в рантайме.
+CREATE TABLE IF NOT EXISTS wms_roles (
+  id BIGSERIAL PRIMARY KEY,
+  name VARCHAR(50) NOT NULL UNIQUE,
+  is_active SMALLINT NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+INSERT INTO wms_roles (name) VALUES
+  ('Администратор'), ('Кладовщик'), ('Водитель'), ('Приемщик'), ('Менеджер')
+ON CONFLICT (name) DO NOTHING;
+
+-- Права по роли (общие для всех сотрудников с этой ролью). Раньше создавалась только в рантайме.
+CREATE TABLE IF NOT EXISTS role_access (
+  id BIGSERIAL PRIMARY KEY,
+  role VARCHAR(50) NOT NULL,
+  scope VARCHAR(10) NOT NULL DEFAULT 'wms',
+  module_key VARCHAR(50) NOT NULL,
+  level VARCHAR(20) NOT NULL DEFAULT 'none',
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE (role, scope, module_key)
+);
+
+-- Действия, которые можно разрешать отдельно от доступа к модулю (например, редактирование документов).
+CREATE TABLE IF NOT EXISTS role_permissions (
+  id BIGSERIAL PRIMARY KEY,
+  role VARCHAR(50) NOT NULL,
+  permission_key VARCHAR(50) NOT NULL,
+  allowed SMALLINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE (role, permission_key)
+);
+
+-- ---------- 15: этикетки ----------
+CREATE TABLE IF NOT EXISTS label_templates (
+  id BIGSERIAL PRIMARY KEY,
+  label_type VARCHAR(30) NOT NULL UNIQUE,
+  label_name VARCHAR(100) NOT NULL,
+  title VARCHAR(100) NOT NULL,
+  prefix VARCHAR(10) NOT NULL DEFAULT '',
+  zpl_template TEXT NOT NULL,
+  sql_query TEXT NULL,
+  width_mm INTEGER NOT NULL DEFAULT 58,
+  height_mm INTEGER NOT NULL DEFAULT 40,
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS label_sequences (
+  label_type VARCHAR(30) NOT NULL,
+  seq_day VARCHAR(10) NOT NULL,
+  last_no INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (label_type, seq_day)
+);
+CREATE TABLE IF NOT EXISTS label_print_log (
+  id BIGSERIAL PRIMARY KEY,
+  label_type VARCHAR(30) NOT NULL,
+  label_name VARCHAR(100) NOT NULL,
+  qty INTEGER NOT NULL,
+  code_from VARCHAR(50) NULL,
+  code_to VARCHAR(50) NULL,
+  user_id BIGINT NULL,
+  user_login VARCHAR(100) NULL,
+  user_fio VARCHAR(150) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_label_log_created ON label_print_log (created_at);
+CREATE TABLE IF NOT EXISTS label_codes (
+  id BIGSERIAL PRIMARY KEY,
+  label_type VARCHAR(30) NOT NULL,
+  code VARCHAR(50) NOT NULL UNIQUE,
+  batch_id BIGINT NULL,
+  user_id BIGINT NULL,
+  user_login VARCHAR(100) NULL,
+  printed_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_label_codes_batch ON label_codes (batch_id);
 
 -- История выходов по СКУД (вкладка «История выходов»).
 CREATE TABLE IF NOT EXISTS employee_exits (
@@ -358,6 +438,11 @@ CREATE TABLE IF NOT EXISTS receipt_items (
   receipt_id BIGINT NOT NULL REFERENCES receipts (id) ON DELETE CASCADE,
   line_no INTEGER NOT NULL DEFAULT 0,
   code VARCHAR(50) NULL,
+  barcode VARCHAR(100) NULL,
+  scan_serial SMALLINT NOT NULL DEFAULT 0,
+  scan_chz SMALLINT NOT NULL DEFAULT 0,
+  owner_contractor_id BIGINT NULL,
+  owner_name VARCHAR(255) NULL,
   sku VARCHAR(50) NOT NULL,
   name VARCHAR(255) NOT NULL,
   unit VARCHAR(10) NOT NULL DEFAULT 'шт',
@@ -776,6 +861,14 @@ CREATE TABLE IF NOT EXISTS storage_cell_zones (
   UNIQUE (cell_id, zone)
 );
 
+CREATE TABLE IF NOT EXISTS storage_cell_extra_zones (
+  id BIGSERIAL PRIMARY KEY,
+  cell_id BIGINT NOT NULL REFERENCES storage_cells (id) ON DELETE CASCADE,
+  zone VARCHAR(50) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE (cell_id, zone)
+);
+
 CREATE TABLE IF NOT EXISTS warehouse_zones (
   id BIGSERIAL PRIMARY KEY,
   warehouse_id BIGINT NOT NULL REFERENCES warehouses (id) ON DELETE CASCADE,
@@ -816,10 +909,17 @@ CREATE INDEX IF NOT EXISTS idx_order_status ON client_orders (status);
 CREATE TABLE IF NOT EXISTS client_order_items (
   id BIGSERIAL PRIMARY KEY,
   order_id BIGINT NOT NULL REFERENCES client_orders (id) ON DELETE CASCADE,
+  wms_code VARCHAR(50) NULL,
+  barcode VARCHAR(100) NULL,
+  scan_serial SMALLINT NOT NULL DEFAULT 0,
+  scan_chz SMALLINT NOT NULL DEFAULT 0,
+  owner_contractor_id BIGINT NULL,
+  owner_name VARCHAR(255) NULL,
   sku VARCHAR(50) NOT NULL,
   name VARCHAR(255) NOT NULL,
   unit VARCHAR(10) NOT NULL DEFAULT 'шт',
   qty NUMERIC(12,3) NOT NULL,
+  supplier_batch VARCHAR(100) NULL,
   prod_date DATE NULL
 );
 CREATE INDEX IF NOT EXISTS idx_coi_order ON client_order_items (order_id);
@@ -918,6 +1018,7 @@ CREATE TABLE IF NOT EXISTS shipment_items (
   check_label VARCHAR(50) NULL,
   warehouse_id BIGINT NULL,
   comment TEXT NULL,
+  supplier_batch VARCHAR(100) NULL,
   prod_date DATE NULL
 );
 CREATE TABLE IF NOT EXISTS tsd_picks (
@@ -988,17 +1089,25 @@ CREATE INDEX IF NOT EXISTS idx_sm_sku ON shipment_marks (sku);
 CREATE TABLE IF NOT EXISTS shipment_sort_log (
   id BIGSERIAL PRIMARY KEY,
   shipment_id BIGINT NOT NULL REFERENCES shipments (id) ON DELETE CASCADE,
-  pallet_id VARCHAR(50) NULL COMMENT 'SSCC/номер паллеты',
-  pallet_created_at TIMESTAMP NULL COMMENT 'Дата создания SSCC',
-  user_id BIGINT NULL COMMENT 'id сотрудника',
-  item_id BIGINT NULL COMMENT 'id товара (shipment_items.id)',
-  serial_no VARCHAR(100) NULL COMMENT 'Серийный номер',
-  marking_code TEXT NULL COMMENT 'Честный знак (марка)',
+  pallet_id VARCHAR(50) NULL,
+  pallet_created_at TIMESTAMP NULL,
+  user_id BIGINT NULL,
+  item_id BIGINT NULL,
+  serial_no VARCHAR(100) NULL,
+  marking_code TEXT NULL,
   qty NUMERIC(12,3) NOT NULL DEFAULT 1,
-  operation VARCHAR(30) NOT NULL DEFAULT 'sort' COMMENT 'sort|crossdock|mark|serial',
-  reason VARCHAR(100) NULL COMMENT 'Причина: марка не принята / не введена в оборот и т.п.',
+  operation VARCHAR(30) NOT NULL DEFAULT 'sort',
+  reason VARCHAR(100) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+COMMENT ON COLUMN shipment_sort_log.pallet_id IS 'SSCC/номер паллеты';
+COMMENT ON COLUMN shipment_sort_log.pallet_created_at IS 'Дата создания SSCC';
+COMMENT ON COLUMN shipment_sort_log.user_id IS 'id сотрудника';
+COMMENT ON COLUMN shipment_sort_log.item_id IS 'id товара (shipment_items.id)';
+COMMENT ON COLUMN shipment_sort_log.serial_no IS 'Серийный номер';
+COMMENT ON COLUMN shipment_sort_log.marking_code IS 'Честный знак (марка)';
+COMMENT ON COLUMN shipment_sort_log.operation IS 'sort|crossdock|mark|serial';
+COMMENT ON COLUMN shipment_sort_log.reason IS 'Причина: марка не принята / не введена в оборот и т.п.';
 CREATE INDEX IF NOT EXISTS idx_ssl_shipment ON shipment_sort_log (shipment_id);
 CREATE INDEX IF NOT EXISTS idx_ssl_pallet ON shipment_sort_log (pallet_id);
 CREATE INDEX IF NOT EXISTS idx_ssl_user ON shipment_sort_log (user_id);
@@ -1127,6 +1236,7 @@ CREATE TABLE IF NOT EXISTS task_items (
   cell_from VARCHAR(50) NULL,
   cell_to VARCHAR(50) NULL,
   pallet VARCHAR(50) NULL,
+  supplier_batch VARCHAR(100) NULL,
   plan_qty NUMERIC(14,3) NOT NULL DEFAULT 0,
   fact_qty NUMERIC(14,3) NOT NULL DEFAULT 0,
   state VARCHAR(30) NULL,
@@ -1257,6 +1367,7 @@ CREATE TABLE IF NOT EXISTS wms_task_items (
   cell_from VARCHAR(50) NULL,
   cell_to VARCHAR(50) NULL,
   pallet VARCHAR(50) NULL,
+  supplier_batch VARCHAR(100) NULL,
   plan_qty NUMERIC(14,3) NOT NULL DEFAULT 0,
   fact_qty NUMERIC(14,3) NOT NULL DEFAULT 0,
   state VARCHAR(30) NULL,
@@ -1562,6 +1673,19 @@ CREATE TABLE IF NOT EXISTS print_jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_pj_tpl ON print_jobs (template_id);
 
+-- Лог импорта робота (in/out). Раньше создавался только в рантайме.
+CREATE TABLE IF NOT EXISTS wms_import_log (
+  id BIGSERIAL PRIMARY KEY,
+  folder VARCHAR(12) NOT NULL,
+  filename VARCHAR(255) NOT NULL,
+  file_hash VARCHAR(64) NULL,
+  status VARCHAR(20) NOT NULL,
+  doc_no VARCHAR(50) NULL,
+  message TEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ilog_hash ON wms_import_log (file_hash);
+
 -- ============================================================
 -- 12. ПОЛЬЗОВАТЕЛЬСКИЕ КОЛОНКИ
 -- ============================================================
@@ -1596,6 +1720,10 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS shipment_ids VARCHAR(255);
 -- task_history.field_label уже в CREATE выше; для старых БД:
 ALTER TABLE task_history ADD COLUMN IF NOT EXISTS field_label VARCHAR(100);
 ALTER TABLE shipment_items ADD COLUMN IF NOT EXISTS prod_date DATE;
+ALTER TABLE client_order_items ADD COLUMN IF NOT EXISTS supplier_batch VARCHAR(100);
+ALTER TABLE shipment_items ADD COLUMN IF NOT EXISTS supplier_batch VARCHAR(100);
+ALTER TABLE task_items ADD COLUMN IF NOT EXISTS supplier_batch VARCHAR(100);
+ALTER TABLE wms_task_items ADD COLUMN IF NOT EXISTS supplier_batch VARCHAR(100);
 ALTER TABLE shipments ADD COLUMN IF NOT EXISTS is_crossdock SMALLINT NOT NULL DEFAULT 0;
 ALTER TABLE receipt_items ADD COLUMN IF NOT EXISTS qty_fact NUMERIC(12,3) NOT NULL DEFAULT 0;
 ALTER TABLE receipt_items ADD COLUMN IF NOT EXISTS line_status VARCHAR(20) NOT NULL DEFAULT 'ok';
@@ -1648,6 +1776,7 @@ CREATE TABLE IF NOT EXISTS wms_journal (
   doc_no VARCHAR(100) NULL,
   sku VARCHAR(50) NULL,
   product_name VARCHAR(255) NULL,
+  supplier_batch VARCHAR(100) NULL,
   qty NUMERIC(14,3) NOT NULL DEFAULT 0,
   pallet VARCHAR(50) NULL,
   sscc VARCHAR(50) NULL,
@@ -1661,6 +1790,7 @@ CREATE TABLE IF NOT EXISTS wms_journal (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 ALTER TABLE wms_journal ADD COLUMN IF NOT EXISTS quality VARCHAR(20) NULL DEFAULT 'новый';
+ALTER TABLE wms_journal ADD COLUMN IF NOT EXISTS supplier_batch VARCHAR(100);
 CREATE INDEX IF NOT EXISTS idx_journal_date ON wms_journal (doc_date);
 CREATE INDEX IF NOT EXISTS idx_journal_op ON wms_journal (op_type);
 CREATE INDEX IF NOT EXISTS idx_journal_sku ON wms_journal (sku);
@@ -1712,7 +1842,7 @@ CREATE INDEX IF NOT EXISTS idx_pbuf_ship ON tsd_pick_buffers (shipment_id);
 -- ============================================================
 -- 14. МИНИМАЛЬНЫЕ СИДЫ (идемпотентно)
 -- ============================================================
-INSERT INTO warehouses (id, name) VALUES (1, 'Основной склад'), (2, 'Холодильный склад')
+INSERT INTO warehouses (id, name) VALUES (1, 'Основной склад')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (id, fio, role, position) VALUES
@@ -1740,7 +1870,7 @@ INSERT INTO cell_types (code, name) VALUES
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO storage_zones (code, name) VALUES
-  ('storage', 'Хранение'), ('accept', 'Приемка'), ('ship', 'Отгрузка'), ('quarantine', 'Карантин')
+  ('storage', 'Хранение'), ('receiving', 'Приёмка'), ('shipment', 'Отгрузка'), ('quarantine', 'Карантин')
 ON CONFLICT (code) DO NOTHING;
 
 -- Ячейки приёмки (ворота) DOK-01…DOK-10 — та же таблица ячеек хранения, зона receiving.

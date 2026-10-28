@@ -4,7 +4,17 @@ declare(strict_types=1);
 // Запуск: php -S 0.0.0.0:8001 -t <папка wms_2> <папка wms_2>\router.php
 // Все запросы сначала проходят через этот файл. Без входа: API отдают 401, страницы ведут на /login.
 
-session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    session_start();
+}
+
+require_once __DIR__ . '/shared/Auth.php';
 
 const AUTH_USER = 'admin';
 // bcrypt-хэш пароля (смена пароля = заменить хэш, получить: php -r "echo password_hash('новый', PASSWORD_DEFAULT), PHP_EOL;")
@@ -13,7 +23,7 @@ const SESSION_KEY = 'wms_auth_user';
 
 function isAuthed(): bool
 {
-    return isset($_SESSION[SESSION_KEY]) && $_SESSION[SESSION_KEY] === AUTH_USER;
+    return wms_auth_user() !== null;
 }
 
 function loginPage(string $error = ''): string
@@ -39,7 +49,7 @@ button{width:100%;margin-top:16px;background:#6432FF;color:#fff;border:0;border-
 <body>
 <div class="box">
 <h1>TiMLog</h1>
-<div class="sub">Вход на портал</div>
+<div class="sub">Вход на портал. Логин и пароль задаются в карточке сотрудника (модуль 10).</div>
 {$err}
 <form method="POST" action="/login">
 <label>Логин</label><input name="login" type="text" autocomplete="username" required>
@@ -58,12 +68,22 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 // --- Вход ---
 if ($uri === '/login') {
     if ($method === 'POST') {
-        $login = (string)($_POST['login'] ?? '');
+        $login = trim((string)($_POST['login'] ?? ''));
         $pass = (string)($_POST['password'] ?? '');
-        if ($login === AUTH_USER && password_verify($pass, AUTH_HASH)) {
-            session_regenerate_id(true);
-            $_SESSION[SESSION_KEY] = AUTH_USER;
-            header('Location: /02-postupleniya/app.html');
+        $employee = wms_auth_attempt($login, $pass);
+        if ($employee) {
+            wms_auth_login($employee);
+            header('Location: ' . wms_auth_landing_url());
+            http_response_code(302);
+            exit;
+        }
+        // Совместимость со старым входом admin: работает, пока у учётной
+        // записи admin в карточке сотрудника не задан собственный пароль.
+        $adminRow = wms_auth_employee_by_login(AUTH_USER);
+        $adminHasPassword = $adminRow && trim((string)($adminRow['password_hash'] ?? '')) !== '';
+        if (!$adminHasPassword && $login === AUTH_USER && password_verify($pass, AUTH_HASH)) {
+            wms_auth_login(wms_auth_admin_employee());
+            header('Location: ' . wms_auth_landing_url());
             http_response_code(302);
             exit;
         }
@@ -72,7 +92,7 @@ if ($uri === '/login') {
         exit;
     }
     if (isAuthed()) {
-        header('Location: /02-postupleniya/app.html');
+        header('Location: ' . wms_auth_landing_url());
         http_response_code(302);
         exit;
     }
@@ -82,11 +102,7 @@ if ($uri === '/login') {
 
 // --- Выход ---
 if ($uri === '/logout') {
-    $_SESSION = [];
-    if (ini_get('session.use_cookies')) {
-        setcookie(session_name(), '', time() - 3600, '/');
-    }
-    session_destroy();
+    wms_auth_logout();
     header('Location: /login');
     http_response_code(302);
     exit;
@@ -94,7 +110,7 @@ if ($uri === '/logout') {
 
 // --- Корень ---
 if ($uri === '/') {
-    header('Location: ' . (isAuthed() ? '/02-postupleniya/app.html' : '/login'));
+    header('Location: ' . (isAuthed() ? wms_auth_landing_url() : '/login'));
     http_response_code(302);
     exit;
 }
@@ -177,6 +193,69 @@ if (!isAuthed()) {
     header('Location: /login');
     http_response_code(302);
     exit;
+}
+
+// --- Права роли на модуль (перечитываются из БД на каждом запросе) ---
+$authUser = wms_auth_user();
+$moduleKey = wms_auth_module_for_uri($uri);
+$moduleLevel = $moduleKey !== null ? (wms_auth_module_levels()[$moduleKey] ?? 'none') : null;
+$isApiRequest = wms_auth_is_api_uri($uri) || isset($_GET['action']);
+if ($moduleKey !== null) {
+    $denied = $moduleLevel === 'none' || ($method !== 'GET' && $moduleLevel !== 'full');
+    if ($denied) {
+        http_response_code(403);
+        if ($isApiRequest) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Нет доступа к модулю или недостаточно прав'], JSON_UNESCAPED_UNICODE);
+        } else {
+            header('Content-Type: text/html; charset=utf-8');
+            echo '<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Нет доступа — TiMLog</title>'
+                . '<style>body{font-family:Arial,Helvetica,sans-serif;background:#F4F5F7;margin:0;display:flex;align-items:center;justify-content:center;height:100vh;color:#1C2331}'
+                . '.b{background:#fff;border:1px solid #EAEAEA;border-radius:12px;padding:26px 30px;max-width:520px;box-shadow:0 8px 24px rgba(0,0,0,.08)}'
+                . 'a{color:#6432FF}</style></head><body><div class="b"><h2 style="margin-top:0">Нет доступа</h2>'
+                . '<p>У вашей роли нет прав на этот модуль. Обратитесь к администратору.</p>'
+                . '<p><a href="/00-dashboard/app.html">Перейти на дашборд</a></p></div></body></html>';
+        }
+        exit;
+    }
+}
+
+// --- Общие инструменты таблиц + блок пользователя (все модули, кроме ТСД) ---
+// Внедряем один общий скрипт: плавающий горизонтальный бегунок, настройка
+// столбцов/порядка и количества строк через шестерёнку. Плюс общий виджет
+// пользователя (ФИО, роль, логин, выход) на каждой вкладке.
+if (preg_match('/\.html$/i', $uri)) {
+    $file = __DIR__ . $uri;
+    $real = realpath($file);
+    $root = realpath(__DIR__);
+    if ($real !== false && $root !== false
+        && str_starts_with($real, $root . DIRECTORY_SEPARATOR)
+        && is_file($real)) {
+        $html = (string)file_get_contents($real);
+        $authJsonFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+        $authInj = '<script>window.WMS_USER=' . json_encode(wms_auth_public_user($authUser), $authJsonFlags)
+            . ';window.WMS_MODULE=' . json_encode($moduleKey)
+            . ';window.WMS_MODULE_LEVEL=' . json_encode($moduleLevel)
+            . ';window.WMS_MODULE_LEVELS=' . json_encode(wms_auth_module_levels())
+            . ';window.WMS_PERMS=' . json_encode(wms_auth_permissions())
+            . ';</script><script src="/shared/auth-client.js" defer></script>';
+        if (stripos($html, '</head>') !== false) {
+            $html = preg_replace('/<\/head>/i', $authInj . '</head>', $html, 1);
+        } else {
+            $html = $authInj . $html;
+        }
+        $inj = '<script src="/shared/table-tools.js"></script>';
+        if (stripos($html, '</body>') !== false) {
+            $html = preg_replace('/<\/body>/i', $inj . '</body>', $html, 1);
+        } else {
+            $html .= $inj;
+        }
+        header('Content-Type: text/html; charset=utf-8');
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('Pragma: no-cache');
+        echo $html;
+        exit;
+    }
 }
 
 // Отдать файл как обычно / выполнить PHP-скрипт

@@ -482,7 +482,8 @@ function wms_pick_stock_candidates(
     ?PDO $rcpPdo,
     string $sku,
     int $warehouseId,
-    string $strategy = 'FIFO'
+    string $strategy = 'FIFO',
+    ?string $batch = null
 ): array {
     $sku = trim($sku);
     if ($sku === '') {
@@ -499,6 +500,10 @@ function wms_pick_stock_candidates(
         if ($warehouseId > 0) {
             $sql .= ' AND s.warehouse_id = :wh';
             $params[':wh'] = $warehouseId;
+        }
+        if ($batch !== null && trim($batch) !== '') {
+            $sql .= " AND COALESCE(s.supplier_batch,'') = :batch";
+            $params[':batch'] = trim($batch);
         }
         $sql .= ' ORDER BY s.id';
         $st = $nomPdo->prepare($sql);
@@ -660,14 +665,15 @@ function wms_pick_match_stock(
     string $sku,
     int $warehouseId,
     float $need,
-    string $strategy = 'FIFO'
+    string $strategy = 'FIFO',
+    ?string $batch = null
 ): array {
     $res = [
         'ok' => false, 'cell' => '', 'pallet' => null, 'stock_id' => null,
         'available' => 0.0, 'need' => $need, 'reason' => '',
-        'strategy' => $strategy, 'blocked' => [], 'candidates' => 0,
+        'strategy' => $strategy, 'blocked' => [], 'candidates' => 0, 'batch' => '',
     ];
-    $cands = wms_pick_stock_candidates($nomPdo, $storagePdo, $rcpPdo, $sku, $warehouseId, $strategy);
+    $cands = wms_pick_stock_candidates($nomPdo, $storagePdo, $rcpPdo, $sku, $warehouseId, $strategy, $batch);
     $res['candidates'] = count($cands);
     if (!$cands) {
         $res['reason'] = 'Товар не найден на складе: нет остатков';
@@ -694,6 +700,38 @@ function wms_pick_match_stock(
     }
     $res['available'] = round($available, 3);
     $res['blocked'] = array_values(array_unique(array_merge($blocked, $locked)));
+    // Партия в строке не задана — выбираем ОДНУ партию, которой хватает,
+    // и не смешиваем разные партии в одном задании.
+    if (($batch === null || trim($batch) === '') && $usable && $need > 0) {
+        $byBatch = [];
+        foreach ($usable as $c) {
+            $b = (string)($c['supplier_batch'] ?? '');
+            $byBatch[$b] = ($byBatch[$b] ?? 0.0) + (float)$c['qty'];
+        }
+        $chosen = null;
+        foreach ($usable as $c) {
+            $b = (string)($c['supplier_batch'] ?? '');
+            if (($byBatch[$b] ?? 0.0) + 1e-9 >= $need) {
+                $chosen = $b;
+                break;
+            }
+        }
+        if ($chosen === null) {
+            $parts = [];
+            foreach ($byBatch as $b => $q) {
+                $parts[] = ($b !== '' ? $b : 'без партии') . ' — ' . round((float)$q, 3);
+            }
+            $res['available'] = round(array_sum($byBatch), 3);
+            $res['reason'] = 'Недостаточно остатка в одной партии (нужно ' . round($need, 3) . '): ' . implode('; ', $parts);
+            return $res;
+        }
+        $usable = array_values(array_filter($usable, static fn($c) => (string)($c['supplier_batch'] ?? '') === $chosen));
+        $available = 0.0;
+        foreach ($usable as $c) {
+            $available += (float)$c['qty'];
+        }
+        $res['available'] = round($available, 3);
+    }
     if (!$usable) {
         $why = array_slice($res['blocked'], 0, 3);
         $res['reason'] = 'Товар заблокирован: ' . ($why ? implode('; ', $why) : 'партии недоступны для отбора');
@@ -704,10 +742,19 @@ function wms_pick_match_stock(
         return $res;
     }
     $pick = $usable[0];
+    if ($need > 0) {
+        foreach ($usable as $c) {
+            if ((float)$c['qty'] + 1e-9 >= $need) {
+                $pick = $c;
+                break;
+            }
+        }
+    }
     $res['ok'] = true;
     $res['cell'] = (string)$pick['cell'];
     $res['pallet'] = $pick['pallet'] !== '' ? $pick['pallet'] : null;
     $res['stock_id'] = (int)$pick['id'];
+    $res['batch'] = (string)($pick['supplier_batch'] ?? '');
     return $res;
 }
 
@@ -824,11 +871,17 @@ function wms_pick_insert_task(PDO $tPdo, array $d): array
     $st->execute($params);
     $tid = (int)$tPdo->lastInsertId();
     $ti = $tbl['i'];
+    try {
+        wms_ensure_column($tPdo, $ti, 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
+    } catch (Throwable) {
+    }
+    $hasBatchItem = wms_task_has_col($tPdo, $ti, 'supplier_batch');
+    $insItem = $tPdo->prepare(
+        "INSERT INTO $ti (task_id,code,sku,name,unit,cell_from,cell_to,pallet" . ($hasBatchItem ? ',supplier_batch' : '') . ",plan_qty,fact_qty,state,executor_fio)
+         VALUES (:t,:code,:sku,:name,:unit,:cf,NULL,:pal" . ($hasBatchItem ? ',:batch' : '') . ",:pq,0,NULL,NULL)"
+    );
     foreach ((array)($d['items'] ?? []) as $it) {
-        $tPdo->prepare(
-            "INSERT INTO $ti (task_id,code,sku,name,unit,cell_from,cell_to,pallet,plan_qty,fact_qty,state,executor_fio)
-             VALUES (:t,:code,:sku,:name,:unit,:cf,NULL,:pal,:pq,0,NULL,NULL)"
-        )->execute([
+        $params = [
             ':t' => $tid,
             ':code' => ($it['code'] ?? '') !== '' ? $it['code'] : null,
             ':sku' => (string)($it['sku'] ?? ''),
@@ -837,7 +890,12 @@ function wms_pick_insert_task(PDO $tPdo, array $d): array
             ':cf' => (string)($it['cell_from'] ?? ''),
             ':pal' => ($it['pallet'] ?? '') !== '' ? (string)$it['pallet'] : null,
             ':pq' => (float)($it['plan_qty'] ?? 0),
-        ]);
+        ];
+        if ($hasBatchItem) {
+            $b = trim((string)($it['supplier_batch'] ?? ''));
+            $params[':batch'] = $b !== '' ? $b : null;
+        }
+        $insItem->execute($params);
     }
     try {
         $th = $tbl['h'];
@@ -872,7 +930,8 @@ function wms_pick_reserve_rows(PDO $tPdo, array $skus): array
     try {
         $in = implode(',', array_fill(0, count($skus), '?'));
         $st = $tPdo->prepare(
-            "SELECT i.sku, i.cell_from, i.pallet, i.plan_qty, i.fact_qty,
+            "SELECT i.sku, i.cell_from, i.pallet, COALESCE(i.supplier_batch,'') AS supplier_batch,
+                    i.plan_qty, i.fact_qty,
                     t.id AS task_id, t.doc_no, t.shipment_ids, t.doc_ref
              FROM {$tbl['i']} i JOIN {$tbl['t']} t ON t.id = i.task_id
              WHERE i.sku IN ($in) AND t.flags LIKE '%pick%' AND t.status IN ('new','work','paused')"
@@ -893,6 +952,7 @@ function wms_pick_reserve_rows(PDO $tPdo, array $skus): array
             $docs = array_values(array_filter(array_map('trim', explode(',', (string)($r['doc_ref'] ?? ''))), fn($v) => $v !== ''));
             $out[] = [
                 'sku' => (string)($r['sku'] ?? ''),
+                'supplier_batch' => trim((string)($r['supplier_batch'] ?? '')),
                 'cell' => trim((string)($r['cell_from'] ?? '')),
                 'pallet' => trim((string)($r['pallet'] ?? '')),
                 'qty' => $need,
@@ -908,11 +968,15 @@ function wms_pick_reserve_rows(PDO $tPdo, array $skus): array
 }
 
 /** Резерв по строке партии (SKU + ячейка + паллета). */
-function wms_pick_reserved_for_row(array $rows, string $sku, string $cell, string $pallet, ?int $shipmentId = null, string $docNo = ''): float
+function wms_pick_reserved_for_row(array $rows, string $sku, string $cell, string $pallet, ?int $shipmentId = null, string $docNo = '', ?string $batch = null): float
 {
     $sum = 0.0;
+    $batch = $batch !== null ? trim($batch) : null;
     foreach ($rows as $r) {
         if (strcasecmp((string)$r['sku'], $sku) !== 0) {
+            continue;
+        }
+        if ($batch !== null && $batch !== '' && strcasecmp(trim((string)($r['supplier_batch'] ?? '')), $batch) !== 0) {
             continue;
         }
         if (trim((string)$r['cell']) !== trim($cell)) {
@@ -935,11 +999,15 @@ function wms_pick_reserved_for_row(array $rows, string $sku, string $cell, strin
 }
 
 /** Резерв по артикулу (весь или по конкретной отгрузке). */
-function wms_pick_reserved_for_sku(array $rows, string $sku, ?int $shipmentId = null, string $docNo = ''): float
+function wms_pick_reserved_for_sku(array $rows, string $sku, ?int $shipmentId = null, string $docNo = '', ?string $batch = null): float
 {
     $sum = 0.0;
+    $batch = $batch !== null ? trim($batch) : null;
     foreach ($rows as $r) {
         if (strcasecmp((string)$r['sku'], $sku) !== 0) {
+            continue;
+        }
+        if ($batch !== null && $batch !== '' && strcasecmp(trim((string)($r['supplier_batch'] ?? '')), $batch) !== 0) {
             continue;
         }
         if ($shipmentId !== null && $shipmentId > 0) {
@@ -981,11 +1049,17 @@ function wms_pick_reserve_lines(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PDO
     $docNo = (string)($head['doc_no'] ?? '');
     $items = [];
     try {
-        $st = $shipPdo->prepare('SELECT sku, name, unit, qty, order_id FROM shipment_items WHERE shipment_id = :s ORDER BY id');
+        $st = $shipPdo->prepare('SELECT sku, name, unit, qty, order_id, COALESCE(supplier_batch,\'\') AS supplier_batch FROM shipment_items WHERE shipment_id = :s ORDER BY id');
         $st->execute([':s' => $shipmentId]);
         $items = $st->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable) {
-        $items = [];
+        try {
+            $st = $shipPdo->prepare('SELECT sku, name, unit, qty, order_id FROM shipment_items WHERE shipment_id = :s ORDER BY id');
+            $st->execute([':s' => $shipmentId]);
+            $items = $st->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable) {
+            $items = [];
+        }
     }
     $lines = [];
     $orderIds = [];
@@ -994,9 +1068,12 @@ function wms_pick_reserve_lines(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PDO
         if ($sku === '') {
             continue;
         }
-        if (!isset($lines[$sku])) {
-            $lines[$sku] = [
+        $batch = trim((string)($it['supplier_batch'] ?? ''));
+        $key = $sku . "\x1F" . $batch;
+        if (!isset($lines[$key])) {
+            $lines[$key] = [
                 'sku' => $sku,
+                'supplier_batch' => $batch,
                 'name' => (string)($it['name'] ?? $sku),
                 'unit' => (string)($it['unit'] ?? 'шт'),
                 'need' => 0.0,
@@ -1008,31 +1085,38 @@ function wms_pick_reserve_lines(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PDO
                 'max_new' => 0.0,
             ];
         }
-        $lines[$sku]['need'] += (float)($it['qty'] ?? 0);
+        $lines[$key]['need'] += (float)($it['qty'] ?? 0);
         $oid = (int)($it['order_id'] ?? 0);
         if ($oid > 0) {
             $orderIds[$oid] = true;
         }
     }
-    // Расход по заказам (client_order_items) — ограничивает ручной резерв.
+    // Расход по заказам (client_order_items) — ограничивает ручной резерв. Строго по партии.
     if ($orderIds) {
         try {
             $oids = array_keys($orderIds);
             $in = implode(',', array_fill(0, count($oids), '?'));
-            $st = $shipPdo->prepare("SELECT sku, SUM(qty) AS q FROM client_order_items WHERE order_id IN ($in) GROUP BY sku");
+            $hasOrderBatch = function_exists('wms_has_column')
+                ? wms_has_column($shipPdo, 'client_order_items', 'supplier_batch') : true;
+            $sql = $hasOrderBatch
+                ? "SELECT sku, COALESCE(supplier_batch,'') AS b, SUM(qty) AS q FROM client_order_items WHERE order_id IN ($in) GROUP BY sku, COALESCE(supplier_batch,'')"
+                : "SELECT sku, '' AS b, SUM(qty) AS q FROM client_order_items WHERE order_id IN ($in) GROUP BY sku";
+            $st = $shipPdo->prepare($sql);
             $st->execute($oids);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $sku = trim((string)($r['sku'] ?? ''));
-                if ($sku !== '' && isset($lines[$sku])) {
-                    $lines[$sku]['order_qty'] += (float)($r['q'] ?? 0);
+                $batch = trim((string)($r['b'] ?? ''));
+                $key = $sku . "\x1F" . $batch;
+                if ($sku !== '' && isset($lines[$key])) {
+                    $lines[$key]['order_qty'] += (float)($r['q'] ?? 0);
                 }
             }
         } catch (Throwable) {
         }
     }
-    $skus = array_keys($lines);
+    $skus = array_values(array_unique(array_column($lines, 'sku')));
     $reserveRows = $taskPdo ? wms_pick_reserve_rows($taskPdo, $skus) : [];
-    // Остаток на складе (без заблокированных ячеек и брака).
+    // Остаток на складе (без заблокированных ячеек и брака) — с разбивкой по партиям.
     $stockMap = [];
     if ($skus) {
         $blockedIdx = [];
@@ -1060,7 +1144,8 @@ function wms_pick_reserve_lines(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PDO
                 $qparams[$k] = $s;
             }
             $st = $nomPdo->prepare(
-                "SELECT p.sku AS sku, s.id, s.cell, s.pallet, s.qty, s.receipt_id
+                "SELECT p.sku AS sku, COALESCE(s.supplier_batch,'') AS supplier_batch,
+                        s.id, s.cell, s.pallet, s.qty, s.receipt_id
                  FROM product_stock s JOIN products p ON p.id = s.product_id
                  WHERE p.sku IN (" . implode(',', $ph) . ") AND s.warehouse_id = :wh AND COALESCE(s.qty,0) > 0"
             );
@@ -1078,9 +1163,10 @@ function wms_pick_reserve_lines(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PDO
             }
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
                 $sku = trim((string)($r['sku'] ?? ''));
-                if (!isset($lines[$sku])) {
+                if (!in_array($sku, $skus, true)) {
                     continue;
                 }
+                $batch = trim((string)($r['supplier_batch'] ?? ''));
                 $cell = trim((string)($r['cell'] ?? ''));
                 $pal = trim((string)($r['pallet'] ?? ''));
                 $rid = (int)($r['receipt_id'] ?? 0);
@@ -1089,15 +1175,21 @@ function wms_pick_reserve_lines(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PDO
                 if ($blocked || $locked) {
                     continue;
                 }
-                $stockMap[$sku] = ($stockMap[$sku] ?? 0.0) + (float)($r['qty'] ?? 0);
+                $stockMap[$sku][$batch] = ($stockMap[$sku][$batch] ?? 0.0) + (float)($r['qty'] ?? 0);
             }
         } catch (Throwable) {
         }
     }
-    foreach ($lines as $sku => &$l) {
-        $l['stock'] = round((float)($stockMap[$sku] ?? 0.0), 3);
-        $l['reserved'] = round(wms_pick_reserved_for_sku($reserveRows, $sku), 3);
-        $l['reserved_shipment'] = round(wms_pick_reserved_for_sku($reserveRows, $sku, $shipmentId, $docNo), 3);
+    foreach ($lines as $key => &$l) {
+        $sku = (string)$l['sku'];
+        $batch = (string)$l['supplier_batch'];
+        if ($batch !== '') {
+            $l['stock'] = round((float)($stockMap[$sku][$batch] ?? 0.0), 3);
+        } else {
+            $l['stock'] = round((float)array_sum($stockMap[$sku] ?? []), 3);
+        }
+        $l['reserved'] = round(wms_pick_reserved_for_sku($reserveRows, $sku, null, '', $batch), 3);
+        $l['reserved_shipment'] = round(wms_pick_reserved_for_sku($reserveRows, $sku, $shipmentId, $docNo, $batch), 3);
         $limit = (float)$l['need'];
         if ((float)$l['order_qty'] > 0) {
             $limit = min($limit, (float)$l['order_qty']);
@@ -1116,20 +1208,25 @@ function wms_pick_reserve_lines(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PDO
  *               limit:float,reserved:float,reserved_shipment:float,max_new:float,
  *               rows:array[],blocked:string[]}
  */
-function wms_pick_reserve_candidates(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PDO $taskPdo, int $shipmentId, string $sku): array
+function wms_pick_reserve_candidates(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PDO $taskPdo, int $shipmentId, string $sku, ?string $batch = null): array
 {
     $shipmentId = (int)$shipmentId;
     $sku = trim($sku);
+    $batch = $batch !== null ? trim($batch) : null;
     $lines = wms_pick_reserve_lines($shipPdo, $nomPdo, $storagePdo, $taskPdo, $shipmentId);
     $line = null;
     foreach ($lines as $l) {
-        if (strcasecmp((string)$l['sku'], $sku) === 0) {
-            $line = $l;
-            break;
+        if (strcasecmp((string)$l['sku'], $sku) !== 0) {
+            continue;
         }
+        if ($batch !== null && $batch !== '' && strcasecmp(trim((string)($l['supplier_batch'] ?? '')), $batch) !== 0) {
+            continue;
+        }
+        $line = $l;
+        break;
     }
     if (!$line) {
-        throw new RuntimeException('Позиция «' . $sku . '» не найдена в отгрузке');
+        throw new RuntimeException('Позиция «' . $sku . '»' . ($batch !== null && $batch !== '' ? ' (партия ' . $batch . ')' : '') . ' не найдена в отгрузке');
     }
     $head = null;
     try {
@@ -1148,17 +1245,18 @@ function wms_pick_reserve_candidates(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo
     } catch (Throwable) {
         $rcpPdo = null;
     }
-    $cands = wms_pick_stock_candidates($nomPdo, $storagePdo, $rcpPdo, $sku, $wh, 'FIFO');
+    $cands = wms_pick_stock_candidates($nomPdo, $storagePdo, $rcpPdo, $sku, $wh, 'FIFO', $batch);
     $rows = [];
     foreach ($cands as $c) {
-        $reservedRow = wms_pick_reserved_for_row($reserveRows, $sku, (string)$c['cell'], (string)$c['pallet']);
-        $reservedThis = wms_pick_reserved_for_row($reserveRows, $sku, (string)$c['cell'], (string)$c['pallet'], $shipmentId, $docNo);
+        $reservedRow = wms_pick_reserved_for_row($reserveRows, $sku, (string)$c['cell'], (string)$c['pallet'], null, '', (string)($c['supplier_batch'] ?? ''));
+        $reservedThis = wms_pick_reserved_for_row($reserveRows, $sku, (string)$c['cell'], (string)$c['pallet'], $shipmentId, $docNo, (string)($c['supplier_batch'] ?? ''));
         $available = round(max(0.0, (float)$c['qty'] - $reservedRow), 3);
         $maxFor = round($available + $reservedThis, 3);
         $rows[] = [
             'stock_id' => (int)$c['id'],
             'cell' => (string)$c['cell'],
             'pallet' => (string)$c['pallet'],
+            'supplier_batch' => (string)($c['supplier_batch'] ?? ''),
             'pallet_type' => (string)$c['pallet_type'],
             'qty' => round((float)$c['qty'], 3),
             'available' => $available,
@@ -1186,6 +1284,7 @@ function wms_pick_reserve_candidates(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo
         'doc_no' => $docNo,
         'warehouse_id' => $wh,
         'sku' => $sku,
+        'supplier_batch' => (string)($line['supplier_batch'] ?? ''),
         'name' => (string)$line['name'],
         'unit' => (string)$line['unit'],
         'need' => (float)$line['need'],
@@ -1224,9 +1323,9 @@ function wms_pick_reserve_manual(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PD
         throw new RuntimeException('Не выбрано ни одной позиции для резервирования');
     }
     $lines = wms_pick_reserve_lines($shipPdo, $nomPdo, $storagePdo, $taskPdo, $shipmentId);
-    $bySku = [];
+    $byKey = [];
     foreach ($lines as $l) {
-        $bySku[strtoupper((string)$l['sku'])] = $l;
+        $byKey[strtoupper((string)$l['sku']) . "\x1F" . trim((string)($l['supplier_batch'] ?? ''))] = $l;
     }
     $head = null;
     try {
@@ -1241,57 +1340,35 @@ function wms_pick_reserve_manual(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PD
     $wh = (int)($head['warehouse_id'] ?? 1) ?: 1;
     $docNo = (string)($head['doc_no'] ?? '');
 
-    // --- Группировка по артикулу и проверка лимитов ---
-    $sumBySku = [];
-    foreach ($items as $it) {
-        $sku = trim((string)($it['sku'] ?? ''));
-        $qty = (float)($it['qty'] ?? 0);
-        if ($sku === '') {
-            throw new RuntimeException('Не указан артикул позиции');
-        }
-        if (!isset($bySku[strtoupper($sku)])) {
-            throw new RuntimeException('Позиция «' . $sku . '» не найдена в отгрузке');
-        }
-        if ($qty <= 0) {
-            throw new RuntimeException('Количество по позиции «' . $sku . '» должно быть больше нуля');
-        }
-        $k = strtoupper($sku);
-        $sumBySku[$k] = ($sumBySku[$k] ?? 0.0) + $qty;
-    }
-    foreach ($sumBySku as $k => $sum) {
-        $l = $bySku[$k];
-        $limit = (float)$l['limit'];
-        $total = (float)$l['reserved_shipment'] + $sum;
-        if ($total > $limit + 1e-9) {
-            throw new RuntimeException(sprintf(
-                'Превышено требуемое количество по позиции: нужно %s, выбрано %s',
-                rtrim(rtrim(number_format($limit, 3, '.', ''), '0'), '.') ?: '0',
-                rtrim(rtrim(number_format($total, 3, '.', ''), '0'), '.') ?: '0'
-            ));
-        }
-    }
-
-    // --- Проверка строк запаса ---
+    // --- Проверка строк запаса (строго по партии) ---
     $rcpPdo = null;
     try {
         $rcpPdo = function_exists('wms_receipts_pdo') ? wms_receipts_pdo() : null;
     } catch (Throwable) {
         $rcpPdo = null;
     }
-    $reserveRows = wms_pick_reserve_rows($taskPdo, array_column($lines, 'sku'));
+    $reserveRows = wms_pick_reserve_rows($taskPdo, array_values(array_unique(array_column($lines, 'sku'))));
     $prepared = [];
+    $sumByKey = [];
     $totalQty = 0.0;
     foreach ($items as $it) {
         $sku = trim((string)($it['sku'] ?? ''));
         $stockId = (int)($it['stock_id'] ?? 0);
         $qty = (float)($it['qty'] ?? 0);
+        if ($sku === '') {
+            throw new RuntimeException('Не указан артикул позиции');
+        }
+        if ($qty <= 0) {
+            throw new RuntimeException('Количество по позиции «' . $sku . '» должно быть больше нуля');
+        }
         if ($stockId <= 0) {
             throw new RuntimeException('Не указана строка товарного запаса по позиции «' . $sku . '»');
         }
         $row = null;
         try {
             $st = $nomPdo->prepare(
-                'SELECT s.id, s.product_id, s.warehouse_id, s.cell, s.pallet, s.qty, s.receipt_id, p.sku, p.name, p.unit
+                'SELECT s.id, s.product_id, s.warehouse_id, s.cell, s.pallet, s.qty, s.receipt_id,
+                        COALESCE(s.supplier_batch,\'\') AS supplier_batch, p.sku, p.name, p.unit
                  FROM product_stock s JOIN products p ON p.id = s.product_id WHERE s.id = :id'
             );
             $st->execute([':id' => $stockId]);
@@ -1307,6 +1384,31 @@ function wms_pick_reserve_manual(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PD
         }
         if ((int)($row['warehouse_id'] ?? 0) !== $wh) {
             throw new RuntimeException('Строка запаса относится к другому складу');
+        }
+        $batch = trim((string)($it['supplier_batch'] ?? ($row['supplier_batch'] ?? '')));
+        $key = strtoupper($sku) . "\x1F" . $batch;
+        $line = $byKey[$key] ?? null;
+        if (!$line) {
+            // Любую партию из запаса разрешаем только если в отгрузке по этому SKU нет строк с партией.
+            $hasSpecific = false;
+            foreach ($lines as $ll) {
+                if (strcasecmp((string)$ll['sku'], $sku) === 0 && trim((string)($ll['supplier_batch'] ?? '')) !== '') {
+                    $hasSpecific = true;
+                    break;
+                }
+            }
+            $noBatchKey = strtoupper($sku) . "\x1F";
+            if (!$hasSpecific && isset($byKey[$noBatchKey])) {
+                $line = $byKey[$noBatchKey];
+                $key = $noBatchKey;
+            }
+        }
+        if (!$line) {
+            throw new RuntimeException('Позиция «' . $sku . '»' . ($batch !== '' ? ' (партия ' . $batch . ')' : '') . ' не найдена в отгрузке');
+        }
+        $lineBatch = trim((string)($line['supplier_batch'] ?? ''));
+        if ($lineBatch !== '' && strcasecmp($lineBatch, $batch) !== 0) {
+            throw new RuntimeException('Партия «' . $batch . '» не соответствует строке отгрузки «' . $lineBatch . '» по позиции «' . $sku . '»');
         }
         $cell = trim((string)($row['cell'] ?? ''));
         $pal = trim((string)($row['pallet'] ?? ''));
@@ -1331,8 +1433,8 @@ function wms_pick_reserve_manual(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PD
             throw new RuntimeException('Партия по позиции «' . $sku . '» заблокирована: ' . implode('; ', $blocked));
         }
         // Остаток в конкретной ячейке/паллете.
-        $reservedRow = wms_pick_reserved_for_row($reserveRows, $sku, $cell, $pal);
-        $reservedThis = wms_pick_reserved_for_row($reserveRows, $sku, $cell, $pal, $shipmentId, $docNo);
+        $reservedRow = wms_pick_reserved_for_row($reserveRows, $sku, $cell, $pal, null, '', $batch);
+        $reservedThis = wms_pick_reserved_for_row($reserveRows, $sku, $cell, $pal, $shipmentId, $docNo, $batch);
         $available = max(0.0, (float)($row['qty'] ?? 0) - $reservedRow);
         $maxFor = $available + $reservedThis;
         if ($qty - $maxFor > 1e-9) {
@@ -1350,9 +1452,25 @@ function wms_pick_reserve_manual(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PD
             'stock_id' => $stockId,
             'cell' => $cell,
             'pallet' => $pal,
+            'supplier_batch' => $batch,
             'qty' => $qty,
         ];
+        $sumByKey[$key] = ($sumByKey[$key] ?? 0.0) + $qty;
         $totalQty += $qty;
+    }
+    // Проверка лимитов — по строке отгрузки (SKU + партия).
+    foreach ($sumByKey as $key => $sum) {
+        $l = $byKey[$key];
+        $limit = (float)$l['limit'];
+        $total = (float)$l['reserved_shipment'] + $sum;
+        if ($total > $limit + 1e-9) {
+            throw new RuntimeException(sprintf(
+                'Превышено требуемое количество по позиции%s: нужно %s, выбрано %s',
+                trim((string)($l['supplier_batch'] ?? '')) !== '' ? ' (партия ' . $l['supplier_batch'] . ')' : '',
+                rtrim(rtrim(number_format($limit, 3, '.', ''), '0'), '.') ?: '0',
+                rtrim(rtrim(number_format($total, 3, '.', ''), '0'), '.') ?: '0'
+            ));
+        }
     }
 
     // --- Запись резерва: задание на отбор + счётчики резерва ---
@@ -1362,7 +1480,9 @@ function wms_pick_reserve_manual(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PD
     foreach ($prepared as $p) {
         $taskItems[] = [
             'sku' => $p['sku'], 'name' => $p['name'], 'unit' => $p['unit'],
-            'cell_from' => $p['cell'], 'pallet' => $p['pallet'], 'plan_qty' => $p['qty'],
+            'cell_from' => $p['cell'], 'pallet' => $p['pallet'],
+            'supplier_batch' => (string)($p['supplier_batch'] ?? ''),
+            'plan_qty' => $p['qty'],
         ];
         $cells[$p['cell']] = true;
     }
@@ -1414,6 +1534,7 @@ function wms_pick_reserve_manual(PDO $shipPdo, PDO $nomPdo, ?PDO $storagePdo, PD
                 'doc_no' => $docNo,
                 'sku' => $p['sku'],
                 'product_name' => $p['name'],
+                'supplier_batch' => (string)($p['supplier_batch'] ?? ''),
                 'qty' => (float)$p['qty'],
                 'pallet' => $p['pallet'] !== '' ? $p['pallet'] : null,
                 'cell_from' => $p['cell'],
@@ -1531,28 +1652,33 @@ function wms_issue_pick_tasks(PDO $shipPdo, array $taskPdos, array $shipmentIds,
             if ($sku === '') {
                 continue;
             }
-            if (!isset($groups[$sku])) {
+            $batch = trim((string)($it['supplier_batch'] ?? ''));
+            $gkey = $sku . "\x1F" . $batch;
+            if (!isset($groups[$gkey])) {
                 $sid = (int)$it['shipment_id'];
-                $groups[$sku] = [
-                    'sku' => $sku, 'name' => (string)($it['name'] ?? $sku),
+                $groups[$gkey] = [
+                    'sku' => $sku, 'supplier_batch' => $batch,
+                    'name' => (string)($it['name'] ?? $sku),
                     'code' => (string)($it['code'] ?? ''), 'unit' => (string)($it['unit'] ?? 'шт'),
                     'qty' => 0.0, 'shipment_ids' => [], 'doc_nos' => [],
                     'warehouse_id' => (int)($byId[$sid]['warehouse_id'] ?? 1),
                     'gate' => $gate,
                 ];
             }
-            $groups[$sku]['qty'] += (float)($it['qty'] ?? 0);
+            $groups[$gkey]['qty'] += (float)($it['qty'] ?? 0);
             $sid = (int)$it['shipment_id'];
-            if (!in_array($sid, $groups[$sku]['shipment_ids'], true)) {
-                $groups[$sku]['shipment_ids'][] = $sid;
-                $groups[$sku]['doc_nos'][] = (string)($byId[$sid]['doc_no'] ?? ('#' . $sid));
+            if (!in_array($sid, $groups[$gkey]['shipment_ids'], true)) {
+                $groups[$gkey]['shipment_ids'][] = $sid;
+                $groups[$gkey]['doc_nos'][] = (string)($byId[$sid]['doc_no'] ?? ('#' . $sid));
             }
         }
     } else {
         foreach ($items as $idx => $it) {
             $sid = (int)$it['shipment_id'];
             $groups['L' . $idx] = [
-                'sku' => (string)($it['sku'] ?? ''), 'name' => (string)($it['name'] ?? ''),
+                'sku' => (string)($it['sku'] ?? ''),
+                'supplier_batch' => trim((string)($it['supplier_batch'] ?? '')),
+                'name' => (string)($it['name'] ?? ''),
                 'code' => (string)($it['code'] ?? ''), 'unit' => (string)($it['unit'] ?? 'шт'),
                 'qty' => (float)($it['qty'] ?? 0), 'shipment_ids' => [$sid],
                 'doc_nos' => [(string)($byId[$sid]['doc_no'] ?? ('#' . $sid))],
@@ -1619,7 +1745,8 @@ function wms_issue_pick_tasks(PDO $shipPdo, array $taskPdos, array $shipmentIds,
             if ($nomPdo) {
                 $gs = wms_pick_group_strategy($shipPdo, $byId, $g['shipment_ids']);
                 $strategy = $gs['strategy'];
-                $match = wms_pick_match_stock($nomPdo, $storagePdo, $rcpPdo, (string)$g['sku'], $wh, (float)$g['qty'], $strategy);
+                $match = wms_pick_match_stock($nomPdo, $storagePdo, $rcpPdo, (string)$g['sku'], $wh, (float)$g['qty'], $strategy,
+                    (string)($g['supplier_batch'] ?? '') !== '' ? (string)$g['supplier_batch'] : null);
                 if (!$match['ok']) {
                     // Товар не удалось подобрать — позиция уходит в отчёт not_reserved.
                     $notReserved[] = [
@@ -1634,6 +1761,10 @@ function wms_issue_pick_tasks(PDO $shipPdo, array $taskPdos, array $shipmentIds,
                     ];
                     continue;
                 }
+            }
+            $batchResolved = trim((string)($g['supplier_batch'] ?? ''));
+            if ($batchResolved === '' && $match) {
+                $batchResolved = (string)($match['batch'] ?? '');
             }
             if ($cell === null || $cell === '') {
                 if ($match && (string)$match['cell'] !== '') {
@@ -1705,14 +1836,24 @@ function wms_issue_pick_tasks(PDO $shipPdo, array $taskPdos, array $shipmentIds,
                 $st->execute($params);
                 $tid = (int)$tPdo->lastInsertId();
                 $ti = $tbl['i'];
-                $tPdo->prepare(
-                    "INSERT INTO $ti (task_id,code,sku,name,unit,cell_from,cell_to,pallet,plan_qty,fact_qty,state,executor_fio)
-                     VALUES (:t,:code,:sku,:name,:unit,:cf,NULL,NULL,:pq,0,NULL,NULL)"
-                )->execute([
+                try {
+                    wms_ensure_column($tPdo, $ti, 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
+                } catch (Throwable) {
+                }
+                $hasBatchItem = wms_task_has_col($tPdo, $ti, 'supplier_batch');
+                $insItem = $tPdo->prepare(
+                    "INSERT INTO $ti (task_id,code,sku,name,unit,cell_from,cell_to,pallet" . ($hasBatchItem ? ',supplier_batch' : '') . ",plan_qty,fact_qty,state,executor_fio)
+                     VALUES (:t,:code,:sku,:name,:unit,:cf,NULL,NULL" . ($hasBatchItem ? ',:batch' : '') . ",:pq,0,NULL,NULL)"
+                );
+                $itemParams = [
                     ':t' => $tid, ':code' => $g['code'] ?: null, ':sku' => $g['sku'],
                     ':name' => $g['name'] ?: $g['sku'], ':unit' => $g['unit'] ?: 'шт',
                     ':cf' => $cell, ':pq' => (float)$g['qty'],
-                ]);
+                ];
+                if ($hasBatchItem) {
+                    $itemParams[':batch'] = $batchResolved !== '' ? $batchResolved : null;
+                }
+                $insItem->execute($itemParams);
                 try {
                     $th = $tbl['h'];
                     $tPdo->prepare(
@@ -1724,6 +1865,7 @@ function wms_issue_pick_tasks(PDO $shipPdo, array $taskPdos, array $shipmentIds,
                     $created[] = [
                         'id' => $tid, 'doc_no' => $tryNo, 'sku' => $g['sku'],
                         'name' => (string)($g['name'] ?? ''),
+                        'supplier_batch' => $batchResolved,
                         'qty' => (float)$g['qty'], 'cell' => $cell,
                         'pallet' => $match && $match['pallet'] ? $match['pallet'] : null,
                         'stock_id' => $match ? $match['stock_id'] : null,
@@ -1799,6 +1941,7 @@ function wms_issue_pick_tasks(PDO $shipPdo, array $taskPdos, array $shipmentIds,
                 'doc_no' => (string)($t['doc_no'] ?? ''),
                 'sku' => (string)($t['sku'] ?? ''),
                 'product_name' => (string)($t['name'] ?? ''),
+                'supplier_batch' => (string)($t['supplier_batch'] ?? ''),
                 'qty' => (float)($t['qty'] ?? 0),
                 'cell_from' => (string)($t['cell'] ?? ''),
                 'zone' => 'Отбор',

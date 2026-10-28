@@ -54,11 +54,256 @@ final class ReceiptService
     private function history(int $id, ?int $userId, string $action, ?string $field, ?string $old, ?string $new, ?string $oldSt = null, ?string $newSt = null): void
     {
         try {
+            $fio = null;
+            $position = null;
+            if (function_exists('wms_auth_user')) {
+                $u = wms_auth_user();
+                if ($u) {
+                    $fio = (string)($u['fio'] ?? '');
+                    $position = (string)($u['position'] ?? '');
+                }
+            }
             $st = $this->pdo->prepare(
-                "INSERT INTO receipt_history (receipt_id,user_id,action,field,old_value,new_value,old_status,new_status) VALUES (?,?,?,?,?,?,?,?)"
+                "INSERT INTO receipt_history (receipt_id,user_id,user_fio,position,action,field,old_value,new_value,old_status,new_status) VALUES (?,?,?,?,?,?,?,?,?,?)"
             );
-            $st->execute([$id, $userId, $action, $field, $old, $new, $oldSt, $newSt]);
+            $st->execute([$id, $userId, $fio, $position, $action, $field, $old, $new, $oldSt, $newSt]);
         } catch (Throwable $e) {
+        }
+    }
+
+    private function assertItemsEditable(array $row): void
+    {
+        $status = (string)($row['status'] ?? '');
+        if ((int)($row['is_posted'] ?? 0) === 1
+            || in_array($status, ['closed', 'closed_short', 'cancelled', 'archived'], true)) {
+            throw new RuntimeException('Строки нельзя менять в статусе «' . $status . '»');
+        }
+    }
+
+    private function number(mixed $v): float
+    {
+        return (float)str_replace(',', '.', trim((string)$v));
+    }
+
+    /** Сколько по строке уже принято/обработано. */
+    public function processedQty(int $receiptId, array $item): float
+    {
+        $fact = max(0.0, (float)($item['qty_fact'] ?? 0));
+        $lineNo = (int)($item['line_no'] ?? 0);
+        $sku = (string)($item['sku'] ?? '');
+        $batch = (string)($item['supplier_batch'] ?? '');
+        $ops = 0.0;
+        try {
+            if ($lineNo > 0) {
+                $st = $this->pdo->prepare(
+                    "SELECT COALESCE(SUM(qty),0) FROM receipt_operations
+                      WHERE receipt_id=:r AND line_no=:ln AND accept_status IN ('Принято','Брак')"
+                );
+                $st->execute([':r' => $receiptId, ':ln' => $lineNo]);
+                $ops = (float)$st->fetchColumn();
+            } elseif ($sku !== '') {
+                // Старые операции ТСД без line_no: используем только если строка с таким SKU/партией одна.
+                $cnt = $this->pdo->prepare(
+                    "SELECT COUNT(*) FROM receipt_items
+                      WHERE receipt_id=:r AND sku=:s AND COALESCE(supplier_batch,'')=:b"
+                );
+                $cnt->execute([':r' => $receiptId, ':s' => $sku, ':b' => $batch]);
+                if ((int)$cnt->fetchColumn() === 1) {
+                    $st = $this->pdo->prepare(
+                        "SELECT COALESCE(SUM(qty),0) FROM receipt_operations
+                          WHERE receipt_id=:r AND sku=:s AND COALESCE(supplier_batch,'')=:b
+                            AND COALESCE(line_no,0)=0 AND accept_status IN ('Принято','Брак')"
+                    );
+                    $st->execute([':r' => $receiptId, ':s' => $sku, ':b' => $batch]);
+                    $ops = (float)$st->fetchColumn();
+                }
+            }
+        } catch (Throwable) {
+        }
+        return round(max($fact, $ops), 3);
+    }
+
+    /** Изменить количество строки (не ниже уже обработанного). */
+    public function updateItem(int $receiptId, int $itemId, array $data, ?int $userId): array
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $st = $this->pdo->prepare("SELECT * FROM receipts WHERE id=:id");
+            $st->execute([':id' => $receiptId]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                throw new RuntimeException('Документ не найден');
+            }
+            $this->assertItemsEditable($row);
+            $it = $this->pdo->prepare("SELECT * FROM receipt_items WHERE id=:id AND receipt_id=:rid");
+            $it->execute([':id' => $itemId, ':rid' => $receiptId]);
+            $item = $it->fetch(PDO::FETCH_ASSOC);
+            if (!$item) {
+                throw new RuntimeException('Строка не найдена');
+            }
+            $processed = $this->processedQty($receiptId, $item);
+            $oldQty = (float)($item['qty'] ?? 0);
+            $qty = $this->number($data['qty'] ?? $oldQty);
+            if ($qty <= 0) {
+                throw new RuntimeException('Количество должно быть больше нуля');
+            }
+            if ($qty + 0.0001 < $processed) {
+                throw new RuntimeException('Нельзя указать меньше обработанного: ' . $processed);
+            }
+            $price = (float)($item['price'] ?? 0);
+            $vat = (int)($item['vat_rate'] ?? 20);
+            $vatUnit = round($price * $vat / 100, 2);
+            $priceWvat = round($price + $vatUnit, 2);
+            $sumNoVat = round($qty * $price, 2);
+            $sumVat = round($qty * $vatUnit, 2);
+            $sumVatAll = round($qty * $priceWvat, 2);
+            $boxes = array_key_exists('boxes', $data) ? max(0, (int)$data['boxes']) : (int)($item['boxes'] ?? 0);
+            $this->pdo->prepare(
+                "UPDATE receipt_items SET qty=:qty, boxes=:boxes, vat_sum_unit=:vu, price_wvat=:pw,
+                  sum_novat=:sn, vat_sum=:vs, sum_vat=:sv WHERE id=:id AND receipt_id=:rid"
+            )->execute([
+                ':qty' => $qty, ':boxes' => $boxes, ':vu' => $vatUnit, ':pw' => $priceWvat,
+                ':sn' => $sumNoVat, ':vs' => $sumVat, ':sv' => $sumVatAll,
+                ':id' => $itemId, ':rid' => $receiptId,
+            ]);
+            if (abs($qty - $oldQty) > 0.0001) {
+                $this->history($receiptId, $userId, 'update', 'Количество', (string)$oldQty, (string)$qty);
+            }
+            $this->recalc($receiptId);
+            $this->pdo->commit();
+            $item['qty'] = $qty;
+            $item['boxes'] = $boxes;
+            $item['processed_qty'] = $processed;
+            return $item;
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /** Добавить строку в приходный документ. */
+    public function addItem(int $receiptId, array $data, ?int $userId): array
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $st = $this->pdo->prepare("SELECT * FROM receipts WHERE id=:id");
+            $st->execute([':id' => $receiptId]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                throw new RuntimeException('Документ не найден');
+            }
+            $this->assertItemsEditable($row);
+
+            $sku = trim((string)($data['sku'] ?? ''));
+            $wmsCode = trim((string)($data['wms_code'] ?? $data['code'] ?? '')) ?: null;
+            $barcode = trim((string)($data['barcode'] ?? '')) ?: null;
+            $scanSerial = !empty($data['scan_serial']) ? 1 : 0;
+            $scanChz = !empty($data['scan_chz']) ? 1 : 0;
+            $ownerId = (int)($data['owner_contractor_id'] ?? 0) ?: null;
+            $ownerName = trim((string)($data['owner_name'] ?? '')) ?: null;
+            $name = trim((string)($data['name'] ?? ''));
+            $unit = trim((string)($data['unit'] ?? '')) ?: 'шт';
+            $qty = $this->number($data['qty'] ?? 0);
+            $price = $this->number($data['price'] ?? 0);
+            $vat = (int)($data['vat_rate'] ?? 20);
+            $boxes = max(0, (int)($data['boxes'] ?? 0));
+            if ($sku === '') {
+                throw new RuntimeException('Укажите артикул');
+            }
+            if ($name === '') {
+                throw new RuntimeException('Укажите наименование');
+            }
+            if ($qty <= 0) {
+                throw new RuntimeException('Количество должно быть больше нуля');
+            }
+            if ($price < 0) {
+                throw new RuntimeException('Цена не может быть отрицательной');
+            }
+            if ($vat < 0 || $vat > 100) {
+                $vat = 20;
+            }
+            $vatUnit = round($price * $vat / 100, 2);
+            $priceWvat = round($price + $vatUnit, 2);
+            $sumNoVat = round($qty * $price, 2);
+            $sumVat = round($qty * $vatUnit, 2);
+            $sumVatAll = round($qty * $priceWvat, 2);
+
+            $ln = $this->pdo->prepare("SELECT COALESCE(MAX(line_no),0)+1 FROM receipt_items WHERE receipt_id=:id");
+            $ln->execute([':id' => $receiptId]);
+            $lineNo = (int)$ln->fetchColumn();
+            $prodDate = trim((string)($data['prod_date'] ?? ''));
+            $prodDate = $prodDate !== '' ? $prodDate : null;
+
+            $this->pdo->prepare(
+                "INSERT INTO receipt_items
+                  (receipt_id,line_no,code,barcode,scan_serial,scan_chz,owner_contractor_id,owner_name,sku,name,unit,qty,boxes,price,vat_rate,vat_sum_unit,price_wvat,sum_novat,vat_sum,sum_vat,supplier_batch,prod_date)
+                 VALUES
+                  (:rid,:ln,:code,:barcode,:scan_serial,:scan_chz,:owner_id,:owner_name,:sku,:name,:unit,:qty,:boxes,:price,:vat,:vu,:pw,:sn,:vs,:sv,:batch,:prod)"
+            )->execute([
+                ':rid' => $receiptId, ':ln' => $lineNo,
+                ':code' => $wmsCode, ':barcode' => $barcode, ':scan_serial' => $scanSerial, ':scan_chz' => $scanChz,
+                ':owner_id' => $ownerId, ':owner_name' => $ownerName,
+                ':sku' => $sku, ':name' => $name, ':unit' => $unit,
+                ':qty' => $qty, ':boxes' => $boxes, ':price' => $price, ':vat' => $vat,
+                ':vu' => $vatUnit, ':pw' => $priceWvat, ':sn' => $sumNoVat,
+                ':vs' => $sumVat, ':sv' => $sumVatAll,
+                ':batch' => trim((string)($data['supplier_batch'] ?? '')) ?: null,
+                ':prod' => $prodDate,
+            ]);
+            $itemId = (int)$this->pdo->lastInsertId();
+            $this->recalc($receiptId);
+            $this->history($receiptId, $userId, 'update', 'Товары', null, $sku . ' × ' . $qty);
+            $this->pdo->commit();
+            return [
+                'id' => $itemId, 'line_no' => $lineNo, 'wms_code' => $wmsCode, 'barcode' => $barcode,
+                'scan_serial' => $scanSerial, 'scan_chz' => $scanChz,
+                'owner_contractor_id' => $ownerId, 'owner_name' => $ownerName,
+                'sku' => $sku, 'name' => $name,
+                'unit' => $unit, 'qty' => $qty, 'price' => $price, 'vat_rate' => $vat,
+                'supplier_batch' => $data['supplier_batch'] ?? null,
+            ];
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /** Удалить строку приходного документа. */
+    public function deleteItem(int $receiptId, int $itemId, ?int $userId): void
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $st = $this->pdo->prepare("SELECT * FROM receipts WHERE id=:id");
+            $st->execute([':id' => $receiptId]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                throw new RuntimeException('Документ не найден');
+            }
+            $this->assertItemsEditable($row);
+            $it = $this->pdo->prepare("SELECT * FROM receipt_items WHERE id=:id AND receipt_id=:rid");
+            $it->execute([':id' => $itemId, ':rid' => $receiptId]);
+            $item = $it->fetch(PDO::FETCH_ASSOC);
+            if (!$item) {
+                throw new RuntimeException('Строка не найдена');
+            }
+            $processed = $this->processedQty($receiptId, $item);
+            if ($processed > 0) {
+                throw new RuntimeException('Нельзя удалить строку: уже обработано ' . $processed);
+            }
+            $this->pdo->prepare("DELETE FROM receipt_items WHERE id=:id AND receipt_id=:rid")
+                ->execute([':id' => $itemId, ':rid' => $receiptId]);
+            $this->recalc($receiptId);
+            $this->history($receiptId, $userId, 'update', 'Товары', (string)$item['sku'] . ' × ' . (string)$item['qty'], null);
+            $this->pdo->commit();
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
         }
     }
 
@@ -392,7 +637,7 @@ final class ReceiptService
             $rows = $this->pdo->prepare(
                 "SELECT a.sku, a.type, a.qty_diff, a.created_at,
                         COALESCE(a.supplier_batch,'') AS supplier_batch,
-                        (SELECT i.code FROM receipt_items i WHERE i.receipt_id = a.receipt_id AND i.sku = a.sku LIMIT 1) AS barcode,
+                        (SELECT COALESCE(NULLIF(i.barcode,''), i.code) FROM receipt_items i WHERE i.receipt_id = a.receipt_id AND i.sku = a.sku LIMIT 1) AS barcode,
                         (SELECT i.name FROM receipt_items i WHERE i.receipt_id = a.receipt_id AND i.sku = a.sku LIMIT 1) AS name
                  FROM tsd_act_rasx a WHERE a.receipt_id = :id$where ORDER BY a.id"
             );
@@ -403,7 +648,7 @@ final class ReceiptService
             try {
                 $rows = $this->pdo->prepare(
                     "SELECT a.sku, a.type, a.qty_diff, a.created_at, '' AS supplier_batch,
-                            (SELECT i.code FROM receipt_items i WHERE i.receipt_id = a.receipt_id AND i.sku = a.sku LIMIT 1) AS barcode,
+                            (SELECT COALESCE(NULLIF(i.barcode,''), i.code) FROM receipt_items i WHERE i.receipt_id = a.receipt_id AND i.sku = a.sku LIMIT 1) AS barcode,
                             (SELECT i.name FROM receipt_items i WHERE i.receipt_id = a.receipt_id AND i.sku = a.sku LIMIT 1) AS name
                      FROM tsd_act_rasx a WHERE a.receipt_id = :id$where ORDER BY a.id"
                 );
@@ -439,7 +684,7 @@ final class ReceiptService
             // строках (разные партии) обе строки показывали общий факт,
             // и сумма в «Документе приемщика» была завышена в N раз.
             $rows = $this->pdo->prepare(
-                "SELECT i.line_no, i.code AS barcode, i.sku, i.name, i.qty AS plan_qty, i.supplier_batch,
+                "SELECT i.line_no, COALESCE(NULLIF(i.barcode,''), i.code) AS barcode, i.sku, i.name, i.qty AS plan_qty, i.supplier_batch,
                         COALESCE((SELECT SUM(o.qty) FROM receipt_operations o
                                   WHERE o.receipt_id = i.receipt_id AND o.sku = i.sku
                                     AND o.accept_status = 'Принято'
@@ -449,7 +694,7 @@ final class ReceiptService
         } catch (Throwable) {
             // Старая схема без supplier_batch — считаем по SKU.
             $rows = $this->pdo->prepare(
-                "SELECT i.line_no, i.code AS barcode, i.sku, i.name, i.qty AS plan_qty,
+                "SELECT i.line_no, COALESCE(NULLIF(i.barcode,''), i.code) AS barcode, i.sku, i.name, i.qty AS plan_qty,
                         COALESCE((SELECT SUM(o.qty) FROM receipt_operations o
                                   WHERE o.receipt_id = i.receipt_id AND o.sku = i.sku
                                     AND o.accept_status = 'Принято'), 0) AS fact_qty

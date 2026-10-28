@@ -227,6 +227,7 @@ final class ReceiptRepository
         try {
             $st = $this->pdo->prepare(
                 "SELECT o.pallet, o.sku, o.qty, o.accept_status, o.accept_date AS changed_at,
+                        o.supplier_batch,
                         (SELECT i.name FROM receipt_items i
                           WHERE i.receipt_id = o.receipt_id AND i.sku = o.sku LIMIT 1) AS name,
                         (SELECT p.status FROM tsd_pallets p
@@ -258,6 +259,7 @@ final class ReceiptRepository
                 'changed_at' => (string)($r['changed_at'] ?? ''),
                 'pallet' => ($r['pallet'] ?? '') !== '' ? $r['pallet'] : null,
                 'sku' => (string)($r['sku'] ?? ''),
+                'supplier_batch' => (string)($r['supplier_batch'] ?? ''),
                 'name' => (string)($r['name'] ?? ''),
                 'qty' => $accepted ? abs($qty) : -abs($qty),
                 'accept_status' => (string)($r['accept_status'] ?? ''),

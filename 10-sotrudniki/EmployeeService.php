@@ -6,6 +6,7 @@ require_once __DIR__ . '/EmployeeAccess.php';
 require_once __DIR__ . '/EmployeeFilter.php';
 require_once __DIR__ . '/EmployeeRepository.php';
 require_once __DIR__ . '/../shared/pg.php';
+require_once __DIR__ . '/../shared/Roles.php';
 
 // Сервис карточки сотрудника: создание/правка, блокировка, права и роли,
 // графики, история изменений, выгрузка и печать личного ШК.
@@ -24,6 +25,7 @@ final class EmployeeService
         'department' => 'Отдел',
         'personnel_no' => 'Табельный номер',
         'pin' => 'PIN',
+        'login' => 'Логин',
         'photo_path' => 'Фото',
         'phone_internal' => 'Телефон (внутренний)',
         'phone_mobile' => 'Мобильный телефон',
@@ -44,7 +46,7 @@ final class EmployeeService
     private const EDITABLE = [
         'last_name', 'first_name', 'middle_name', 'position', 'code', 'department',
         'personnel_no', 'photo_path', 'phone_internal', 'phone_mobile', 'email',
-        'birth_date', 'hired_at', 'status', 'role', 'zone', 'warehouse_id',
+        'birth_date', 'hired_at', 'status', 'role', 'zone', 'warehouse_id', 'login',
     ];
 
     /** Обязательные поля формы создания (в макете помечены «*»). */
@@ -67,17 +69,19 @@ final class EmployeeService
     public function create(array $data, int $userId): int
     {
         $d = $this->normalize($data);
+        $password = trim((string)($data['password'] ?? ''));
         $this->validate($d);
+        $this->validateCredentials($d['login'], $password, true, 0);
 
         $now = wms_now_sql($this->pdo);
         $sql = "INSERT INTO employees
                 (fio, last_name, first_name, middle_name, position, code, department,
-                 personnel_no, photo_path, phone_internal, phone_mobile, email,
+                 personnel_no, login, password_hash, photo_path, phone_internal, phone_mobile, email,
                  birth_date, hired_at, status, role, zone, warehouse_id, tsd_access,
                  is_active, is_blocked, allow_unplanned_exit, created_at, updated_at)
                 VALUES
                 (:fio, :last_name, :first_name, :middle_name, :position, :code, :department,
-                 :personnel_no, :photo_path, :phone_internal, :phone_mobile, :email,
+                 :personnel_no, :login, :password_hash, :photo_path, :phone_internal, :phone_mobile, :email,
                  :birth_date, :hired_at, :status, :role, :zone, :warehouse_id, :tsd_access,
                  :is_active, :is_blocked, :allow_unplanned_exit, $now, $now)";
         $st = $this->pdo->prepare($sql);
@@ -90,6 +94,8 @@ final class EmployeeService
             ':code' => $d['code'],
             ':department' => $d['department'],
             ':personnel_no' => $d['personnel_no'],
+            ':login' => $d['login'],
+            ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
             ':photo_path' => $d['photo_path'],
             ':phone_internal' => $d['phone_internal'],
             ':phone_mobile' => $d['phone_mobile'],
@@ -136,6 +142,10 @@ final class EmployeeService
         }
         $d = array_merge($d, $merged);
         $this->validate($d);
+        $password = trim((string)($data['password'] ?? ''));
+        if ($d['login'] !== '' || $password !== '') {
+            $this->validateCredentials($d['login'], $password, false, $id);
+        }
 
         $sets = [];
         $p = [':id' => $id];
@@ -156,6 +166,11 @@ final class EmployeeService
             $sets[] = "$f = :$f";
             $p[':' . $f] = $new;
             $this->log($id, $f, self::FIELD_LABELS[$f] ?? $f, $old, $new, $userId);
+        }
+        if ($password !== '') {
+            $sets[] = 'password_hash = :password_hash';
+            $p[':password_hash'] = password_hash($password, PASSWORD_DEFAULT);
+            $this->log($id, 'password_hash', 'Пароль', '—', 'изменён', $userId);
         }
         if ($sets) {
             $now = wms_now_sql($this->pdo);
@@ -293,6 +308,12 @@ final class EmployeeService
     }
 
     /** Копирование прав пользователя WMS сотруднику («по аналогии с пользователем»). */
+    /** Справочник ролей. */
+    public function roles(): array
+    {
+        return array_map(static fn(array $r): string => (string)$r['name'], wms_roles_list($this->pdo, true));
+    }
+
     /** Права роли сотрудника (единые для всех сотрудников этой роли). */
     public function roleAccessForEmployee(int $employeeId): array
     {
@@ -502,7 +523,10 @@ final class EmployeeService
                 EmployeeStatus::values()
             ),
             'zones' => ['Все зоны'],
-            'roles' => ['Администратор', 'Кладовщик', 'Менеджер', 'Водитель', 'Приемщик'],
+            'roles' => array_map(
+                static fn(array $r): string => (string)$r['name'],
+                wms_roles_list($this->pdo, true)
+            ),
         ];
     }
 
@@ -540,6 +564,7 @@ final class EmployeeService
             'code' => $s('code'),
             'department' => $s('department'),
             'personnel_no' => $s('personnel_no'),
+            'login' => $s('login'),
             'photo_path' => $s('photo_path'),
             'phone_internal' => $s('phone_internal'),
             'phone_mobile' => $s('phone_mobile'),
@@ -562,6 +587,37 @@ final class EmployeeService
             if ($v === null || $v === '' || $v === 0) {
                 throw new RuntimeException('Заполните поле «' . $label . '»');
             }
+        }
+    }
+
+    /** Проверка логина/пароля учётной записи. */
+    private function validateCredentials(string $login, string $password, bool $isCreate, int $id): void
+    {
+        $login = trim($login);
+        if ($login === '') {
+            throw new RuntimeException('Укажите логин для входа');
+        }
+        if (function_exists('mb_strlen') ? mb_strlen($login, 'UTF-8') > 100 : strlen($login) > 100) {
+            throw new RuntimeException('Логин — до 100 символов');
+        }
+        if ($isCreate && $password === '') {
+            throw new RuntimeException('Укажите пароль для входа');
+        }
+        if ($password !== '') {
+            if (function_exists('mb_strlen') ? mb_strlen($password, 'UTF-8') < 4 : strlen($password) < 4) {
+                throw new RuntimeException('Пароль — не менее 4 символов');
+            }
+        }
+        try {
+            $st = $this->pdo->prepare('SELECT id FROM employees WHERE LOWER(login) = LOWER(:l) AND id <> :id LIMIT 1');
+            $st->execute([':l' => $login, ':id' => $id]);
+            if ($st->fetchColumn()) {
+                throw new RuntimeException('Логин уже занят');
+            }
+        } catch (RuntimeException $e) {
+            throw $e;
+        } catch (Throwable) {
+            // если колонка ещё не дотянулась — ошибку уникальности поймает БД
         }
     }
 

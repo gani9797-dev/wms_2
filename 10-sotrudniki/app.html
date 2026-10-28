@@ -200,6 +200,8 @@ body.navhide main{max-width:none}
 <div class="hint" style="margin-top:8px">ПКМ по строке — удалить график.</div>
 </div>
 <div id="tabaccess" style="display:none">
+<div class="sec">Роль сотрудника и права роли</div>
+<select id="accroleSel" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px"></select>
 <div class="hint" id="accrole" style="margin-bottom:10px"></div>
 <div class="sec">Доступ в WMS — права роли</div>
 <div id="accwms"></div>
@@ -253,6 +255,12 @@ body.navhide main{max-width:none}
 <div><label>Статус</label><select id="i_status"></select></div>
 <div><label>Склад <span class="req">*</span></label><select id="i_wh"></select></div>
 </div>
+<div class="grid3">
+<div><label>Логин для входа <span class="req">*</span></label><input id="i_login" autocomplete="username"></div>
+<div><label>Пароль <span class="req">*</span></label><input id="i_password" type="password" autocomplete="new-password" placeholder="На создание — обязателен"></div>
+<div><label>Повтор пароля</label><input id="i_password2" type="password" autocomplete="new-password"></div>
+</div>
+<div class="hint" style="margin-top:-2px">Логин и пароль используются для входа в правом верхнем углу. При редактировании пустой пароль оставляет текущий.</div>
 <div class="mfoot">
 <button class="btn sm" id="frmcancel">Закрыть</button>
 <button class="btn sm" id="frmreset">Сбросить</button>
@@ -448,7 +456,7 @@ const r=await (await fetch(`${API}?action=show&id=${id}`)).json();
 if(!r||r.error){toast('Не удалось загрузить карточку');return}
 cardData=r;
 $('ctitle').textContent=`${r.id} ${r.code||''} ${r.fio||''}`.trim();
-$('csub').textContent=`${r.position||''} · ${r.department||''} · ${r.personnel_no||''}`;
+$('csub').textContent=`${r.position||''} · ${r.department||''} · ${r.personnel_no||''} · логин: ${r.login||'не задан'}`;
 $('c_role').value=r.role||'';opts('c_role',def.roles||[],r.role);
 $('c_zone').value=r.zone||'';opts('c_zone',def.zones||[],r.zone);
 $('c_exp').textContent=r.experience||'—';
@@ -477,6 +485,16 @@ const j=await r.json();toast(r.ok?'График удалён':'Ошибка: '+(
 let accessRole='';
 async function loadAccess(){const r=await (await fetch(`${API}?action=access&id=${curId}`)).json();
 accessItems=r.items||[];accessModules=r.modules||{};accessLevels=r.levels||{};accessUsers=r.users||[];accessRole=r.role||'';
+const roleNames=r.roles||[];
+opts('accroleSel',roleNames.map(x=>({value:x,label:x})),accessRole);
+$('accroleSel').onchange=async()=>{
+ const newRole=$('accroleSel').value;
+ if(!newRole||newRole===accessRole)return;
+ const rr=await fetch(`${API}?action=update&id=${curId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role:newRole})});
+ const jj=await rr.json();
+ if(!rr.ok){toast('Ошибка: '+(jj.error||''));$('accroleSel').value=accessRole;return}
+ accessRole=newRole;toast('Роль изменена: '+newRole);load();loadAccess();
+};
 if($('accrole'))$('accrole').innerHTML='Права задаются <b>для роли</b> «'+esc(accessRole||'—')+'» и действуют на всех сотрудников с этой ролью. Уровни: полный доступ / только просмотр / нет доступа.';
 opts('accuser',accessUsers.map(u=>({value:u.id,label:u.fio+(u.position?' ('+u.position+')':'')})),'','— выберите пользователя —');
 renderAccess();}
@@ -520,7 +538,7 @@ $('histrows').innerHTML=(r||[]).map(x=>`<tr><td>${dFmt(x.created_at)}</td><td>${
 
 /* ---------------- Форма ---------------- */
 let formMode='create',formRole='',formZone='';
-function frmReset(){formRole='';formZone='';['i_first','i_last','i_mid','i_pers','i_birth','i_hired','i_code','i_phone_i','i_phone_m','i_email','i_photo'].forEach(i=>{if($(i))$(i).value=''});
+function frmReset(){formRole='';formZone='';['i_first','i_last','i_mid','i_pers','i_birth','i_hired','i_code','i_phone_i','i_phone_m','i_email','i_photo','i_login','i_password','i_password2'].forEach(i=>{if($(i))$(i).value=''});
 opts('i_dep',def.departments||[],'','— выберите —');
 opts('i_pos',def.positions||[],'','— выберите —');
 opts('i_wh',(def.warehouses||[]).map(w=>({value:w.id,label:w.name})),'','— выберите —');
@@ -536,6 +554,7 @@ opts('i_dep',def.departments||[],r.department,'— выберите —');
 opts('i_pos',def.positions||[],r.position,'— выберите —');
 $('i_code').value=r.code||'';$('i_phone_i').value=r.phone_internal||'';$('i_phone_m').value=r.phone_mobile||'';
 $('i_email').value=r.email||'';opts('i_status',def.statuses||[],r.db_status||r.status);
+$('i_login').value=r.login||'';$('i_password').value='';$('i_password2').value='';
 opts('i_wh',(def.warehouses||[]).map(w=>({value:w.id,label:w.name})),r.warehouse_id,'— выберите —');
 formRole=r.role||'';formZone=r.zone||'';
 $('frm').classList.add('open');document.body.style.overflow='hidden';}
@@ -544,10 +563,14 @@ $('frmcancel').onclick=()=>{$('frm').classList.remove('open');document.body.styl
 $('frmreset').onclick=()=>{frmReset();toast('Форма очищена')};
 $('i_photo').onchange=()=>{const f=$('i_photo').files[0];$('i_photo_prev').textContent=f?f.name:'Файл не выбран'};
 $('frmsave').onclick=async()=>{
+const pass=$('i_password').value,pass2=$('i_password2').value;
+if(formMode==='create'&&!pass){toast('Укажите пароль для входа');return}
+if(pass!==pass2){toast('Пароли не совпадают');return}
 const body={last_name:$('i_last').value,first_name:$('i_first').value,middle_name:$('i_mid').value,
 personnel_no:$('i_pers').value,birth_date:$('i_birth').value,hired_at:$('i_hired').value,
 department:$('i_dep').value,position:$('i_pos').value,code:$('i_code').value,
 phone_internal:$('i_phone_i').value,phone_mobile:$('i_phone_m').value,email:$('i_email').value,
+login:$('i_login').value,password:pass,
 status:$('i_status').value,warehouse_id:+$('i_wh').value,
 role:formRole||'Кладовщик',zone:formZone||'Все зоны'};
 const r=await fetch(`${API}?action=${formMode==='edit'?'update':'store'}${formMode==='edit'?'?id='+curId:''}`,

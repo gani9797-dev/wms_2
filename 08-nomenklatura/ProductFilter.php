@@ -101,7 +101,7 @@ final class ProductFilter
         $f->flagProdDate = $getFlag('control_prod_date');
         $f->hasImage = $getFlag('has_image');
         $f->page = max(1, (int)($q['page'] ?? 1));
-        $f->perPage = min(200, max(5, (int)($q['per_page'] ?? 24)));
+        $f->perPage = wms_per_page($q['per_page'] ?? 24, 24, 200, 5);
         $allowed = ['sku', 'code', 'name', 'qty', 'created_at', 'updated_at', 'id',
             'unit', 'category', 'reserved', 'status', 'barcode'];
         if (isset($q['sort']) && in_array($q['sort'], $allowed, true)) $f->sort = $q['sort'];
