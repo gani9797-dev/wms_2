@@ -219,6 +219,108 @@ function labels_actor(): array
     ];
 }
 
+function labels_run_process(array $cmd, int $timeout = 20): array
+{
+    $descriptors = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+    $process = proc_open($cmd, $descriptors, $pipes);
+    if (!is_resource($process)) {
+        throw new RuntimeException('Не удалось запустить системную команду');
+    }
+    stream_set_blocking($pipes[1], false);
+    stream_set_blocking($pipes[2], false);
+    $out = '';
+    $err = '';
+    $started = microtime(true);
+    while (true) {
+        $out .= stream_get_contents($pipes[1]);
+        $err .= stream_get_contents($pipes[2]);
+        $status = proc_get_status($process);
+        if (!$status['running']) {
+            break;
+        }
+        if (microtime(true) - $started > $timeout) {
+            proc_terminate($process);
+            foreach ($pipes as $pipe) {
+                fclose($pipe);
+            }
+            proc_close($process);
+            throw new RuntimeException('Превышено время ожидания системной команды');
+        }
+        usleep(50000);
+    }
+    $out .= stream_get_contents($pipes[1]);
+    $err .= stream_get_contents($pipes[2]);
+    foreach ($pipes as $pipe) {
+        fclose($pipe);
+    }
+    $code = proc_close($process);
+    return [$code, $out, $err];
+}
+
+function labels_printers(): array
+{
+    if (PHP_OS_FAMILY !== 'Windows') {
+        return [];
+    }
+    $script = '$ErrorActionPreference="Stop"; [Console]::OutputEncoding=[Text.Encoding]::UTF8; '
+        . '@(Get-Printer | Select-Object Name,Default) | ConvertTo-Json -Compress';
+    [$code, $out, $err] = labels_run_process([
+        'powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', $script,
+    ], 15);
+    if ($code !== 0) {
+        throw new RuntimeException('Не удалось получить список принтеров: ' . trim($err ?: $out));
+    }
+    $out = trim($out);
+    if ($out === '' || $out === 'null' || $out === '[]') {
+        return [];
+    }
+    $data = json_decode($out, true);
+    if (!is_array($data)) {
+        throw new RuntimeException('Не удалось разобрать список принтеров');
+    }
+    if (isset($data['Name'])) {
+        $data = [$data];
+    }
+    $rows = [];
+    foreach ($data as $printer) {
+        if (!is_array($printer) || trim((string)($printer['Name'] ?? '')) === '') {
+            continue;
+        }
+        $rows[] = ['name' => (string)$printer['Name'], 'default' => !empty($printer['Default'])];
+    }
+    return $rows;
+}
+
+function labels_print_raw(string $printer, string $zpl): void
+{
+    if (PHP_OS_FAMILY !== 'Windows') {
+        throw new RuntimeException('Прямая печать доступна только на Windows-сервере');
+    }
+    $names = array_column(labels_printers(), 'name');
+    if (!in_array($printer, $names, true)) {
+        throw new RuntimeException('Принтер не найден');
+    }
+    $tmp = tempnam(sys_get_temp_dir(), 'wms_zpl_');
+    if ($tmp === false) {
+        throw new RuntimeException('Не удалось создать временный файл');
+    }
+    try {
+        if (file_put_contents($tmp, $zpl, LOCK_EX) === false) {
+            throw new RuntimeException('Не удалось записать ZPL во временный файл');
+        }
+        $script = __DIR__ . '/print-zpl.ps1';
+        [$code, $out, $err] = labels_run_process([
+            'powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+            '-File', $script, '-Printer', $printer, '-Path', $tmp,
+        ], 30);
+        if ($code !== 0) {
+            throw new RuntimeException('Ошибка печати: ' . trim($err ?: $out));
+        }
+    } finally {
+        @unlink($tmp);
+    }
+}
+
 function labels_log_batch(PDO $pdo, array $tpl, array $codes, array $actor, string $type, int $qty): int
 {
     $now = labels_now_sql($pdo);
@@ -262,6 +364,58 @@ try {
         exit;
     }
 
+    if ($action === 'printers' && $method === 'GET') {
+        try {
+            echo json_encode(['rows' => labels_printers(), 'supported' => PHP_OS_FAMILY === 'Windows'], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['rows' => [], 'supported' => PHP_OS_FAMILY === 'Windows', 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
+    if ($action === 'template_create' && $method === 'POST') {
+        $b = json_decode(file_get_contents('php://input'), true) ?? [];
+        $type = strtolower(trim((string)($b['type'] ?? '')));
+        $name = trim((string)($b['name'] ?? ''));
+        $title = trim((string)($b['title'] ?? ''));
+        $prefix = trim((string)($b['prefix'] ?? ''));
+        $zpl = (string)($b['zpl'] ?? '');
+        $sql = (string)($b['sql'] ?? '');
+        $width = (int)($b['width_mm'] ?? 58);
+        $height = (int)($b['height_mm'] ?? 40);
+        if (!preg_match('/^[a-z][a-z0-9_]{1,29}$/', $type)) {
+            throw new RuntimeException('Код типа: латиница, цифры и _, от 2 до 30 символов');
+        }
+        if ($type === 'stock_sscc') {
+            throw new RuntimeException('Этот тип зарезервирован для SSCC товарного запаса');
+        }
+        if ($name === '' || $title === '') {
+            throw new RuntimeException('Укажите название и заголовок этикетки');
+        }
+        if (trim($zpl) === '') {
+            throw new RuntimeException('Укажите ZPL-код');
+        }
+        $prefixLen = function_exists('mb_strlen') ? mb_strlen($prefix) : strlen($prefix);
+        if ($prefixLen > 10) {
+            throw new RuntimeException('Префикс не длиннее 10 символов');
+        }
+        if ($width < 10 || $width > 200 || $height < 10 || $height > 200) {
+            throw new RuntimeException('Размер этикетки должен быть от 10 до 200 мм');
+        }
+        $exists = $pdo->prepare("SELECT COUNT(*) FROM label_templates WHERE label_type=:t");
+        $exists->execute([':t' => $type]);
+        if ((int)$exists->fetchColumn() > 0) {
+            throw new RuntimeException('Этикетка с таким кодом уже существует');
+        }
+        $pdo->prepare("INSERT INTO label_templates (label_type,label_name,title,prefix,zpl_template,sql_query,width_mm,height_mm) VALUES (:t,:n,:title,:p,:zpl,:sql,:w,:h)")
+            ->execute([
+                ':t' => $type, ':n' => $name, ':title' => $title, ':p' => $prefix,
+                ':zpl' => $zpl, ':sql' => $sql, ':w' => $width, ':h' => $height,
+            ]);
+        echo json_encode(['ok' => true, 'type' => $type], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($action === 'template' && $method === 'GET') {
         $type = trim((string)($_GET['type'] ?? ''));
         $row = labels_template($pdo, $type);
@@ -285,9 +439,9 @@ try {
 
     if ($action === 'print' && $method === 'POST') {
         $b = json_decode(file_get_contents('php://input'), true) ?? [];
-        $type = (string)($b['type'] ?? '');
+        $type = trim((string)($b['type'] ?? ''));
         $qty = (int)($b['qty'] ?? 1);
-        if (!in_array($type, ['shipment', 'receipt', 'picking'], true)) throw new RuntimeException('Неверный тип этикетки');
+        if ($type === '' || $type === 'stock_sscc') throw new RuntimeException('Неверный тип этикетки');
         if ($qty < 1 || $qty > 500) throw new RuntimeException('Количество должно быть от 1 до 500');
         $tpl = labels_template($pdo, $type);
         if (!$tpl) throw new RuntimeException('Шаблон не найден');
@@ -327,9 +481,25 @@ try {
         }
         echo json_encode([
             'ok' => true, 'batch_id' => $batchId, 'type' => $type, 'label_name' => $tpl['label_name'],
-            'qty' => $qty, 'codes' => $codes, 'zpl' => $zpl,
+            'title' => (string)($tpl['title'] ?? ''), 'width_mm' => (int)($tpl['width_mm'] ?? 58),
+            'height_mm' => (int)($tpl['height_mm'] ?? 40), 'qty' => $qty, 'codes' => $codes, 'zpl' => $zpl,
             'sql' => (string)($tpl['sql_query'] ?? ''),
         ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'print_raw' && $method === 'POST') {
+        $b = json_decode(file_get_contents('php://input'), true) ?? [];
+        $printer = trim((string)($b['printer'] ?? ''));
+        $zpl = (string)($b['zpl'] ?? '');
+        if ($printer === '' || trim($zpl) === '') {
+            throw new RuntimeException('Не выбран принтер или нет ZPL');
+        }
+        if (strlen($zpl) > 2000000) {
+            throw new RuntimeException('Слишком большой объём ZPL');
+        }
+        labels_print_raw($printer, $zpl);
+        echo json_encode(['ok' => true, 'printer' => $printer], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -357,7 +527,9 @@ try {
         }
         echo json_encode([
             'ok' => true, 'batch_id' => $batchId, 'type' => 'stock_sscc',
-            'label_name' => $tpl['label_name'], 'qty' => 1, 'codes' => [$code],
+            'label_name' => $tpl['label_name'], 'title' => (string)($tpl['title'] ?? ''),
+            'width_mm' => (int)($tpl['width_mm'] ?? 58), 'height_mm' => (int)($tpl['height_mm'] ?? 40),
+            'qty' => 1, 'codes' => [$code],
             'zpl' => labels_zpl($tpl, $code), 'sql' => (string)($tpl['sql_query'] ?? ''),
         ], JSON_UNESCAPED_UNICODE);
         exit;

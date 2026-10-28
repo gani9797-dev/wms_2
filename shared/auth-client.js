@@ -97,14 +97,24 @@
   function ensureNav() {
     var nav = document.querySelector('aside nav.nav');
     if (!nav) return;
-    if (nav.querySelector('a[href$="15-etiketki/app.html"]')) return;
     var levels = window.WMS_MODULE_LEVELS || {};
-    if (levels && levels.labels === 'none') return;
-    var a = document.createElement('a');
-    a.className = 'mi';
-    a.href = '../15-etiketki/app.html';
-    a.textContent = '🏷️ 15 Этикетки';
-    nav.appendChild(a);
+    var a = nav.querySelector('a[href$="15-etiketki/app.html"]');
+    if (!a && levels.labels !== 'none') {
+      a = document.createElement('a');
+      a.className = 'mi';
+      a.href = '../15-etiketki/app.html';
+      a.textContent = '🏷️ 15 Этикетки';
+    }
+    var tsd = nav.querySelector('a[href$="tsd/app.html"]');
+    if (!tsd && levels.tsd !== 'none') {
+      tsd = document.createElement('a');
+      tsd.className = 'mi';
+      tsd.href = '../tsd/app.html';
+      tsd.textContent = '📱 ТСД';
+    }
+    if (a && tsd) nav.insertBefore(a, tsd);
+    else if (a) nav.appendChild(a);
+    if (tsd) nav.appendChild(tsd);
   }
   function applySession(data) {
     if (!data || !data.user) {

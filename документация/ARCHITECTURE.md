@@ -1,7 +1,7 @@
 # WMS TiMLog — архитектура, связи и результаты проверки
 
-Дата проверки: 2026-10-28.  
-Схемы: [`wms-overview.svg`](./wms-overview.svg) — обзор; [`wms-architecture.drawio`](./wms-architecture.drawio) — 7 страниц: обзор, приход, заказ/отгрузка, склад, БД прихода, БД отгрузки, этикетки.  
+Дата проверки: 2026-10-28.
+Схемы: [`wms-overview.svg`](./wms-overview.svg) — обзор; [`wms-architecture.drawio`](./wms-architecture.drawio) — 7 страниц: обзор, приход, заказ/отгрузка, склад, БД прихода, БД отгрузки, этикетки.
 Отчёт smoke-теста: [`qa-report.json`](./qa-report.json).
 
 ## 1. Как работает система
@@ -62,25 +62,31 @@
 
 > `с/app.html` — посторонняя копия 3.1 в каталоге `с`; в меню не используется.
 
+> В меню модуль 15 идёт сразу после 14 «Журнал», а ТСД всегда последний.
+
 ## 3. Основные потоки данных
 
 ### Приёмка
-`in/` (CSV/TXT/XLSX) → `ImportRobot` / `CsvUpload` → `receipts` + `receipt_items`  
-02 UI или `tsd/prihod.php` → `receipt_operations` + `receipt_items.qty_fact`  
+`in/` (CSV/TXT/XLSX) → `ImportRobot` / `CsvUpload` → `receipts` + `receipt_items`
+02 UI или `tsd/prihod.php` → `receipt_operations` + `receipt_items.qty_fact`
 Закрытие → `StockSync` → `products` / `product_stock` / `product_movements` / `wms_journal`.
 
 ### Отгрузка
-03.1 UI → `client_orders` + `client_order_items`  
-03 UI → `ShipmentService::formFromOrders()` → `shipments` + `shipment_orders` + `shipment_items`  
-ТСД `otbor/sort/ship` → `tsd_picks`, `shipment_history`, `shipment_sort_log`  
+03.1 UI → `client_orders` + `client_order_items`
+03 UI → `ShipmentService::formFromOrders()` → `shipments` + `shipment_orders` + `shipment_items`
+ТСД `otbor/sort/ship` → `tsd_picks`, `shipment_history`, `shipment_sort_log`
 Факт отбора виден в 03 (`readiness`, `fact_qty`), журнал — в 14.
 
 ### Этикетки
-15 UI → `label_templates` / `label_sequences` → `label_codes` + `label_print_log`. ZPL 58×40 мм, максимум 500 шт. за печать. 08.1 → ПКМ «Печатать SSCC» → `print_sscc` (существующий SSCC строки запаса).
+15 UI → `label_templates` / `label_sequences` → `label_codes` + `label_print_log`. ZPL 58×40 мм, максимум 500 шт. за печать.
+
+В окне печати показывается предпросмотр одной этикетки и список Windows-принтеров (`?action=printers`); после выбора принтера ZPL сразу отправляется в RAW-очередь через `15-etiketki/print-zpl.ps1` (`?action=print_raw`).
+Новый тип этикетки создаётся в UI 15 (`?action=template_create`): код, название, заголовок, префикс, размеры, ZPL и SQL.
+08.1 → ПКМ «Печатать SSCC» → `print_sscc` (существующий SSCC строки запаса).
 
 ### Склад и задания
-05 UI → `storage_cells`, `cell_content`, `cell_history`, `cell_movements`  
-07 UI / ТСД → `tasks`, `task_items`, `task_history`  
+05 UI → `storage_cells`, `cell_content`, `cell_history`, `cell_movements`
+07 UI / ТСД → `tasks`, `task_items`, `task_history`
 Задания ссылаются на документы через `tasks.doc_ref` / `shipment_ids` (без FK), на SKU — через `task_items.sku` (без FK).
 
 ## 4. Связи таблиц
@@ -238,6 +244,7 @@
 - Smoke-тест: **136 проверок, 0 ошибок**.
 - Проверены: 35 HTML-страниц WMS/ТСД, `session.php`, `table-tools.js`, `auth-client.js`, чтение всех demo API, TSD read API, создание/редактирование/удаление тестовых прихода, заказа, сотрудника и роли.
 - Тестовые записи удалены; временный QA-пользователь удалён.
+- Этикетки: проверены создание нового типа, печать custom-шаблона, список принтеров, отклонение несуществующего принтера и JS-предпросмотр; тестовые шаблоны/коды/последовательности удалены.
 
 ### Целостность БД
 Проверено 40 связей (FK и логические). Выполнена очистка:
@@ -249,12 +256,12 @@
    - `A-105108`, строка 6, `MK-ASM-1320`: qty 70.
 3. **`tasks`** — по решению пользователя удалены 7 устаревших задач «сбор» `TASK-202610-02463…02469` и их `task_items` / `task_history`.
 
-Резервная копия удалённых/изменённых строк: `документация/cleanup-backup-2026-10-28.json`.  
+Резервная копия удалённых/изменённых строк: `документация/cleanup-backup-2026-10-28.json`.
 Остальные проверки — 0 нарушений: нет orphan-строк по FK, нет дублей `receipts.doc_no`, `shipments.doc_no`, `client_orders.doc_no`, `products.sku`, `products.code`, `storage_cells.code`, нет дублей логинов, нет отрицательных остатков в `cell_content` / `product_stock`, нет переотбора в `shipment_items` относительно `tsd_picks`.
 
 ### Статические модули
-`01`, `01.1`, `01.2`, `02.1`, `03.2`, `03.3`, `04`, `05.1`, `06`, `09.1`, `10.1`, `10.2`, `11`, `13.2`, `13.3`, `13.4` — страницы-заглушки (≈6 КБ, без серверного API).  
-`13.1` — UI без серверного API; `12` использует API модуля 08; `00` — дашборд-агрегатор.  
+`01`, `01.1`, `01.2`, `02.1`, `03.2`, `03.3`, `04`, `05.1`, `06`, `09.1`, `10.1`, `10.2`, `11`, `13.2`, `13.3`, `13.4` — страницы-заглушки (≈6 КБ, без серверного API).
+`13.1` — UI без серверного API; `12` использует API модуля 08; `00` — дашборд-агрегатор.
 `с/app.html` — посторонняя копия 3.1, не входит в меню.
 
 ## 7. Как открыть схему
@@ -267,6 +274,7 @@
 - Страница 5 — БД прихода.
 - Страница 6 — БД заказов и отгрузки.
 - Страница 7 — этикетки: шаблоны, последовательности, коды и лог.
+- Печать этикеток: выбор Windows-принтера, предпросмотр одной этикетки и RAW-отправка ZPL; создание новых типов этикеток — в модуле 15.
 
 ## 8. Публикация и доступ
 
