@@ -75,8 +75,14 @@ try {
         if (isset($ids['ids'])) {
             $ids = $ids['ids'];
         }
-        $n = $service->deleteMany((array)$ids, $userId);
-        echo json_encode(['ok' => true, 'deleted' => $n], JSON_UNESCAPED_UNICODE);
+        $res = $service->deleteMany((array)$ids, $userId);
+        echo json_encode([
+            'ok' => true,
+            'deleted' => (int)($res['deleted'] ?? 0),
+            'skipped' => (int)($res['skipped'] ?? 0),
+            'skipped_ids' => $res['skipped_ids'] ?? [],
+            'not_found' => $res['not_found'] ?? [],
+        ], JSON_UNESCAPED_UNICODE);
     } elseif ($action === 'pick' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         // ТСД-скан: {item_id, qty}
         $itemId = (int)($body['item_id'] ?? $_GET['item_id'] ?? 0);

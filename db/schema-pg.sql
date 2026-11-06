@@ -411,6 +411,8 @@ CREATE TABLE IF NOT EXISTS receipts (
   -- Отклонения при закрытии: излишек / недостача (заполняются при закрытии документа).
   excess_qty NUMERIC(14,3) NOT NULL DEFAULT 0,
   shortage_qty NUMERIC(14,3) NOT NULL DEFAULT 0,
+  -- Кросс-док: приёмка по флагу документа (без вопроса на ТСД).
+  crossdock SMALLINT NOT NULL DEFAULT 0,
   priority VARCHAR(20) NOT NULL DEFAULT 'normal',
   volume NUMERIC(12,3) NOT NULL DEFAULT 0,
   quarantine SMALLINT NOT NULL DEFAULT 0,
@@ -517,6 +519,8 @@ CREATE TABLE IF NOT EXISTS receipt_flags (
   -- Паллета, на которую серийные номера приняты (для журнала серийных номеров).
   pallet VARCHAR(50) NULL,
   qty NUMERIC(14,3) NULL,
+  -- Агрегационный код (QR с несколькими серийными номерами через «;»).
+  aggregation TEXT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -804,6 +808,8 @@ CREATE TABLE IF NOT EXISTS storage_cells (
   allow_mixed_goods SMALLINT NOT NULL DEFAULT 1,
   -- Разрешено ли в ячейке несколько типов паллет (euro/fin).
   allow_multi_pallet_types SMALLINT NOT NULL DEFAULT 1,
+  -- Блокировка по качеству (карантин).
+  quality_lock SMALLINT NOT NULL DEFAULT 0,
   hazmat_allowed SMALLINT NOT NULL DEFAULT 0,
   comment TEXT NULL,
   is_archived SMALLINT NOT NULL DEFAULT 0,
@@ -901,10 +907,12 @@ CREATE TABLE IF NOT EXISTS client_orders (
   warehouse_id BIGINT NULL,
   total NUMERIC(14,2) NOT NULL DEFAULT 0,
   comment TEXT NULL,
+  external_id VARCHAR(100) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_order_contractor ON client_orders (contractor_id);
 CREATE INDEX IF NOT EXISTS idx_order_status ON client_orders (status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_order_external ON client_orders (external_id) WHERE external_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS client_order_items (
   id BIGSERIAL PRIMARY KEY,
@@ -1038,7 +1046,7 @@ CREATE TABLE IF NOT EXISTS shipment_flags (
   flag_type VARCHAR(50) NOT NULL,
   serial_no VARCHAR(100) NULL,
   marking_code TEXT NULL,
-  aggregation VARCHAR(50) NULL,
+  aggregation TEXT NULL,
   stock_left INTEGER NULL,
   -- Паллета, с которой серийный номер отгружен (для журнала серийных номеров).
   pallet VARCHAR(50) NULL,
@@ -1111,6 +1119,26 @@ COMMENT ON COLUMN shipment_sort_log.reason IS 'Причина: марка не �
 CREATE INDEX IF NOT EXISTS idx_ssl_shipment ON shipment_sort_log (shipment_id);
 CREATE INDEX IF NOT EXISTS idx_ssl_pallet ON shipment_sort_log (pallet_id);
 CREATE INDEX IF NOT EXISTS idx_ssl_user ON shipment_sort_log (user_id);
+
+-- Паллеты отгрузки (SSCC) и их статусы для упаковочного листа (модуль 3.2)
+-- и функции ТСД «Отгрузить ТС»:
+--   sorted_at  — паллета отсортирована,
+--   in_zone_at — весь товар паллеты в зоне отгрузки («проверено»),
+--   shipped_at — отгружено (скан SSCC на ТСД).
+CREATE TABLE IF NOT EXISTS shipment_pallets (
+  id BIGSERIAL PRIMARY KEY,
+  shipment_id BIGINT NOT NULL,
+  sscc VARCHAR(50) NOT NULL,
+  qty NUMERIC(14,3) NOT NULL DEFAULT 0,
+  sorted_at TIMESTAMP NULL,
+  in_zone_at TIMESTAMP NULL,
+  shipped_at TIMESTAMP NULL,
+  user_id BIGINT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE (shipment_id, sscc)
+);
+CREATE INDEX IF NOT EXISTS idx_sp_shipment ON shipment_pallets (shipment_id);
+CREATE INDEX IF NOT EXISTS idx_sp_shipped ON shipment_pallets (shipped_at);
 
 CREATE TABLE IF NOT EXISTS packing_tasks (
   id BIGSERIAL PRIMARY KEY,
@@ -1246,6 +1274,7 @@ CREATE TABLE IF NOT EXISTS task_history (
   id BIGSERIAL PRIMARY KEY,
   task_id BIGINT NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,
   user_id BIGINT NULL,
+  user_fio VARCHAR(150) NULL,
   action VARCHAR(50) NOT NULL,
   field VARCHAR(50) NULL,
   field_label VARCHAR(100) NULL,
@@ -1719,6 +1748,7 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS gate VARCHAR(20);
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS shipment_ids VARCHAR(255);
 -- task_history.field_label уже в CREATE выше; для старых БД:
 ALTER TABLE task_history ADD COLUMN IF NOT EXISTS field_label VARCHAR(100);
+ALTER TABLE task_history ADD COLUMN IF NOT EXISTS user_fio VARCHAR(150);
 ALTER TABLE shipment_items ADD COLUMN IF NOT EXISTS prod_date DATE;
 ALTER TABLE client_order_items ADD COLUMN IF NOT EXISTS supplier_batch VARCHAR(100);
 ALTER TABLE shipment_items ADD COLUMN IF NOT EXISTS supplier_batch VARCHAR(100);
@@ -1736,6 +1766,7 @@ ALTER TABLE receipt_operations ADD COLUMN IF NOT EXISTS reason TEXT;
 ALTER TABLE receipt_items ADD COLUMN IF NOT EXISTS deviation VARCHAR(20);
 ALTER TABLE receipts ADD COLUMN IF NOT EXISTS excess_qty NUMERIC(14,3) NOT NULL DEFAULT 0;
 ALTER TABLE receipts ADD COLUMN IF NOT EXISTS shortage_qty NUMERIC(14,3) NOT NULL DEFAULT 0;
+ALTER TABLE receipts ADD COLUMN IF NOT EXISTS crossdock SMALLINT NOT NULL DEFAULT 0;
 ALTER TABLE receipt_flags ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'годный';
 ALTER TABLE receipt_flags ADD COLUMN IF NOT EXISTS reason TEXT;
 ALTER TABLE storage_cells ADD COLUMN IF NOT EXISTS beam_width NUMERIC(3,1) NOT NULL DEFAULT 3.2;
@@ -1757,6 +1788,7 @@ ALTER TABLE counterparties ADD COLUMN IF NOT EXISTS placement_zones VARCHAR(255)
 ALTER TABLE counterparties ADD COLUMN IF NOT EXISTS placement_cell_codes TEXT NULL;
 ALTER TABLE storage_cells ADD COLUMN IF NOT EXISTS allow_mixed_goods SMALLINT NOT NULL DEFAULT 1;
 ALTER TABLE storage_cells ADD COLUMN IF NOT EXISTS allow_multi_pallet_types SMALLINT NOT NULL DEFAULT 1;
+ALTER TABLE storage_cells ADD COLUMN IF NOT EXISTS quality_lock SMALLINT NOT NULL DEFAULT 0;
 ALTER TABLE product_stock ADD COLUMN IF NOT EXISTS prod_date DATE NULL;
 ALTER TABLE receipt_operations ADD COLUMN IF NOT EXISTS no_serial SMALLINT NOT NULL DEFAULT 0;
 ALTER TABLE receipt_operations ADD COLUMN IF NOT EXISTS reject_reason TEXT NULL;
@@ -1809,6 +1841,8 @@ CREATE TABLE IF NOT EXISTS wms_serial_journal (
   pallet VARCHAR(50) NULL,
   qty NUMERIC(14,3) NOT NULL DEFAULT 1,
   cell VARCHAR(50) NULL,
+  -- Агрегационный код (QR с несколькими серийными номерами через «;»).
+  aggregation TEXT NULL,
   doc_date TIMESTAMP NOT NULL DEFAULT NOW(),
   user_id BIGINT NULL,
   user_fio VARCHAR(150) NULL,
@@ -1885,3 +1919,62 @@ WHERE NOT EXISTS (
 
 -- pin для старых пользователей (как в shared/db.php)
 UPDATE users SET pin = LPAD((1000 + id)::text, 4, '0') WHERE pin IS NULL OR pin = '';
+
+-- ============================================================
+-- Интеграция (API v1): настройки, журнал запросов, rate limit, outbox вебхуков
+-- Таблицы также создаются автоматически из shared/IntegrationApi.php.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS wms_api_settings (
+  id BIGINT PRIMARY KEY,
+  enabled SMALLINT NOT NULL DEFAULT 1,
+  client_id VARCHAR(100) NOT NULL DEFAULT 'wms-client',
+  client_secret VARCHAR(255) NOT NULL DEFAULT '',
+  jwt_secret VARCHAR(255) NOT NULL DEFAULT '',
+  callback_url VARCHAR(500) NULL,
+  webhook_secret VARCHAR(255) NULL,
+  rate_limit INTEGER NOT NULL DEFAULT 100,
+  token_ttl INTEGER NOT NULL DEFAULT 3600,
+  updated_at TIMESTAMP NULL
+);
+INSERT INTO wms_api_settings (id, enabled, client_id) VALUES (1, 1, 'wms-client')
+ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS wms_api_log (
+  id BIGSERIAL PRIMARY KEY,
+  request_id VARCHAR(64) NULL,
+  direction VARCHAR(10) NOT NULL DEFAULT 'IN',
+  client_id VARCHAR(100) NULL,
+  method VARCHAR(10) NULL,
+  path VARCHAR(500) NULL,
+  status_code INTEGER NULL,
+  duration_ms INTEGER NULL,
+  ip VARCHAR(64) NULL,
+  request_body TEXT NULL,
+  response_body TEXT NULL,
+  error TEXT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_api_log_created ON wms_api_log (created_at);
+CREATE INDEX IF NOT EXISTS idx_api_log_status ON wms_api_log (status_code);
+
+CREATE TABLE IF NOT EXISTS wms_api_rate (
+  id BIGSERIAL PRIMARY KEY,
+  api_key VARCHAR(100) NOT NULL,
+  ts TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_api_rate_key ON wms_api_rate (api_key, ts);
+
+CREATE TABLE IF NOT EXISTS wms_webhook_outbox (
+  id BIGSERIAL PRIMARY KEY,
+  event VARCHAR(50) NOT NULL,
+  external_id VARCHAR(100) NULL,
+  payload TEXT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TIMESTAMP NULL,
+  last_error TEXT NULL,
+  http_code INTEGER NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  sent_at TIMESTAMP NULL
+);
+CREATE INDEX IF NOT EXISTS idx_wh_outbox_status ON wms_webhook_outbox (status, next_attempt_at);

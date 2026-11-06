@@ -13,6 +13,7 @@ require_once __DIR__ . '/ProductService.php';
 require_once __DIR__ . '/Notifications.php';
 
 require_once __DIR__ . '/../shared/db.php';
+require_once __DIR__ . '/../shared/LabelPrint.php';
 
 $dbFile = wms_nomenclature_db_file();
 $pdo = wms_nomenclature_pdo();
@@ -182,7 +183,7 @@ endif;
 
 $repo = new ProductRepository($pdo);
 $service = new ProductService($pdo);
-$userId = 1;
+$userId = function_exists('wms_auth_actor_id') ? wms_auth_actor_id() : 1;
 $action = $_GET['action'] ?? 'list';
 header('Content-Type: application/json; charset=utf-8');
 
@@ -206,6 +207,7 @@ try {
         if ($sku !== '') {
             require_once __DIR__ . '/../shared/PickIssue.php';
 require_once __DIR__ . '/../shared/db.php';
+require_once __DIR__ . '/../shared/LabelPrint.php';
 require_once __DIR__ . '/../shared/Counterparties.php';
             try {
                 $tpdos = wms_tasks_pdos();
@@ -258,13 +260,38 @@ require_once __DIR__ . '/../shared/Counterparties.php';
         echo json_encode($repo->tasks((int)($_GET['id'] ?? 0)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'defaults') {
         echo json_encode($repo->defaults(), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    } elseif ($action === 'owners') {
+        // Список значений для поля «Владелец» карточки товара:
+        // все контрагенты из модуля 09 «Контрагенты и грузополучатели» (любой тип)
+        // + уже сохранённые владельцы товаров (чтобы исторические значения не терялись).
+        $names = [];
+        foreach (WmsCounterparties::listAll($pdo, true) as $cp) {
+            $n = trim((string)($cp['name'] ?? ''));
+            if ($n !== '') {
+                $names[$n] = true;
+            }
+        }
+        try {
+            foreach ($pdo->query("SELECT DISTINCT owner FROM products WHERE owner IS NOT NULL AND TRIM(owner) <> ''")->fetchAll(PDO::FETCH_COLUMN) as $o) {
+                $o = trim((string)$o);
+                if ($o !== '') {
+                    $names[$o] = true;
+                }
+            }
+        } catch (Throwable) {
+        }
+        $out = array_keys($names);
+        usort($out, fn($a, $b) => strcmp((string)$a, (string)$b));
+        echo json_encode(['names' => $out], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'counterparties') {
-        // Список клиентов (контрагентов) для выпадающего списка в карточке товара.
+        // Справочник контрагентов (модуль 09): клиенты — для поля «Владелец» карточки.
+        // ctype: client | consignee | supplier.
         $list = [];
         foreach (WmsCounterparties::listAll($pdo, true) as $cp) {
             $list[] = [
                 'id' => (int)($cp['id'] ?? 0),
                 'name' => (string)($cp['name'] ?? ''),
+                'ctype' => (string)($cp['ctype'] ?? 'client'),
                 'reserve_strategy' => (string)($cp['reserve_strategy'] ?? WmsCounterparties::DEFAULT_STRATEGY),
                 'scan_serial_in' => (int)($cp['scan_serial_in'] ?? 0) ? 1 : 0,
                 'scan_serial_out' => (int)($cp['scan_serial_out'] ?? 0) ? 1 : 0,
@@ -306,7 +333,54 @@ require_once __DIR__ . '/../shared/Counterparties.php';
         $b = json_decode(file_get_contents('php://input'), true) ?? [];
         $n = $service->massUpdate((array)($b['ids'] ?? []), (array)($b['patch'] ?? []), $userId);
         echo json_encode(['updated' => $n], JSON_UNESCAPED_UNICODE);
-    } elseif ($action === 'print') {
+    } elseif (($action === 'printers' || $action === 'print_thermal') && !wms_labels_can_print()) {
+        wms_labels_deny_json();
+    } elseif ($action === 'printers') {
+        // Список принтеров Windows для прямой (термо) печати этикеток.
+        require_once __DIR__ . '/../shared/LabelPrint.php';
+        try {
+            echo json_encode(['rows' => wms_label_printers(), 'supported' => wms_label_can_print_direct()], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['rows' => [], 'supported' => wms_label_can_print_direct(), 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    } elseif ($action === 'print_thermal' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        // Прямая печать этикетки на принтер (без PDF): растровый ZPL, кириллица шрифтом Arial.
+        require_once __DIR__ . '/../shared/LabelPrint.php';
+        $b = json_decode(file_get_contents('php://input'), true) ?? [];
+        $pId = (int)($b['id'] ?? 0);
+        $pBc = isset($b['bc']) ? trim((string)$b['bc']) : '';
+        $printer = trim((string)($b['printer'] ?? ''));
+        $pW = isset($b['w']) ? (float)$b['w'] : 58.0;
+        $pH = isset($b['h']) ? (float)$b['h'] : 40.0;
+        $pN = isset($b['copies']) ? max(1, min(999, (int)$b['copies'])) : 1;
+        $pDpi = in_array((int)($b['dpi'] ?? 203), [203, 300], true) ? (int)$b['dpi'] : 203;
+        try {
+            if ($pId <= 0) {
+                throw new RuntimeException('Не выбран товар');
+            }
+            if ($printer === '') {
+                throw new RuntimeException('Не выбран принтер');
+            }
+            $pd = $service->printData($pId, 'barcode', $pBc !== '' ? $pBc : null);
+            if (trim((string)($pd['barcode'] ?? '')) === '') {
+                throw new RuntimeException('У товара нет штрихкода');
+            }
+            $spec = wms_label_spec(
+                (string)($pd['sku'] ?? ''),
+                (string)$pd['barcode'],
+                (string)$pd['barcode'],
+                $pW,
+                $pH,
+                $pDpi,
+                $pN,
+                (string)($pd['name'] ?? '')
+            );
+            $res = wms_label_print_thermal($printer, $spec);
+            echo json_encode(['ok' => true, 'printer' => $res['printer'], 'copies' => $pN], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        }    } elseif ($action === 'print') {
         $pId = (int)($_GET['id'] ?? 0);
         $pKind = (string)($_GET['kind'] ?? 'barcode');
         $pBc = isset($_GET['bc']) ? (string)$_GET['bc'] : null;

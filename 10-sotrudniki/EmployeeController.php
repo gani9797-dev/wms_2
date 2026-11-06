@@ -39,6 +39,9 @@ final class EmployeeController
             $this->json(['error' => 'Не найдено'], 404);
             return;
         }
+        // Пароль никогда не отдаём: хранится только необратимый хэш.
+        unset($row['password_hash'], $row['password_plain']);
+        $row['has_password'] = (bool)($row['has_password'] ?? false);
         $this->json($row);
     }
 
@@ -167,6 +170,28 @@ final class EmployeeController
     {
         $d = $this->service->printData($id);
         $fmt = (string)($query['format'] ?? '');
+        if ($fmt === 'pdf') {
+            // PDF-этикетка ровно по размеру (как в «Номенклатуре»).
+            require_once __DIR__ . '/../shared/Pdf.php';
+            $w = (float)($query['w'] ?? 58.0);
+            $h = (float)($query['h'] ?? 40.0);
+            try {
+                $pdf = wms_pdf_label((string)$d['code'], (string)$d['code'], (string)$d['code'], $w, $h, (string)$d['name']);
+                if (!headers_sent()) {
+                    header('Content-Type: application/pdf');
+                    header('Content-Disposition: inline; filename="employee_' . (int)$d['id'] . '.pdf"');
+                    header('Content-Length: ' . strlen($pdf));
+                }
+                echo $pdf;
+            } catch (Throwable $e) {
+                http_response_code(400);
+                if (!headers_sent()) {
+                    header('Content-Type: text/plain; charset=utf-8');
+                }
+                echo 'Ошибка PDF: ' . $e->getMessage();
+            }
+            return;
+        }
         if ($fmt === 'zpl' || $fmt === 'label') {
             require_once __DIR__ . '/../shared/Zpl.php';
             $w = (float)($query['w'] ?? 58.0);

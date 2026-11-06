@@ -27,7 +27,7 @@ final class EmployeeRepository
         $offset = ($f->page - 1) * $f->perPage;
         $sortMap = [
             'id' => ['e.id', 'n'], 'fio' => ['e.fio', 't'],
-            'position' => ['e.position', 't'], 'code' => ['e.code', 't'],
+            'position' => ['e.position', 't'], 'code' => ['e.code', 't'], 'login' => ['e.login', 't'],
             'department' => ['e.department', 't'],
             'status' => ['(CASE WHEN e.is_blocked = 1 THEN 2 WHEN e.status = \'fired\' THEN 1 ELSE 0 END)', 'n'],
             'hired_at' => ['e.hired_at', 'd'], 'created_at' => ['e.created_at', 'd'],

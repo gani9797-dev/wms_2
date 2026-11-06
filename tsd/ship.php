@@ -173,4 +173,87 @@ if ($action === 'finish' && $method === 'POST') {
     j(['ok' => true, 'status' => 'assembled', 'progress' => progress($pdo, $sid)]);
 }
 
-j(['error' => 'unknown action: ?action=tasks|task|scan|finish'], 404);
+// --- «Отгрузить ТС»: список отгрузок, готовых к отгрузке ---
+if ($action === 'ship_list') {
+    require_once __DIR__ . '/../shared/ShipmentPallets.php';
+    $in = "'assembled','packing','packed','on_check','checked','ready'";
+    $rows = $pdo->query(
+        "SELECT s.id, s.doc_no, s.status, s.consignee, s.vehicle, s.gate, s.plan_shipment_date, w.name AS warehouse
+         FROM shipments s LEFT JOIN warehouses w ON w.id=s.warehouse_id
+         WHERE s.status IN ($in) ORDER BY s.id DESC LIMIT 50"
+    )->fetchAll();
+    foreach ($rows as &$r) {
+        $pals = wms_ship_pallets_sync($pdo, (int)$r['id']);
+        $total = count($pals);
+        $shipped = 0;
+        foreach ($pals as $p) {
+            if (!empty($p['shipped_at'])) {
+                $shipped++;
+            }
+        }
+        $r['pallets_total'] = $total;
+        $r['pallets_shipped'] = $shipped;
+        $r['status_label'] = $r['status'] === 'shipped' ? 'Отгружено' : (string)$r['status'];
+    }
+    j(['rows' => $rows]);
+}
+
+// --- «Отгрузить ТС»: карточка отгрузки (SSCC + статусы) ---
+if ($action === 'ship_task') {
+    require_once __DIR__ . '/../shared/ShipmentPallets.php';
+    $id = (int)($_GET['id'] ?? $_GET['shipment_id'] ?? 0);
+    $q = trim((string)($_GET['q'] ?? ''));
+    if ($id <= 0 && $q !== '') {
+        $h = $pdo->prepare('SELECT id FROM shipments WHERE doc_no=:q LIMIT 1');
+        $h->execute([':q' => $q]);
+        $id = (int)($h->fetchColumn() ?: 0);
+    }
+    if ($id <= 0) {
+        j(['error' => 'нужен id отгрузки'], 422);
+    }
+    $h = $pdo->prepare('SELECT s.*, w.name AS warehouse FROM shipments s LEFT JOIN warehouses w ON w.id=s.warehouse_id WHERE s.id=:id');
+    $h->execute([':id' => $id]);
+    $head = $h->fetch();
+    if (!$head) {
+        j(['error' => 'Отгрузка не найдена'], 404);
+    }
+    $pallets = wms_ship_pallets_sync($pdo, $id);
+    $out = [];
+    $shipped = 0;
+    foreach ($pallets as $p) {
+        $st = wms_ship_pallet_status($p);
+        if ($st['code'] === 'shipped') {
+            $shipped++;
+        }
+        $out[] = [
+            'id' => (int)$p['id'],
+            'sscc' => (string)$p['sscc'],
+            'qty' => (float)($p['qty'] ?? 0),
+            'status' => $st['code'],
+            'status_label' => $st['label'],
+            'shipped_at' => $p['shipped_at'],
+        ];
+    }
+    j(['head' => $head, 'pallets' => $out, 'total' => count($out), 'shipped' => $shipped,
+        'all_shipped' => count($out) > 0 && $shipped === count($out)]);
+}
+
+// --- «Отгрузить ТС»: скан SSCC (цикл по паллетам) ---
+if ($action === 'ship_pallet' && $method === 'POST') {
+    require_once __DIR__ . '/../shared/ShipmentPallets.php';
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    $sid = (int)($b['shipment_id'] ?? $_GET['id'] ?? 0);
+    $sscc = trim((string)($b['sscc'] ?? $b['code'] ?? ''));
+    $uid = (int)($b['user_id'] ?? 0) ?: null;
+    $fio = trim((string)($b['user_fio'] ?? ''));
+    if ($sid <= 0 || $sscc === '') {
+        j(['error' => 'нужны shipment_id и sscc'], 422);
+    }
+    $res = wms_ship_pallet_ship($pdo, $sid, $sscc, $uid, $fio);
+    if (!$res['ok']) {
+        j(['error' => $res['error'], 'code' => $res['code'] ?? 400], $res['code'] ?? 400);
+    }
+    j($res);
+}
+
+j(['error' => 'unknown action: ?action=tasks|task|scan|finish|ship_list|ship_task|ship_pallet'], 404);

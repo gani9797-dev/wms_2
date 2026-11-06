@@ -63,23 +63,58 @@ final class CellPlacement
             return self::$robotSettings;
         }
         $out = [
-            'section_pallet_lock' => 0,
+            'section_pallet_lock' => 1,
             'euro_cap_per_section' => 4,
             'fin_cap_per_section' => 3,
             'fin_block_3rd_cell' => 1,
+            'beam32_euro_places' => 3,
+            'beam32_fin_places' => 2,
+            'beam36_euro_places' => 4,
+            'beam36_fin_places' => 3,
+            'beam36_fin_block_place' => 3,
         ];
         try {
-            $st = $pdo->prepare(
-                "SELECT section_pallet_lock, euro_cap_per_section, fin_cap_per_section, fin_block_3rd_cell
-                 FROM robot_settings WHERE id = 1 LIMIT 1"
-            );
-            $st->execute();
-            $row = $st->fetch(PDO::FETCH_ASSOC);
+            // Таблица настроек робота (модуль 13 «Склад и хранение»).
+            $drv = function_exists('wms_driver') ? wms_driver($pdo) : (string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+            $pg = $drv === 'pgsql';
+            $auto = $pg ? '' : ' AUTOINCREMENT';
+            $pdo->exec("CREATE TABLE IF NOT EXISTS robot_settings (
+                id " . ($pg ? 'BIGINT PRIMARY KEY' : 'INTEGER PRIMARY KEY' . $auto) . ",
+                section_pallet_lock " . ($pg ? 'SMALLINT' : 'INTEGER') . " NOT NULL DEFAULT 1,
+                euro_cap_per_section INTEGER NOT NULL DEFAULT 4,
+                fin_cap_per_section INTEGER NOT NULL DEFAULT 3,
+                fin_block_3rd_cell " . ($pg ? 'SMALLINT' : 'INTEGER') . " NOT NULL DEFAULT 1,
+                beam32_euro_places INTEGER NOT NULL DEFAULT 3,
+                beam32_fin_places INTEGER NOT NULL DEFAULT 2,
+                beam36_euro_places INTEGER NOT NULL DEFAULT 4,
+                beam36_fin_places INTEGER NOT NULL DEFAULT 3,
+                beam36_fin_block_place INTEGER NOT NULL DEFAULT 3,
+                updated_at " . ($pg ? 'TIMESTAMP' : 'TEXT') . " NULL)");
+            foreach ([
+                ['beam32_euro_places', 3], ['beam32_fin_places', 2],
+                ['beam36_euro_places', 4], ['beam36_fin_places', 3], ['beam36_fin_block_place', 3],
+            ] as [$col, $def]) {
+                if (function_exists('wms_ensure_column')) {
+                    wms_ensure_column($pdo, 'robot_settings', $col,
+                        'INT NOT NULL DEFAULT ' . $def, 'INTEGER NOT NULL DEFAULT ' . $def, 'INTEGER NOT NULL DEFAULT ' . $def);
+                }
+            }
+            $st = $pdo->query('SELECT * FROM robot_settings WHERE id = 1 LIMIT 1');
+            $row = $st ? $st->fetch(PDO::FETCH_ASSOC) : null;
+            if (!$row) {
+                try {
+                    $pdo->exec('INSERT INTO robot_settings (id) VALUES (1)');
+                } catch (Throwable) {
+                }
+                $st = $pdo->query('SELECT * FROM robot_settings WHERE id = 1 LIMIT 1');
+                $row = $st ? $st->fetch(PDO::FETCH_ASSOC) : null;
+            }
             if ($row) {
-                $out['section_pallet_lock'] = (int)($row['section_pallet_lock'] ?? 0);
-                $out['euro_cap_per_section'] = (int)($row['euro_cap_per_section'] ?? 4);
-                $out['fin_cap_per_section'] = (int)($row['fin_cap_per_section'] ?? 3);
-                $out['fin_block_3rd_cell'] = (int)($row['fin_block_3rd_cell'] ?? 1);
+                foreach ($out as $k => $def) {
+                    if (array_key_exists($k, $row) && $row[$k] !== null && $row[$k] !== '') {
+                        $out[$k] = (int)$row[$k];
+                    }
+                }
             }
         } catch (Throwable) {
             // Таблицы ещё нет — используем значения по умолчанию.
@@ -87,6 +122,46 @@ final class CellPlacement
         return self::$robotSettings = $out;
     }
 
+    /** Сохранить настройки робота размещения (модуль 13 «Склад и хранение»). */
+    public static function saveRobotSettings(PDO $pdo, array $b): array
+    {
+        self::robotSettings($pdo); // гарантируем таблицу и строку id=1
+        $fields = [
+            'section_pallet_lock' => 0, 'euro_cap_per_section' => 4, 'fin_cap_per_section' => 3,
+            'fin_block_3rd_cell' => 0, 'beam32_euro_places' => 3, 'beam32_fin_places' => 2,
+            'beam36_euro_places' => 4, 'beam36_fin_places' => 3, 'beam36_fin_block_place' => 3,
+        ];
+        $flags = ['section_pallet_lock', 'fin_block_3rd_cell'];
+        $positive = ['euro_cap_per_section', 'fin_cap_per_section', 'beam32_euro_places',
+            'beam32_fin_places', 'beam36_euro_places', 'beam36_fin_places'];
+        $sets = [];
+        $p = [];
+        foreach ($fields as $k => $def) {
+            if (!array_key_exists($k, $b)) {
+                continue;
+            }
+            if (in_array($k, $flags, true)) {
+                $v = (int)!empty($b[$k]);
+            } else {
+                $v = (int)$b[$k];
+                if (in_array($k, $positive, true)) {
+                    $v = max(1, $v);
+                }
+                $v = max(0, $v);
+            }
+            $sets[] = $k . ' = :' . $k;
+            $p[':' . $k] = $v;
+        }
+        if ($sets) {
+            $p[':id'] = 1;
+            try {
+                $pdo->prepare('UPDATE robot_settings SET ' . implode(', ', $sets) . ' WHERE id = :id')->execute($p);
+            } catch (Throwable) {
+            }
+        }
+        self::resetRobotSettingsCache();
+        return self::robotSettings($pdo);
+    }
     /** Сбросить кэш настроек робота (вызывать после сохранения в модуле 13). */
     public static function resetRobotSettingsCache(): void
     {
@@ -119,15 +194,25 @@ final class CellPlacement
         return $s !== '' ? $s : 'euro';
     }
 
-    /** Вместимость яруса по типу тары. */
-    public static function levelCapacity(float $beam, string $palletType): int
+    /**
+     * Вместимость яруса по типу тары с учётом настроек робота:
+     *   балка 3,2: евро 3 / фин 2;  балка 3,6: евро 4 / фин 3 (3-я ячейка под фин блокируется).
+     */
+    public static function levelCapacity(float $beam, string $palletType, ?array $robot = null): int
     {
         $beam = self::normalizeBeam($beam);
         $t = self::normalizePalletType($palletType);
+        $robot = $robot ?? [];
         if ($beam <= 3.4) {
-            return $t === 'fin' ? 2 : 3;
+            $key = $t === 'fin' ? 'beam32_fin_places' : 'beam32_euro_places';
+            $def = $t === 'fin' ? 2 : 3;
+            $v = (int)($robot[$key] ?? 0);
+            return $v > 0 ? $v : $def;
         }
-        return $t === 'fin' ? 3 : 4;
+        $key = $t === 'fin' ? 'beam36_fin_places' : 'beam36_euro_places';
+        $def = $t === 'fin' ? 3 : 4;
+        $v = (int)($robot[$key] ?? 0);
+        return $v > 0 ? $v : $def;
     }
 
     public static function sectionKey(array $cell): string
@@ -320,7 +405,20 @@ final class CellPlacement
         $secCells = $bySection[self::sectionKey($cell)] ?? [];
         $lvlCells = $byLevel[self::levelKey($cell)] ?? [];
         $beam = self::normalizeBeam($cell['beam_width'] ?? self::BEAM_32);
-        $cap = self::levelCapacity($beam, $palletType);
+        $cap = self::levelCapacity($beam, $palletType, $robot);
+
+        // Правило заказчика: если в секции (ряд + секция) хоть у одной ячейки
+        // включён флаг «разрешены разные типы паллет» — робот в этой секции
+        // не размещает (размещение вручную возможно, автоматика — нет).
+        foreach ($secCells as $s) {
+            if ($isIgn($s)) {
+                continue;
+            }
+            if ((int)($s['allow_multi_pallet_types'] ?? 0) === 1) {
+                return $bad('Секция настроена на разные типы паллет — робот здесь не размещает (ячейка '
+                    . (string)($cell['code'] ?? '') . ')');
+            }
+        }
 
         // Правило «разные товары в одной ячейке»: снятый флаг allow_mixed_goods.
         $mixed = self::mixedGoodsError($cell, (array)($cell['content_skus'] ?? []), self::skuList($sku));
@@ -402,23 +500,14 @@ final class CellPlacement
             return $badRes;
         }
 
-        // Для 3.6 + фин: блокировка 3-й ячейки яруса (причина "(Фин секция)").
+        // Для 3.6 + фин: блокировка заданной ячейки яруса (по умолчанию 3-й).
+        $blockPlace = (string)(int)($robot['beam36_fin_block_place'] ?? 3);
         if ($robot['fin_block_3rd_cell'] === 1 && $beam > 3.4 && $palletType === 'fin') {
+            // На балке 3,6 под фин доступны 1-я, 2-я и 4-я ячейки;
+            // заданная (по умолчанию 3-я) блокируется всегда.
             $placeNo = trim((string)($cell['place_no'] ?? ''));
-            if ($placeNo === '3') {
-                // Проверяем, есть ли уже 3 фин на ярусе (включая эту ячейку, если она уже фин)
-                $finOnLevel = 0;
-                foreach ($lvlCells as $s) {
-                    if ($isIgn($s)) {
-                        continue;
-                    }
-                    if (self::isOccupied($s) && self::normalizePalletType((string)($s['pallet_type'] ?? '')) === 'fin') {
-                        $finOnLevel++;
-                    }
-                }
-                if ($finOnLevel >= 3) {
-                    return $bad('Ячейка заблокирована: (Фин секция) — 3-я ячейка яруса недоступна для фин');
-                }
+            if ($placeNo !== '' && (int)$placeNo === (int)$blockPlace) {
+                return $bad('Ячейка заблокирована: (Фин секция) — ячейка ' . $blockPlace . ' яруса недоступна для фин');
             }
         }
 

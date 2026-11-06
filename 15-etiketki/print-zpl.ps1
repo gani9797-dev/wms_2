@@ -1,9 +1,12 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][string]$Printer,
     [Parameter(Mandatory = $true)][string]$Path
 )
 
+# Сообщения об ошибках должны приходить в PHP в UTF-8 (иначе json_encode
+# возвращает пустую строку и фронт видит «Unexpected end of JSON input»).
 $ErrorActionPreference = 'Stop'
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
 $code = @"
 using System;
@@ -26,8 +29,8 @@ public static class WmsRawPrinter
     [DllImport("winspool.drv", EntryPoint = "ClosePrinter", SetLastError = true)]
     private static extern bool ClosePrinter(IntPtr hPrinter);
 
-    [DllImport("winspool.drv", EntryPoint = "StartDocPrinterW", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool StartDocPrinter(IntPtr hPrinter, int level, [In] ref DOC_INFO_1 di);
+    [DllImport("winspool.drv", EntryPoint = "StartDocPrinterW", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+    private static extern bool StartDocPrinter(IntPtr hPrinter, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DOC_INFO_1 di);
 
     [DllImport("winspool.drv", EntryPoint = "EndDocPrinter", SetLastError = true)]
     private static extern bool EndDocPrinter(IntPtr hPrinter);
@@ -41,7 +44,7 @@ public static class WmsRawPrinter
     [DllImport("winspool.drv", EntryPoint = "WritePrinter", SetLastError = true)]
     private static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, int dwCount, out int dwWritten);
 
-    public static void Send(string printerName, string fileName)
+    public static void Send(string printerName, string fileName, string datatype)
     {
         IntPtr hPrinter;
         if (!OpenPrinter(printerName, out hPrinter, IntPtr.Zero))
@@ -51,8 +54,8 @@ public static class WmsRawPrinter
         {
             DOC_INFO_1 di = new DOC_INFO_1();
             di.pDocName = "WMS label";
-            di.pDatatype = "RAW";
-            if (!StartDocPrinter(hPrinter, 1, ref di))
+            di.pDatatype = datatype;
+            if (!StartDocPrinter(hPrinter, 1, di))
                 throw new Exception("StartDocPrinter failed: " + Marshal.GetLastWin32Error());
 
             try
@@ -95,4 +98,20 @@ public static class WmsRawPrinter
 "@
 
 Add-Type -TypeDefinition $code -Language CSharp
-[WmsRawPrinter]::Send($Printer, $Path)
+
+try {
+    [WmsRawPrinter]::Send($Printer, $Path, "RAW")
+}
+catch {
+    # Некоторые драйверы (Bluetooth/виртуальные) не принимают явный тип документа —
+    # повторяем без pDatatype (спулер подставит RAW сам).
+    $first = $_.Exception.Message
+    try {
+        [WmsRawPrinter]::Send($Printer, $Path, $null)
+    }
+    catch {
+        throw ("Не удалось отправить этикетку на принтер '" + $Printer + "': " + $first)
+    }
+}
+
+Write-Output "OK"

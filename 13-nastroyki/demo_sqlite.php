@@ -256,7 +256,20 @@ try {
         zj(['ok' => true]);
     }
 
-    if ($action === 'robot_get') {
+    if ($action === 'place_robot_get') {
+    require_once __DIR__ . '/../05-yacheyki-hraneniya/CellPlacement.php';
+    $sdb = wms_storage_pdo();
+    echo json_encode(['settings' => CellPlacement::robotSettings($sdb)], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+if ($action === 'place_robot_save' && $method === 'POST') {
+    require_once __DIR__ . '/../05-yacheyki-hraneniya/CellPlacement.php';
+    $sdb = wms_storage_pdo();
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    echo json_encode(['ok' => true, 'settings' => CellPlacement::saveRobotSettings($sdb, $b)], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+if ($action === 'robot_get') {
         $run = wms_robot_tick();
         $s = wms_robot_settings();
         zj(['settings' => $s, 'paths' => wms_robot_paths(), 'last_tick' => $run,
@@ -280,7 +293,140 @@ try {
         zj(['rows' => wms_robot_log_rows((int)($_GET['limit'] ?? 100))]);
     }
 
-    zj(['error' => 'Неизвестное действие: zones|zone_save|zone_delete|contractors|robot_get|robot_save|robot_run|robot_log'], 404);
+    // ---------------- Интеграция и логирование (API v1) ----------------
+    if (in_array($action, [
+        'api_settings_get', 'api_settings_save', 'api_regen', 'api_log', 'api_webhooks',
+        'api_webhook_retry', 'api_webhook_run', 'api_selftest', 'api_health',
+    ], true)) {
+        require_once __DIR__ . '/../shared/IntegrationApi.php';
+        $adb = wms_api_pdo();
+        $mask = static function (string $v): string {
+            if ($v === '') {
+                return '';
+            }
+            return strlen($v) <= 8 ? '••••' : (substr($v, 0, 4) . '••••' . substr($v, -4));
+        };
+
+        if ($action === 'api_settings_get') {
+            $s = wms_api_settings($adb);
+            zj([
+                'settings' => [
+                    'enabled' => (int)$s['enabled'], 'client_id' => (string)$s['client_id'],
+                    'client_secret_masked' => $mask((string)$s['client_secret']),
+                    'jwt_secret_masked' => $mask((string)$s['jwt_secret']),
+                    'callback_url' => (string)($s['callback_url'] ?? ''),
+                    'webhook_secret_masked' => $mask((string)($s['webhook_secret'] ?? '')),
+                    'rate_limit' => (int)$s['rate_limit'], 'token_ttl' => (int)$s['token_ttl'],
+                    'updated_at' => (string)($s['updated_at'] ?? ''),
+                ],
+                'health' => wms_api_health($adb),
+                'endpoints' => [
+                    ['method' => 'POST', 'path' => '/api/v1/oauth/token', 'desc' => 'Токен (client_credentials / refresh_token)'],
+                    ['method' => 'POST', 'path' => '/api/v1/orders', 'desc' => 'Создание/обновление заказа (идемпотентно по external_id)'],
+                    ['method' => 'GET', 'path' => '/api/v1/orders/{external_id}', 'desc' => 'Статус заказа'],
+                    ['method' => 'GET', 'path' => '/api/v1/stock?page=&page_size=', 'desc' => 'Остатки по ячейкам (≤ 100 на страницу)'],
+                    ['method' => 'POST', 'path' => '/api/v1/nomenclature', 'desc' => 'Номенклатура и штрихкоды (идемпотентно по SKU)'],
+                    ['method' => 'GET', 'path' => '/api/v1/webhooks', 'desc' => 'Очередь вебхуков (outbox)'],
+                    ['method' => 'GET', 'path' => '/api/v1/health', 'desc' => 'Здоровье интеграции (5xx, очередь)'],
+                ],
+            ]);
+        }
+
+        if ($action === 'api_settings_save' && $method === 'POST') {
+            $b = json_decode(file_get_contents('php://input'), true) ?? [];
+            $s = wms_api_settings_save($adb, $b);
+            zj(['ok' => true, 'settings' => [
+                'enabled' => (int)$s['enabled'], 'client_id' => (string)$s['client_id'],
+                'client_secret_masked' => $mask((string)$s['client_secret']),
+                'jwt_secret_masked' => $mask((string)$s['jwt_secret']),
+                'callback_url' => (string)($s['callback_url'] ?? ''),
+                'webhook_secret_masked' => $mask((string)($s['webhook_secret'] ?? '')),
+                'rate_limit' => (int)$s['rate_limit'], 'token_ttl' => (int)$s['token_ttl'],
+            ]]);
+        }
+
+        if ($action === 'api_regen' && $method === 'POST') {
+            $b = json_decode(file_get_contents('php://input'), true) ?? [];
+            $s = wms_api_regenerate($adb, (string)($b['which'] ?? 'client_secret'));
+            $which = (string)($b['which'] ?? 'client_secret');
+            $val = (string)($s[$which] ?? '');
+            zj(['ok' => true, 'which' => $which, 'value' => $val, 'masked' => $mask($val)]);
+        }
+
+        if ($action === 'api_log') {
+            $page = max(1, (int)($_GET['page'] ?? 1));
+            $per = max(10, min(100, (int)($_GET['page_size'] ?? 25)));
+            $where = ['1=1'];
+            $params = [];
+            $dir = (string)($_GET['direction'] ?? '');
+            if (in_array($dir, ['IN', 'OUT'], true)) {
+                $where[] = 'direction = :dir';
+                $params[':dir'] = $dir;
+            }
+            $grp = (string)($_GET['status'] ?? '');
+            if (in_array($grp, ['2xx', '3xx', '4xx', '5xx'], true)) {
+                $where[] = 'status_code BETWEEN ' . (int)$grp[0] . '00 AND ' . (int)$grp[0] . '99';
+            }
+            $q = trim((string)($_GET['q'] ?? ''));
+            if ($q !== '') {
+                $where[] = '(request_id LIKE :q1 OR path LIKE :q2 OR client_id LIKE :q3)';
+                $params[':q1'] = '%' . $q . '%';
+                $params[':q2'] = '%' . $q . '%';
+                $params[':q3'] = '%' . $q . '%';
+            }
+            $w = implode(' AND ', $where);
+            $st = $adb->prepare("SELECT COUNT(*) FROM wms_api_log WHERE $w");
+            $st->execute($params);
+            $total = (int)$st->fetchColumn();
+            $off = ($page - 1) * $per;
+            $st = $adb->prepare("SELECT id,request_id,direction,client_id,method,path,status_code,duration_ms,ip,error,created_at
+                    FROM wms_api_log WHERE $w ORDER BY id DESC LIMIT $per OFFSET $off");
+            $st->execute($params);
+            zj(['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total, 'page' => $page,
+                'page_size' => $per, 'pages' => (int)ceil($total / $per)]);
+        }
+
+        if ($action === 'api_webhooks') {
+            $rows = $adb->query("SELECT id,event,external_id,status,attempts,http_code,last_error,created_at,sent_at
+                    FROM wms_webhook_outbox ORDER BY id DESC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
+            zj(['rows' => $rows, 'health' => wms_api_health($adb)]);
+        }
+
+        if ($action === 'api_webhook_retry' && $method === 'POST') {
+            $b = json_decode(file_get_contents('php://input'), true) ?? [];
+            zj(wms_webhook_retry($adb, (int)($b['id'] ?? 0)));
+        }
+
+        if ($action === 'api_webhook_run' && $method === 'POST') {
+            $res = wms_webhooks_dispatch_due($adb, 20);
+            zj($res + ['health' => wms_api_health($adb)]);
+        }
+
+        if ($action === 'api_selftest' && $method === 'POST') {
+            $b = json_decode(file_get_contents('php://input'), true) ?? [];
+            $s = wms_api_settings($adb);
+            $secret = (string)($b['client_secret'] ?? '');
+            if ($secret === '' || !hash_equals((string)$s['client_secret'], $secret)) {
+                zj(['ok' => false, 'error' => 'Неверный client_secret'], 401);
+            }
+            $tok = wms_api_issue_token($s);
+            $claims = wms_api_verify_token($adb, 'Bearer ' . $tok['access_token']);
+            zj([
+                'ok' => $claims !== null,
+                'token_type' => $tok['token_type'],
+                'expires_in' => $tok['expires_in'],
+                'token_preview' => substr($tok['access_token'], 0, 28) . '…',
+                'claims' => ['sub' => (string)($claims['sub'] ?? ''), 'exp' => (int)($claims['exp'] ?? 0)],
+                'health' => wms_api_health($adb),
+            ]);
+        }
+
+        if ($action === 'api_health') {
+            zj(wms_api_health($adb));
+        }
+    }
+
+    zj(['error' => 'Неизвестное действие: zones|zone_save|zone_delete|contractors|robot_get|robot_save|robot_run|robot_log|api_*'], 404);
 } catch (Throwable $e) {
     zj(['error' => $e->getMessage()], 400);
 }

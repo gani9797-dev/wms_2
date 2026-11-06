@@ -39,7 +39,7 @@ button.danger{background:#C62828;border-color:#C62828}
 .inforow b{color:#6432FF}
 h2.m{margin:0 0 8px;font-size:20px}
 </style>
-</head>
+<script src="no-autokb.js"></script></head>
 <body>
 <header><div class="row"><b>ТСД</b><span class="who" id="who"></span><span id="rolechip"></span><span style="flex:1"></span><button id="homebtn" class="hbtn" style="width:auto">☰ Меню</button></div><small id="hsub">выбери роль</small></header>
 <main><div id="home"></div>
@@ -132,7 +132,7 @@ _s.map((s,i)=>`<button class="sub" data-i="${i}">${s.t}</button>`).join('')+`</d
 $('home').querySelectorAll('.menu button').forEach(b=>b.onclick=()=>openItem(_s[+b.dataset.i],_t));
 $('bk').onclick=()=>backOrRoot();window.scrollTo(0,0)});return}
 if(it.act==='mtasks'){const _type=it.type,_st=(typeof it.sub==='string'?it.sub:(it.subtype||''));if(_type==='перемещение'&&_st==='целый паллет'){renderMoveWhole();return}loadModuleTasks(_type,_st);return}
-if(it.act==='ship'){loadTasks();return}
+if(it.act==='ship'){loadShipOut();return}
 if(it.act==='info'){const _it=it;navPush('info:'+(_it.kind||''),()=>_renderInfo(_it));return}}
 function _renderInfo(it){homeVisible();$('home').innerHTML=`<div class="card"><div class="mut">Информация</div><h2 class="m">${it.t}</h2>
 ${it.hint?`<div class="mut">${it.hint}</div>`:''}
@@ -294,9 +294,89 @@ const my=SEQ;const api=MODE==='in'?apiRecv:apiShip;const uid=ME?ME.id:null;
 const body=MODE==='in'?{receipt_id:CUR,receiver_id:uid}:{shipment_id:CUR,user_id:uid};
 const r=await api('?action=finish',{method:'POST',body:JSON.stringify(body)});const j=await r.json();if(my!==SEQ)return;
 if(!r.ok){toast('Ошибка: '+(j.error||''));return}toast(MODE==='in'?'Приемка завершена ✓':'Сборка завершена ✓');navReplace('ship',()=>{CUR=null;$('detail').classList.add('hidden');_loadTasks()})}
+// --- «Отгрузить ТС»: скан отгрузки → скан SSCC по кругу → «Отгружено» ---
+let SHIP=null;
+function loadShipOut(){SHIP=null;navPush('shipout',()=>{hideHome();CUR=null;const d=$('detail');if(d)d.classList.add('hidden');_loadShipOut()})}
+async function _loadShipOut(){
+const my=SEQ;const r=await apiShip('?action=ship_list');
+if(my!==SEQ)return;
+if(r.status===401){toast('Нет доступа: проверь токен');return}
+const j=await r.json();if(my!==SEQ)return;
+const box=$('tasks');$('detail').classList.add('hidden');$('home').style.display='';
+let s=`<div class="card"><h2 class="m">Отгрузить ТС</h2>
+<div class="mut">Отсканируй номер отгрузки:</div>
+<input id="sq" placeholder="Номер отгрузки (S-…)" autocomplete="off">
+<button id="sgo">Найти отгрузку</button></div>`;
+s+=`<div class="mut">Отгрузки к отгрузке: ${(j.rows||[]).length}. Выбери документ:</div>`;
+s+=(j.rows||[]).map(t=>{
+const no=t.doc_no||('#'+t.id);
+const sub=(t.consignee||'')+(t.warehouse?(' · '+t.warehouse):'');
+const pal=t.pallets_total?`${t.pallets_shipped} / ${t.pallets_total} SSCC`:'нет паллет';
+const pc=t.pallets_total?Math.round(t.pallets_shipped/t.pallets_total*100):0;
+return `<div class="task" data-id="${t.id}"><b>${no}</b> <span class="mut">${sub}</span><br>
+<span class="mut">${t.status_label||t.status} · ${pal}</span><div class="prog"><i style="width:${pc}%"></i></div></div>`}).join('');
+box.innerHTML=s;
+const q=$('sq');q.focus();
+q.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();findShipment()}};
+$('sgo').onclick=findShipment;
+box.querySelectorAll('.task').forEach(el=>el.onclick=()=>openShipOut(+el.dataset.id));
+}
+async function findShipment(){const v=(($('sq')||{value:''}).value||'').trim();if(!v){toast('Отсканируй номер отгрузки');return}
+const r=await apiShip('?action=ship_task&q='+encodeURIComponent(v));const j=await r.json().catch(()=>({}));
+if(!r.ok){toast(j.error||'Отгрузка не найдена',4000);return}
+openShipOut(j.head.id)}
+function openShipOut(id){navPush('shipdoc:'+id,()=>_openShipOut(id))}
+async function _openShipOut(id){
+const my=SEQ;const r=await apiShip('?action=ship_task&id='+id);
+if(my!==SEQ)return;
+const j=await r.json();if(my!==SEQ)return;
+if(!r.ok){toast(j.error||'Ошибка отгрузки');return}
+SHIP=j;renderShipOut();
+}
+function shipStatusLabel(h){return h.status==='shipped'?'Отгружено':(h.status||'')}
+function renderShipOut(){
+const h=SHIP.head;const done=SHIP.shipped||0,total=SHIP.total||0;
+const pc=total?Math.round(done/total*100):0;
+let s=`<div class="card"><div class="mut">Отгрузка</div>
+<b style="font-size:20px">${h.doc_no||('#'+h.id)}</b><br>
+<span>${h.consignee||''}${h.warehouse?(' · '+h.warehouse):''}</span><br>
+<span class="mut">статус: ${shipStatusLabel(h)}</span>
+<div class="prog"><i style="width:${pc}%"></i></div>
+<b>Отгружено ${done} из ${total} SSCC</b></div>`;
+if(total===0){
+ s+=`<div class="card amber"><b>Нет паллет для отгрузки</b><div class="mut">Сначала отсортируйте товар по отгрузке (SSCC должны быть в зоне отгрузки).</div></div>`;
+}else if(SHIP.all_shipped){
+ s+=`<div class="card green"><b>Все SSCC отгружены ✓</b><div class="mut">Документ переведён в статус «Отгружено».</div></div>`;
+}else{
+ s+=`<div class="card"><input id="sscc" placeholder="Скан SSCC паллеты" autocomplete="off">
+<button id="ssend">Отгрузить паллету (Enter)</button>
+<div class="mut" style="margin-top:6px">Сканируй SSCC по кругу: количество сканов равно числу паллет.</div></div>`;
+}
+s+=`<div class="card"><b>Паллеты (${total})</b>`+((SHIP.pallets||[]).length
+ ?(SHIP.pallets||[]).map(p=>`<div class="item"><b>${p.sscc}</b> <span class="mut">${p.status_label}${p.qty?(' · '+p.qty+' шт'):''}</span></div>`).join('')
+ :'<div class="mut">Паллет нет</div>')+`</div>`;
+s+=`<div class="row"><button class="ghost" id="bk">← К списку</button></div>`;
+$('detail').innerHTML=s;
+$('tasks').innerHTML='';$('home').style.display='none';$('detail').classList.remove('hidden');
+const e=$('sscc');if(e){e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();shipPallet()}};$('ssend').onclick=shipPallet}
+$('bk').onclick=()=>backOrRoot();window.scrollTo(0,0);
+}
+async function shipPallet(){const e=$('sscc');if(!e)return;const v=(e.value||'').trim();if(!v){toast('Отсканируй SSCC');return}
+const my=SEQ;const uid=ME?ME.id:null;
+let j={},ok=false;
+try{const r=await apiShip('?action=ship_pallet',{method:'POST',body:JSON.stringify({shipment_id:SHIP.head.id,sscc:v,user_id:uid,user_fio:ME?ME.fio:''})});j=await r.json().catch(()=>({}));ok=r.ok}catch(_){toast('Нет сети — повтори скан',3500);return}
+if(!ok){toast(j.error||'Ошибка отгрузки',4000);e.value='';e.focus();return}
+e.value='';
+if(j.already){toast('Паллета уже отгружена: '+(j.sscc||v),3000)}
+else if(j.all_shipped){toast('Все SSCC отгружены — отгрузка «Отгружено» ✓',5000)}
+else{toast('Отгружено '+(j.sscc||v)+'. Осталось паллет: '+(j.remaining!==undefined?j.remaining:'—'),3000)}
+if(my!==SEQ)return;
+await _openShipOut(SHIP.head.id);
+}
 setInterval(flushQueue,5000);
 function boot(){if(ROLE||(ME&&ME.role)){if(!ROLE){ROLE=roleOf();localStorage.setItem('tsd_role',ROLE)}paintRole()}NAV=[{n:'root',run:showMenuOnly}];try{history.replaceState({n:'root'},'')}catch(_){}SEQ++;showMenuOnly()}
 boot();
 </script>
+<script src="auth-gate.js"></script>
 </body>
 </html>

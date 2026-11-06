@@ -227,7 +227,7 @@ final class ReceiptRepository
         try {
             $st = $this->pdo->prepare(
                 "SELECT o.pallet, o.sku, o.qty, o.accept_status, o.accept_date AS changed_at,
-                        o.supplier_batch,
+                        o.supplier_batch, o.no_serial, o.reject_reason,
                         (SELECT i.name FROM receipt_items i
                           WHERE i.receipt_id = o.receipt_id AND i.sku = o.sku LIMIT 1) AS name,
                         (SELECT p.status FROM tsd_pallets p
@@ -274,6 +274,14 @@ final class ReceiptRepository
     {
         $w = ['1=1'];
         $p = [];
+        // Учётная запись клиента: только документы с товаром его владельца (модуль 9).
+        if (function_exists('wms_data_owner_scope')) {
+            $scope = wms_data_owner_scope();
+            if ($scope !== '') {
+                $w[] = "EXISTS (SELECT 1 FROM receipt_items ri JOIN products pr ON pr.sku = ri.sku WHERE ri.receipt_id = r.id AND COALESCE(pr.owner,'') = :own_scope)";
+                $p[':own_scope'] = $scope;
+            }
+        }
         if ($f->search !== null) {
             $w[] = '(r.doc_no LIKE :q OR r.external_no LIKE :q OR sup.name LIKE :q OR ctr.name LIKE :q OR r.contract_no LIKE :q)';
             $p[':q'] = '%' . $f->search . '%';

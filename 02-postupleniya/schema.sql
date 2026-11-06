@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS receipts (
   deviation_qty DECIMAL(14,3) NOT NULL DEFAULT 0 COMMENT 'Отклонение (шт)',
   excess_qty DECIMAL(14,3) NOT NULL DEFAULT 0 COMMENT 'Излишек при закрытии (шт)',
   shortage_qty DECIMAL(14,3) NOT NULL DEFAULT 0 COMMENT 'Недостача при закрытии (шт)',
+  crossdock TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Кросс-док: приёмка по флагу документа',
   priority VARCHAR(20) NOT NULL DEFAULT 'normal' COMMENT 'low/normal/high',
   volume DECIMAL(12,3) NOT NULL DEFAULT 0 COMMENT 'Объем, м3',
   quarantine TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Карантин',

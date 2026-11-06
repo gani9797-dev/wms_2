@@ -53,7 +53,24 @@ function wms_stock_ensure_columns(PDO $nomPdo): void
                 $nomPdo->exec('ALTER TABLE product_stock ADD COLUMN receipt_no TEXT');
             }
         }
-        if (!in_array('quality', $have, true)) {
+        foreach ([
+            ['no_serial', 'TINYINT(1) NOT NULL DEFAULT 0', 'INTEGER NOT NULL DEFAULT 0', 'SMALLINT NOT NULL DEFAULT 0'],
+            ['reject_reason', 'VARCHAR(255) NULL', 'TEXT NULL', 'VARCHAR(255) NULL'],
+        ] as [$col, $ddlMy, $ddlSqlite, $ddlPg]) {
+            if (!in_array($col, $have, true)) {
+                try {
+                    if ($isMysql) {
+                        $nomPdo->exec("ALTER TABLE `product_stock` ADD COLUMN `$col` $ddlMy");
+                    } elseif ($isPg) {
+                        $nomPdo->exec('ALTER TABLE "product_stock" ADD COLUMN "' . $col . '" ' . $ddlPg);
+                    } else {
+                        $nomPdo->exec('ALTER TABLE product_stock ADD COLUMN ' . $col . ' ' . $ddlSqlite);
+                    }
+                    $have[] = $col;
+                } catch (Throwable) {
+                }
+            }
+        }        if (!in_array('quality', $have, true)) {
             if ($isMysql) {
                 $nomPdo->exec("ALTER TABLE `product_stock` ADD COLUMN quality VARCHAR(20) NULL DEFAULT 'новый'");
             } elseif ($isPg) {
@@ -95,12 +112,12 @@ function wms_ensure_product_card(PDO $nomPdo, string $sku, int $whId, array &$cr
     if ($isMysql || $isPg) {
         $nomPdo->prepare(
             "INSERT INTO products (code,sku,name,unit,category,brand,owner,warehouse_id,length_mm,width_mm,height_mm,weight_g,qty,reserved_qty,is_active,is_archived,created_at,updated_at)
-             VALUES (:code,:sku,:name,'шт','Мячи','Wilson','ООО «Эталон»',:wh,100,100,100,500,0,0,1,0,NOW(),NOW())"
+             VALUES (:code,:sku,:name,'шт','Мячи','',NULL,:wh,100,100,100,500,0,0,1,0,NOW(),NOW())"
         )->execute([':code' => $code, ':sku' => $sku, ':name' => 'Не заявлен: ' . $sku, ':wh' => $whId]);
     } else {
         $nomPdo->prepare(
             "INSERT INTO products (code,sku,name,unit,category,brand,owner,warehouse_id,length_mm,width_mm,height_mm,weight_g,qty,reserved_qty,is_active,is_archived,created_at)
-             VALUES (:code,:sku,:name,'шт','Мячи','Wilson','ООО «Эталон»',:wh,100,100,100,500,0,0,1,0,datetime('now'))"
+             VALUES (:code,:sku,:name,'шт','Мячи','',NULL,:wh,100,100,100,500,0,0,1,0,datetime('now'))"
         )->execute([':code' => $code, ':sku' => $sku, ':name' => 'Не заявлен: ' . $sku, ':wh' => $whId]);
     }
     $p->execute([':s' => $sku]);
@@ -249,6 +266,29 @@ function wms_sync_pallet_stock(PDO $recPdo, PDO $nomPdo, int $receiptId, string 
         }
     } catch (Throwable) {
     }
+    // Приёмка без с/н: признак и причина отбраковки (для журнала и товарного запаса).
+    $noSerial = 0;
+    $rejectReason = '';
+    try {
+        $nsSql = "SELECT COALESCE(MAX(no_serial),0) AS ns, MAX(reject_reason) AS rr
+                    FROM receipt_operations
+                   WHERE receipt_id=:r AND sku=:s AND accept_status='Принято'";
+        $nsP = [':r' => $receiptId, ':s' => $sku];
+        if ($pallet !== '') {
+            $nsSql .= ' AND pallet=:p';
+            $nsP[':p'] = $pallet;
+        } else {
+            $nsSql .= " AND COALESCE(pallet,'')=''";
+        }
+        $ns = $recPdo->prepare($nsSql);
+        $ns->execute($nsP);
+        $nsRow = $ns->fetch(PDO::FETCH_ASSOC) ?: [];
+        $noSerial = (int)($nsRow['ns'] ?? 0) ? 1 : 0;
+        $rejectReason = trim((string)($nsRow['rr'] ?? ''));
+    } catch (Throwable) {
+    }
+    $out['no_serial'] = $noSerial;
+    $out['reject_reason'] = $rejectReason;
     $out['quality'] = $quality;
 
     $created = [];
@@ -329,8 +369,8 @@ function wms_sync_pallet_stock(PDO $recPdo, PDO $nomPdo, int $receiptId, string 
     if ($row) {
         // UPDATE — остаток приводится к факту приёмки по паллете.
         try {
-            $nomPdo->prepare("UPDATE product_stock SET qty=:q, pallet_type=COALESCE(pallet_type,:pt), prod_date=COALESCE(:pd, prod_date), quality=COALESCE(:ql, quality), pallet_date=COALESCE(pallet_date, :pdt), supplier_batch=COALESCE(NULLIF(supplier_batch,''), :sb) WHERE id=:id")
-                ->execute([':q' => $fact, ':pt' => $ptype, ':pd' => $prodDate, ':ql' => $quality, ':pdt' => $palletDate, ':sb' => ($batch !== '' ? $batch : null), ':id' => (int)$row['id']]);
+            $nomPdo->prepare("UPDATE product_stock SET qty=:q, pallet_type=COALESCE(pallet_type,:pt), prod_date=COALESCE(:pd, prod_date), quality=COALESCE(:ql, quality), pallet_date=COALESCE(pallet_date, :pdt), supplier_batch=COALESCE(NULLIF(supplier_batch,''), :sb), no_serial=:ns, reject_reason=:rr WHERE id=:id")
+                ->execute([':q' => $fact, ':pt' => $ptype, ':pd' => $prodDate, ':ql' => $quality, ':pdt' => $palletDate, ':sb' => ($batch !== '' ? $batch : null), ':ns' => $noSerial, ':rr' => ($rejectReason !== '' ? $rejectReason : null), ':id' => (int)$row['id']]);
         } catch (Throwable) {
             $nomPdo->prepare("UPDATE product_stock SET qty=:q WHERE id=:id")
                 ->execute([':q' => $fact, ':id' => (int)$row['id']]);
@@ -339,11 +379,12 @@ function wms_sync_pallet_stock(PDO $recPdo, PDO $nomPdo, int $receiptId, string 
     } else {
         try {
             $nomPdo->prepare(
-                "INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,pallet_type,qty,receipt_id,receipt_no,prod_date,quality,pallet_date,supplier_batch)
-                 VALUES (:p,:w,:c,:pal,:pt,:q,:r,:d,:pd,:ql,:pdt,:sb)"
+                "INSERT INTO product_stock (product_id,warehouse_id,cell,pallet,pallet_type,qty,receipt_id,receipt_no,prod_date,quality,pallet_date,supplier_batch,no_serial,reject_reason)
+                 VALUES (:p,:w,:c,:pal,:pt,:q,:r,:d,:pd,:ql,:pdt,:sb,:ns,:rr)"
             )->execute([':p' => $pid, ':w' => $whId, ':c' => $cell, ':pal' => ($pallet !== '' ? $pallet : null),
                 ':pt' => $ptype, ':q' => $fact, ':r' => $receiptId, ':d' => $docNo, ':pd' => $prodDate, ':ql' => $quality, ':pdt' => $palletDate,
-                ':sb' => ($batch !== '' ? $batch : null)]);
+                ':sb' => ($batch !== '' ? $batch : null), ':ns' => $noSerial,
+                ':rr' => ($rejectReason !== '' ? $rejectReason : null)]);
             $out['stock_id'] = (int)$nomPdo->lastInsertId();
         } catch (Throwable) {
             try {
@@ -410,7 +451,8 @@ function wms_sync_pallet_stock(PDO $recPdo, PDO $nomPdo, int $receiptId, string 
                 'zone' => 'Приёмка',
                 'user_id' => $userId,
                 'user_fio' => $userFio,
-                'comment' => 'Приёмка поступления · принято всего: ' . $fact,
+                'comment' => 'Приёмка поступления · принято всего: ' . $fact
+                    . ($noSerial ? (' · без с/н' . ($rejectReason !== '' ? ': ' . $rejectReason : '')) : ''),
                 'quality' => $quality,
             ]);
         } catch (Throwable) {

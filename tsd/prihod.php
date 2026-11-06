@@ -18,7 +18,7 @@ require_once __DIR__ . '/../shared/tsd_auth.php';
 //   (таблица-дубль tsd_stock удалена — расходилась с фактом и с 8.1).
 // Порядок этапов на ТСД: 1 ворота = ячейка приёмки (DOK-01…DOK-10, зона «Приёмка»
 // в таблице ячеек хранения) → 2 документы с этими воротами / ШК документа
-// (ворота проставляются в receipts.gate) → 3 скан ШК товара → 4 кросс-док? →
+// (ворота проставляются в receipts.gate) → 3 скан ШК товара → 4 кросс-док по флагу receipts.crossdock →
 // 5 «Приёмка»: количество вручную + тарное место (2 — недостача, 3 — излишки) →
 // 6 качество → 7 подтверждение позиции и закрытие тарного места.
 // Марки ЧЗ (если требуются) сканируются перед приёмкой. Количество единиц вводится
@@ -250,6 +250,23 @@ function pos_chz_required(PDO $pdo, int $rid, string $sku): bool
         && csv_upload_chz_required($itemGroup, $measure['chz_group'] ?? null);
 }
 
+/** Карта «серийный номер → агрегационный QR-код» из тела запроса. */
+function req_serial_aggs(array $body): array
+{
+    $raw = $body['serial_aggs'] ?? null;
+    if (!is_array($raw)) {
+        return [];
+    }
+    $out = [];
+    foreach ($raw as $k => $v) {
+        $k = trim((string)$k);
+        if ($k !== '') {
+            $out[$k] = trim((string)$v);
+        }
+    }
+    return $out;
+}
+
 /** Список серийных номеров из тела запроса (массив или строка через запятую). */
 function req_serials(array $body): array
 {
@@ -313,7 +330,7 @@ function save_prod_date(PDO $pdo, int $rid, string $sku, ?string $batch, string 
  *   receipt_flags (flag_type='serial': serial_no, sku, pallet, qty)
  *   + журнал серийных номеров (WmsJournal::logSerial, операция «Приход»).
  */
-function write_receipt_serials(PDO $pdo, int $rid, string $sku, array $serials, ?string $pallet, $uid, ?string $userFio = null): void
+function write_receipt_serials(PDO $pdo, int $rid, string $sku, array $serials, ?string $pallet, $uid, ?string $userFio = null, array $aggs = []): void
 {
     if (!$serials) {
         return;
@@ -357,17 +374,18 @@ function write_receipt_serials(PDO $pdo, int $rid, string $sku, array $serials, 
     $ins = null;
     try {
         $ins = $pdo->prepare(
-            "INSERT INTO receipt_flags (receipt_id,item_id,flag_type,serial_no,sku,pallet,qty,status,flag_date,created_at)
-             VALUES (:r,:i,'serial',:s,:sku,:pal,1,'годный',datetime('now'),datetime('now'))"
+            "INSERT INTO receipt_flags (receipt_id,item_id,flag_type,serial_no,sku,pallet,qty,status,flag_date,created_at,aggregation)
+             VALUES (:r,:i,'serial',:s,:sku,:pal,1,'годный',datetime('now'),datetime('now'),:ag)"
         );
     } catch (Throwable) {
         $ins = null;
     }
     foreach ($serials as $sn) {
+        $agg = (isset($aggs[$sn]) && trim((string)$aggs[$sn]) !== '') ? trim((string)$aggs[$sn]) : null;
         if ($ins) {
             try {
                 $ins->execute([':r' => $rid, ':i' => $itemId, ':s' => $sn, ':sku' => $sku,
-                    ':pal' => ($pallet !== null && $pallet !== '') ? $pallet : null]);
+                    ':pal' => ($pallet !== null && $pallet !== '') ? $pallet : null, ':ag' => $agg]);
             } catch (Throwable) {
             }
         }
@@ -383,6 +401,7 @@ function write_receipt_serials(PDO $pdo, int $rid, string $sku, array $serials, 
                 'cell' => $cell,
                 'user_id' => $uid,
                 'user_fio' => $userFio,
+                'aggregation' => $agg,
             ]);
         } catch (Throwable) {
         }
@@ -756,6 +775,20 @@ if ($action === 'serial_check') {
     $d->execute([':r' => $rid, ':s' => $serial]);
     if ($d->fetch()) {
         j(['error' => 'Серийный номер уже отсканирован: ' . $serial], 409);
+    }
+    // Журнал серийных номеров: нельзя принять с/н, который уже есть в журнале.
+    try {
+        require_once __DIR__ . '/../shared/db.php';
+        $nom = nom_db();
+        $jt = wms_ext_table($nom, 'wms_serial_journal');
+        $q = $nom->prepare("SELECT op_type, receipt_doc_no, shipment_doc_no FROM $jt WHERE serial_no=:s LIMIT 1");
+        $q->execute([':s' => $serial]);
+        if ($ex = $q->fetch(PDO::FETCH_ASSOC)) {
+            $doc = trim((string)($ex['receipt_doc_no'] ?? '')) !== '' ? (string)$ex['receipt_doc_no'] : (string)($ex['shipment_doc_no'] ?? '');
+            j(['error' => 'Серийный номер уже в журнале (' . (string)($ex['op_type'] ?? '') . ($doc !== '' ? ' ' . $doc : '') . '): ' . $serial,
+                'in_journal' => true, 'serial' => $serial], 409);
+        }
+    } catch (Throwable) {
     }
     j(['ok' => true, 'serial' => $serial]);
 }
@@ -1151,6 +1184,7 @@ if ($action === 'qty' && $method === 'POST') {
     $uid = (int)($body['user_id'] ?? 0) ?: null;
     $batch = req_batch($body);
     $serials = req_serials($body);
+    $serialAggs = req_serial_aggs($body);
     $noSerial = (int)($body['no_serial'] ?? 0) ? 1 : 0;
     $allowExcess = (int)($body['allow_excess'] ?? 0) === 1;
     $rejectReason = trim((string)($body['reject_reason'] ?? ''));
@@ -1204,6 +1238,17 @@ if ($action === 'qty' && $method === 'POST') {
             $d->execute([':r' => $rid, ':s' => $sn]);
             if ($d->fetch()) {
                 j(['error' => 'Серийный номер уже отсканирован: ' . $sn], 409);
+            }
+            // Уже в журнале серийных номеров (другой приход/отгрузка) — принять нельзя.
+            try {
+                $nom = nom_db();
+                $jt = wms_ext_table($nom, 'wms_serial_journal');
+                $q = $nom->prepare("SELECT op_type FROM $jt WHERE serial_no=:s LIMIT 1");
+                $q->execute([':s' => $sn]);
+                if ($q->fetchColumn() !== false) {
+                    j(['error' => 'Серийный номер уже в журнале: ' . $sn, 'in_journal' => true], 409);
+                }
+            } catch (Throwable) {
             }
         }
     } elseif ($needSerial && !$isDefect) {
@@ -1268,7 +1313,7 @@ if ($action === 'qty' && $method === 'POST') {
         op_insert($pdo, $rid, $sku, $batch, 'Принято', $uid, $pallet, $qty, null, $noSerial,
             $rejectReason !== '' ? $rejectReason : null);
         // Серийные номера: receipt_flags + журнал серийных номеров («Приход»).
-        write_receipt_serials($pdo, $rid, $sku, $serials, $pallet, $uid);
+        write_receipt_serials($pdo, $rid, $sku, $serials, $pallet, $uid, null, $serialAggs);
         // Дата производства партии — в позицию документа.
         if ($prodDate !== '') {
             save_prod_date($pdo, $rid, $sku, $batch, $prodDate, $uid);

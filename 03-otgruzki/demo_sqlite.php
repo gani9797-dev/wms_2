@@ -310,7 +310,7 @@ if ($action === 'list') {
         echo json_encode(['error' => 'нужен id отгрузки'], JSON_UNESCAPED_UNICODE);
     } else {
         try {
-            $nid = $service->copy($sid, 1);
+            $nid = $service->copy($sid, function_exists('wms_auth_actor_id') ? wms_auth_actor_id() : 1);
             http_response_code(201);
             echo json_encode(['id' => $nid], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
@@ -351,7 +351,7 @@ if ($action === 'list') {
 } elseif ($action === 'priority' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $b = json_decode(file_get_contents('php://input'), true) ?? [];
     try {
-        $service->priority((int)($_GET['id'] ?? 0), (string)($b['priority'] ?? 'normal'), 1);
+        $service->priority((int)($_GET['id'] ?? 0), (string)($b['priority'] ?? 'normal'), function_exists('wms_auth_actor_id') ? wms_auth_actor_id() : 1);
         echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(400);
@@ -592,7 +592,7 @@ if ($action === 'list') {
         }
         try {
             $doc = (string)$pdo->query('SELECT doc_no FROM shipments WHERE id=' . $sid)->fetchColumn();
-            $service->delete($sid, 1);
+            $service->delete($sid, function_exists('wms_auth_actor_id') ? wms_auth_actor_id() : 1);
             // В демо нет FK-каскадов — чистим связанные строки вручную.
             foreach (['shipment_items', 'shipment_orders', 'shipment_history', 'shipment_documents', 'shipment_flags', 'tsd_picks'] as $tbl) {
                 try {

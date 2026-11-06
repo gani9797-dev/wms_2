@@ -406,6 +406,12 @@ function wms_ensure_employees_schema(PDO $pdo): void
             ['tsd_access', 'tsd_access TINYINT(1) NOT NULL DEFAULT 0', 'tsd_access INTEGER DEFAULT 0', 'tsd_access SMALLINT NOT NULL DEFAULT 0'],
             ['is_blocked', 'is_blocked TINYINT(1) NOT NULL DEFAULT 0', 'is_blocked INTEGER DEFAULT 0', 'is_blocked SMALLINT NOT NULL DEFAULT 0'],
             ['allow_unplanned_exit', 'allow_unplanned_exit TINYINT(1) NOT NULL DEFAULT 0', 'allow_unplanned_exit INTEGER DEFAULT 0', 'allow_unplanned_exit SMALLINT NOT NULL DEFAULT 0'],
+            // Учётная запись клиента (модуль 9): контрагент, фильтр по владельцу товара, отчёты дашборда.
+            ['counterparty_id', 'counterparty_id BIGINT UNSIGNED NULL', 'counterparty_id INTEGER NULL', 'counterparty_id BIGINT NULL'],
+            ['data_owner', 'data_owner VARCHAR(255) NULL', 'data_owner TEXT NULL', 'data_owner VARCHAR(255) NULL'],
+            ['dashboard_reports', 'dashboard_reports TEXT NULL', 'dashboard_reports TEXT NULL', 'dashboard_reports TEXT NULL'],
+            // Реальный пароль (base64) для показа администратору/разработчику (модуль 10).
+            ['password_plain', 'password_plain VARCHAR(255) NULL', 'password_plain TEXT NULL', 'password_plain VARCHAR(255) NULL'],
             ['updated_at', 'updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP', 'updated_at TEXT DEFAULT (datetime(\'now\'))', 'updated_at TIMESTAMP NOT NULL DEFAULT NOW()'],
         ];
         foreach ($cols as [$c, $ddlMysql, $ddlSqlite, $ddlPg]) {
@@ -525,6 +531,27 @@ function wms_ensure_shipments_schema(PDO $pdo): void
     wms_ensure_column($pdo, 'client_order_items', 'owner_contractor_id', 'BIGINT UNSIGNED NULL', 'owner_contractor_id INTEGER NULL', 'owner_contractor_id BIGINT NULL');
     wms_ensure_column($pdo, 'client_order_items', 'owner_name', 'VARCHAR(255) NULL', 'owner_name TEXT NULL', 'owner_name VARCHAR(255) NULL');
     wms_ensure_column($pdo, 'shipment_items', 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
+    // Статусы паллет отгрузки (упаковочный лист 3.2): отбор → зона отгрузки → отгружено.
+    // sorted_at — паллета отсортирована; in_zone_at — весь товар паллеты в зоне отгрузки;
+    // shipped_at — отгружено (функция ТСД «Отгрузить ТС», скан SSCC).
+    wms_ensure_table($pdo, 'shipment_pallets', $drv === 'pgsql'
+        ? "CREATE TABLE IF NOT EXISTS shipment_pallets (
+              id BIGSERIAL PRIMARY KEY, shipment_id BIGINT NOT NULL, sscc VARCHAR(50) NOT NULL,
+              qty NUMERIC(14,3) NOT NULL DEFAULT 0, sorted_at TIMESTAMP NULL, in_zone_at TIMESTAMP NULL,
+              shipped_at TIMESTAMP NULL, user_id BIGINT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+              UNIQUE (shipment_id, sscc))"
+        : "CREATE TABLE IF NOT EXISTS shipment_pallets (
+              id INTEGER PRIMARY KEY AUTOINCREMENT, shipment_id INTEGER NOT NULL, sscc TEXT NOT NULL,
+              qty REAL DEFAULT 0, sorted_at TEXT, in_zone_at TEXT, shipped_at TEXT,
+              user_id INTEGER, created_at TEXT DEFAULT (datetime('now')))");
+    try {
+        if ($drv === 'pgsql') {
+            $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_ship_pallet ON shipment_pallets(shipment_id, sscc)");
+        } else {
+            $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_ship_pallet ON shipment_pallets(shipment_id, sscc)");
+        }
+    } catch (Throwable) {
+    }
     if ($drv === 'pgsql') {
         wms_ensure_column($pdo, 'shipments', 'is_crossdock', 'TINYINT(1) NOT NULL DEFAULT 0', 'is_crossdock INTEGER DEFAULT 0', 'is_crossdock SMALLINT NOT NULL DEFAULT 0');
         wms_ensure_table($pdo, 'shipment_marks', "CREATE TABLE IF NOT EXISTS shipment_marks (
@@ -832,10 +859,14 @@ function wms_ensure_receipt_schema(PDO $pdo): void
         wms_ensure_column($pdo, 'receipt_items', 'owner_name', 'VARCHAR(255) NULL', 'owner_name TEXT NULL', 'owner_name VARCHAR(255) NULL');
         wms_ensure_column($pdo, 'receipts', 'excess_qty', 'DOUBLE DEFAULT 0', 'excess_qty REAL DEFAULT 0', 'excess_qty NUMERIC(14,3) NOT NULL DEFAULT 0');
         wms_ensure_column($pdo, 'receipts', 'shortage_qty', 'DOUBLE DEFAULT 0', 'shortage_qty REAL DEFAULT 0', 'shortage_qty NUMERIC(14,3) NOT NULL DEFAULT 0');
+        wms_ensure_column($pdo, 'receipts', 'crossdock', 'TINYINT(1) DEFAULT 0', 'crossdock INTEGER DEFAULT 0', 'crossdock SMALLINT NOT NULL DEFAULT 0');
         wms_ensure_column($pdo, 'receipt_operations', 'supplier_batch', 'VARCHAR(100)', 'supplier_batch TEXT', 'VARCHAR(100)');
         wms_ensure_column($pdo, 'receipt_operations', 'reason', 'TEXT', 'reason TEXT', 'TEXT');
         wms_ensure_column($pdo, 'receipt_flags', 'status', 'VARCHAR(20)', "status TEXT DEFAULT 'годный'", "VARCHAR(20) NOT NULL DEFAULT 'годный'");
         wms_ensure_column($pdo, 'receipt_flags', 'reason', 'TEXT', 'reason TEXT', 'TEXT');
+        wms_ensure_column($pdo, 'receipt_flags', 'qty', 'DOUBLE DEFAULT 1', 'qty REAL DEFAULT 1', 'NUMERIC(14,3) NOT NULL DEFAULT 1');
+        wms_ensure_column($pdo, 'receipt_flags', 'pallet', 'VARCHAR(50)', 'pallet TEXT', 'VARCHAR(50)');
+        wms_ensure_column($pdo, 'receipt_flags', 'aggregation', 'VARCHAR(255)', 'aggregation TEXT', 'TEXT');
         wms_ensure_column($pdo, 'tsd_act_rasx', 'supplier_batch', 'VARCHAR(100)', "supplier_batch TEXT DEFAULT ''", "supplier_batch VARCHAR(100) NOT NULL DEFAULT ''");
         // Гард идемпотентного проброса прихода в Номенклатуру (shared/StockSync.php).
         // Без него повторное закрытие документа прибавляло бы остаток дважды.
@@ -863,7 +894,7 @@ function wms_ensure_receipt_schema(PDO $pdo): void
       items_count INTEGER DEFAULT 0, sku_count INTEGER DEFAULT 0, qty_total REAL DEFAULT 0, boxes INTEGER DEFAULT 0,
       accepted_pct INTEGER DEFAULT 0, placed_pct INTEGER DEFAULT 0,
       accepted_qty REAL DEFAULT 0, placed_qty REAL DEFAULT 0, deviation_qty REAL DEFAULT 0,
-      excess_qty REAL DEFAULT 0, shortage_qty REAL DEFAULT 0,
+      excess_qty REAL DEFAULT 0, shortage_qty REAL DEFAULT 0, crossdock INTEGER DEFAULT 0,
       priority TEXT DEFAULT 'normal', volume REAL DEFAULT 0, quarantine INTEGER DEFAULT 0,
       has_diff INTEGER DEFAULT 0, serial_scan INTEGER DEFAULT 0, marking_scan INTEGER DEFAULT 0,
       creator_id INTEGER, unloader_id INTEGER, responsible_id INTEGER,
@@ -944,10 +975,14 @@ function wms_ensure_receipt_schema(PDO $pdo): void
     $ensureCol('receipt_items', 'owner_name', "owner_name TEXT");
     $ensureCol('receipts', 'excess_qty', "excess_qty REAL DEFAULT 0");
     $ensureCol('receipts', 'shortage_qty', "shortage_qty REAL DEFAULT 0");
+    $ensureCol('receipts', 'crossdock', "crossdock INTEGER DEFAULT 0");
     $ensureCol('receipt_operations', 'supplier_batch', "supplier_batch TEXT");
     $ensureCol('receipt_operations', 'reason', "reason TEXT");
     $ensureCol('receipt_flags', 'status', "status TEXT DEFAULT 'годный'");
     $ensureCol('receipt_flags', 'reason', "reason TEXT");
+    $ensureCol('receipt_flags', 'qty', "qty REAL DEFAULT 1");
+    $ensureCol('receipt_flags', 'pallet', "pallet TEXT");
+    $ensureCol('receipt_flags', 'aggregation', "aggregation TEXT");
     $ensureCol('tsd_act_rasx', 'supplier_batch', "supplier_batch TEXT DEFAULT ''");
     try {
         // users — единый справочник: pin проставляем в общей базе сотрудников.
@@ -970,6 +1005,8 @@ function wms_ensure_tasks_schema(PDO $pdo): void
     // Партия в строках задания: ТСД видит, какую именно партию отбирать.
     wms_ensure_column($pdo, 'task_items', 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
     wms_ensure_column($pdo, 'wms_task_items', 'supplier_batch', 'VARCHAR(100) NULL', 'supplier_batch TEXT', 'VARCHAR(100) NULL');
+    // ФИО исполнителя в истории заданий (вкладка «История») — для всех драйверов.
+    wms_ensure_column($pdo, 'task_history', 'user_fio', 'VARCHAR(150) NULL', 'user_fio TEXT', 'user_fio VARCHAR(150) NULL');
     if ($drv === 'pgsql') return;
     $pdo->exec("CREATE TABLE IF NOT EXISTS warehouses (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS tasks (
@@ -990,7 +1027,7 @@ function wms_ensure_tasks_schema(PDO $pdo): void
       state TEXT, executor_fio TEXT)");
     $pdo->exec("CREATE TABLE IF NOT EXISTS task_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL, user_id INTEGER,
-      action TEXT NOT NULL, field TEXT, field_label TEXT, old_value TEXT, new_value TEXT,
+      user_fio TEXT, action TEXT NOT NULL, field TEXT, field_label TEXT, old_value TEXT, new_value TEXT,
       created_at TEXT DEFAULT (datetime('now')))");
     // Закрепление заданий за сотрудниками ТСД + журнал проблем/сортировки.
     $pdo->exec("CREATE TABLE IF NOT EXISTS tsd_task_locks (task_id INTEGER PRIMARY KEY, user_id INTEGER, user_fio TEXT, status TEXT NOT NULL DEFAULT 'work', updated_at TEXT DEFAULT (datetime('now')))");
@@ -1060,6 +1097,7 @@ function wms_ensure_storage_schema(PDO $pdo): void
         // Настройки ячейки: несколько типов паллет / разные товары в одной ячейке.
         wms_ensure_column($pdo, 'storage_cells', 'allow_multi_pallet_types', 'TINYINT(1) NOT NULL DEFAULT 1', 'allow_multi_pallet_types INTEGER DEFAULT 1', 'allow_multi_pallet_types SMALLINT NOT NULL DEFAULT 1');
         wms_ensure_column($pdo, 'storage_cells', 'allow_mixed_goods', 'TINYINT(1) NOT NULL DEFAULT 1', 'allow_mixed_goods INTEGER DEFAULT 1', 'allow_mixed_goods SMALLINT NOT NULL DEFAULT 1');
+        wms_ensure_column($pdo, 'storage_cells', 'quality_lock', 'TINYINT(1) NOT NULL DEFAULT 0', 'quality_lock INTEGER DEFAULT 0', 'quality_lock SMALLINT NOT NULL DEFAULT 0');
         // Ячейки приёмки (ворота) DOK-01…DOK-10 — та же таблица ячеек хранения.
         wms_ensure_cell_zones_schema($pdo);
         wms_ensure_receiving_cells($pdo);
@@ -1077,7 +1115,7 @@ function wms_ensure_storage_schema(PDO $pdo): void
       hazmat_allowed INTEGER DEFAULT 0, comment TEXT, is_archived INTEGER DEFAULT 0,
       beam_width REAL DEFAULT 3.2, cell_height_mm INTEGER DEFAULT NULL,
       allowed_pallet_types TEXT DEFAULT 'euro,fin', pallet_type TEXT DEFAULT NULL,
-      allow_multi_pallet_types INTEGER DEFAULT 1, allow_mixed_goods INTEGER DEFAULT 1,
+      allow_multi_pallet_types INTEGER DEFAULT 1, allow_mixed_goods INTEGER DEFAULT 1, quality_lock INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))");
     $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_cell_code_wh ON storage_cells(code, warehouse_id)");
     // Миграция старых файлов: ширина балки / высота ячейки / типы тары / факт. тип паллеты.
@@ -1088,6 +1126,7 @@ function wms_ensure_storage_schema(PDO $pdo): void
         'pallet_type' => 'pallet_type TEXT',
         'allow_multi_pallet_types' => 'allow_multi_pallet_types INTEGER DEFAULT 1',
         'allow_mixed_goods' => 'allow_mixed_goods INTEGER DEFAULT 1',
+        'quality_lock' => 'quality_lock INTEGER DEFAULT 0',
     ] as $col => $ddl) {
         try {
             $has = false;
@@ -1231,9 +1270,9 @@ function wms_ensure_ext_schema(PDO $pdo): void
     wms_ensure_column($pdo, $cp, 'placement_cell_codes', 'TEXT NULL', 'placement_cell_codes TEXT', 'TEXT NULL');
 
     // --- storage_cells: смешанные товары / несколько типов паллет / качество ---
-    wms_ensure_column($pdo, 'storage_cells', 'allow_mixed_goods', 'TINYINT(1) NOT NULL DEFAULT 1', 'allow_mixed_goods INTEGER DEFAULT 1', 'SMALLINT NOT NULL DEFAULT 1');
-    wms_ensure_column($pdo, 'storage_cells', 'allow_multi_pallet_types', 'TINYINT(1) NOT NULL DEFAULT 1', 'allow_multi_pallet_types INTEGER DEFAULT 1', 'SMALLINT NOT NULL DEFAULT 1');
-    wms_ensure_column($pdo, 'storage_cells', 'quality_lock', 'TINYINT(1) NOT NULL DEFAULT 0', 'quality_lock INTEGER DEFAULT 0', 'SMALLINT NOT NULL DEFAULT 0');
+    wms_ensure_column($pdo, 'storage_cells', 'allow_mixed_goods', 'TINYINT(1) NOT NULL DEFAULT 1', 'allow_mixed_goods INTEGER DEFAULT 1', 'allow_mixed_goods SMALLINT NOT NULL DEFAULT 1');
+    wms_ensure_column($pdo, 'storage_cells', 'allow_multi_pallet_types', 'TINYINT(1) NOT NULL DEFAULT 1', 'allow_multi_pallet_types INTEGER DEFAULT 1', 'allow_multi_pallet_types SMALLINT NOT NULL DEFAULT 1');
+    wms_ensure_column($pdo, 'storage_cells', 'quality_lock', 'TINYINT(1) NOT NULL DEFAULT 0', 'quality_lock INTEGER DEFAULT 0', 'quality_lock SMALLINT NOT NULL DEFAULT 0');
 
     // --- product_stock: тара, партия, дата паллеты, качество, дата производства ---
     // Раньше эти колонки дотягивались только через PRAGMA (SQLite), поэтому на
@@ -1358,6 +1397,8 @@ function wms_ensure_ext_schema(PDO $pdo): void
           user_id INTEGER, user_fio TEXT, created_at TEXT DEFAULT (datetime('now')))");
         wms_ensure_index($pdo, $sj, 'idx_sj_serial', 'serial_no');
     }
+    // Агрегационный код (QR с несколькими с/н через «;») — что именно сканировали.
+    wms_ensure_column($pdo, 'wms_serial_journal', 'aggregation', 'VARCHAR(255) NULL', 'aggregation TEXT', 'TEXT NULL');
 
     // --- буфер отбора: виртуальная промежуточная ячейка + сборочная паллета ---
     $bt = wms_ext_table($pdo, 'tsd_pick_buffers');

@@ -15,19 +15,143 @@ main{flex:1;padding:18px 22px;max-width:1100px}
 .card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px}
 code{background:#F4F0FB;padding:2px 6px;border-radius:6px}
 </style>
-<style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
+<style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style><style>
+.mut{color:var(--mut);font-size:13px}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:4px 0;font-size:24px}
+.bar{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap;align-items:center}
+.bar input[type=text]{width:330px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.bar input[type=date]{padding:9px 10px;border:1px solid var(--line);border-radius:10px;font-size:14px}
+.dt{font-size:13px;color:#4A4A4A}
+.btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 16px;cursor:pointer;font-size:14px}
+.btn.pri{background:var(--vio);color:#fff;border-color:var(--vio);font-weight:700}
+.btn.sm{padding:6px 12px;font-size:13px;border-radius:8px}
+.card.pad0{padding:0;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px;color:#2C313C;border-bottom:1px solid #F0F0F0;white-space:nowrap;background:#FAFAFC}
+td{padding:10px;border-bottom:1px solid #F0F0F0}
+tbody tr{cursor:pointer}tbody tr:hover td{background:#fafaff}
+a.num{color:var(--vio);font-weight:700;text-decoration:none}
+.pager{padding:10px 14px;color:var(--mut);font-size:13px;border-bottom:1px solid #F0F0F0}
+.paltop{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.st{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700}
+.st.checked{background:#E8F5E9;color:#1B7F32;border:1px solid #A5D6A7}
+.st.shipped{background:#E3F2FD;color:#1565C0;border:1px solid #90CAF9}
+.st.pending{background:#F4F5F7;color:#8A92A6;border:1px solid #E0E0E0}
+.pdet{background:#FAFAFC;border:1px solid var(--line);border-radius:8px;padding:12px}
+.pdet h3{margin:0 0 8px;font-size:16px}
+</style></head>
 <body>
-<aside><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp open" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a on" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<aside><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp open" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a on" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-nablyudeniya/app.html">📊 11 Наблюдения</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
 <main>
-<h1>3.2 Упаковка заказов</h1>
-<div class="card">
-<p>Модуль в разработке. Структура БД — см. <code>schema.sql</code> в этой папке.</p>
-<ul>
-<li>Номер по схеме «Список модулей ИТОГО»: <b>3.2</b></li>
-<li>Папка: <code>03.2-upakovka-zakazov/</code></li>
-<li>Таблицы: <code>03.2-upakovka-zakazov/schema.sql</code></li>
-</ul>
+<div class="page">
+<div class="top"><div><div class="mut">Модуль 3.2</div><h1>Упаковка заказов</h1></div>
+<div class="mut" id="who"></div></div>
+<div class="bar">
+<input id="q" type="text" placeholder="Номер отгрузки / грузополучатель">
+<span class="dt">С <input id="from" type="date"></span>
+<span class="dt">По <input id="to" type="date"></span>
+<button class="btn pri" id="reload">Показать</button>
+<button class="btn" id="today">Сегодня</button>
+<button class="btn" id="month">Текущий месяц</button>
+</div>
+<div class="card pad0">
+<div class="pager" id="ptop">Отгрузки</div>
+<table><thead><tr><th>№ отгрузки</th><th>Дата</th><th>Грузополучатель</th><th>Статус</th><th>SSCC (проверено / отгружено / всего)</th><th></th></tr></thead>
+<tbody id="ships"><tr><td colspan="6" class="mut">Загрузка…</td></tr></tbody></table>
+</div>
+<div class="card" id="palcard" style="display:none;margin-top:14px">
+<div class="paltop"><b id="paltitle"></b><button class="btn" id="pclose">Закрыть</button></div>
+<table><thead><tr><th>SSCC</th><th>Позиций</th><th>Кол-во</th><th>С/н</th><th>Статус</th><th></th></tr></thead>
+<tbody id="pals"></tbody></table>
+<div id="pdetail" style="margin-top:12px"></div>
+</div>
 </div>
 </main>
-<script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script></body>
+<script data-nav2>document.addEventListener('click',function(e){var c=e.target.closest('.caret');if(!c)return;var g=c.closest('.grp');if(g)g.classList.toggle('open');});</script><script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api=async p=>{const r=await fetch('demo_sqlite.php'+p);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j};
+const fmt=v=>{const n=Number(v||0);return Number.isInteger(n)?String(n):n.toFixed(3).replace(/\.?0+$/,'')};
+let SHIP=null;
+function iso(d){return d.toISOString().slice(0,10)}
+function setRange(from,to){$('#from').value=from;$('#to').value=to}
+async function load(){
+ $('#ships').innerHTML='<tr><td colspan="6" class="mut">Загрузка…</td></tr>';
+ const p=new URLSearchParams({action:'shipments'});
+ if($('#q').value.trim())p.set('q',$('#q').value.trim());
+ if($('#from').value)p.set('from',$('#from').value);
+ if($('#to').value)p.set('to',$('#to').value);
+ try{
+  const j=await api('?'+p.toString());
+  const rows=j.rows||[];
+  $('#ptop').textContent='Отгрузок: '+rows.length;
+  if(!rows.length){$('#ships').innerHTML='<tr><td colspan="6" class="mut">Нет отгрузок за выбранный период</td></tr>';return}
+  $('#ships').innerHTML=rows.map(r=>{
+   const all=r.pallets_total||0,ch=r.pallets_checked||0,sh=r.pallets_shipped||0;
+   return `<tr data-id="${r.id}"><td><a class="num">${esc(r.doc_no||('#'+r.id))}</a></td>
+   <td>${esc((r.doc_date||'').slice(0,16))}</td><td>${esc(r.consignee||'')}</td>
+   <td>${esc(r.status_label||r.status||'')}</td>
+   <td>${ch} / ${sh} / ${all}</td>
+   <td><button class="btn sm" data-open="${r.id}">SSCC</button></td></tr>`}).join('');
+  $('#ships').querySelectorAll('tr[data-id]').forEach(tr=>tr.onclick=()=>openShipment(+tr.dataset.id));
+ }catch(e){$('#ships').innerHTML='<tr><td colspan="6" class="st pending">Ошибка: '+esc(e.message)+'</td></tr>'}
+}
+async function openShipment(id){
+ SHIP=id;$('#palcard').style.display='';
+ $('#paltitle').textContent='Загрузка паллет…';$('#pals').innerHTML='';$('#pdetail').innerHTML='';
+ try{
+  const j=await api('?action=pallets&shipment_id='+id);
+  const h=j.head||{},rows=j.rows||[];
+  $('#paltitle').textContent='Отгрузка '+(h.doc_no||('#'+id))+' · '+((h.doc_date||'').slice(0,10))+' · '+(h.consignee||'');
+  if(!rows.length){$('#pals').innerHTML='<tr><td colspan="6" class="mut">Паллет (SSCC) нет — товар ещё не отсортирован</td></tr>';return}
+  $('#pals').innerHTML=rows.map(r=>`<tr data-sscc="${esc(r.sscc)}">
+   <td><a class="num">${esc(r.sscc)}</a></td><td>${r.items}</td><td>${fmt(r.qty)}</td><td>${r.serials}</td>
+   <td><span class="st ${esc(r.status)}">${esc(r.status_label)}</span></td>
+   <td><button class="btn sm" data-print="${esc(r.sscc)}">Печать A4</button></td></tr>`).join('');
+  $('#pals').querySelectorAll('tr[data-sscc]').forEach(tr=>tr.onclick=e=>{
+   if(e.target.closest('[data-print]'))return;
+   openPallet(tr.dataset.sscc)});
+  $('#pals').querySelectorAll('[data-print]').forEach(b=>b.onclick=e=>{
+   e.stopPropagation();printPallet(b.dataset.print)});
+  $('#palcard').scrollIntoView({behavior:'smooth',block:'start'});
+ }catch(e){$('#paltitle').textContent='Ошибка: '+e.message}
+}
+async function openPallet(sscc){
+ $('#pdetail').innerHTML='<div class="pdet mut">Загрузка состава…</div>';
+ try{
+  const j=await api('?action=pallet&shipment_id='+SHIP+'&sscc='+encodeURIComponent(sscc));
+  const items=j.items||[];
+  let s=`<div class="pdet"><h3>SSCC ${esc(sscc)} <span class="st ${esc(j.status)}">${esc(j.status_label)}</span></h3>`;
+  if(!items.length){s+='<div class="mut">Состав паллеты не найден</div>'}
+  else{
+   s+='<table><thead><tr><th>Код</th><th>Артикул</th><th>Наименование</th><th>Кол-во</th><th>Серийные номера</th></tr></thead><tbody>'+
+    items.map(i=>`<tr><td>${esc(i.code)}</td><td>${esc(i.sku)}</td><td>${esc(i.name)}</td>
+    <td>${fmt(i.qty)} ${esc(i.unit||'')}</td><td>${(i.serials||[]).map(x=>esc(x)).join(', ')||'<span class="mut">—</span>'}</td></tr>`).join('')+
+    '</tbody></table>';
+  }
+  s+=`<div style="margin-top:10px"><button class="btn pri" data-print="${esc(sscc)}">Печать A4 PDF</button></div></div>`;
+  $('#pdetail').innerHTML=s;
+  $('#pdetail').querySelector('[data-print]').onclick=()=>printPallet(sscc);
+ }catch(e){$('#pdetail').innerHTML='<div class="pdet st pending">Ошибка: '+esc(e.message)+'</div>'}
+}
+function printPallet(sscc){window.open('demo_sqlite.php?action=print&shipment_id='+SHIP+'&sscc='+encodeURIComponent(sscc),'_blank')}
+$('#reload').onclick=load;
+$('#pclose').onclick=()=>{$('#palcard').style.display='none';SHIP=null};
+$('#q').addEventListener('keydown',e=>{if(e.key==='Enter')load()});
+$('#today').onclick=()=>{const d=iso(new Date());setRange(d,d);load()};
+$('#month').onclick=()=>{const n=new Date();setRange(iso(new Date(n.getFullYear(),n.getMonth(),1)),iso(new Date(n.getFullYear(),n.getMonth()+1,0)));load()};
+(function paintWho(){
+ let tries=0;
+ const tick=()=>{
+  const u=window.WMS_USER;
+  if(u&&u.fio){$('#who').textContent=u.fio;return}
+  if(++tries<15)setTimeout(tick,300);
+ };
+ tick();
+})();
+const n0=new Date();
+setRange(iso(new Date(n0.getFullYear(),n0.getMonth(),1)),iso(new Date(n0.getFullYear(),n0.getMonth()+1,0)));
+load();
+</script></body>
 </html>

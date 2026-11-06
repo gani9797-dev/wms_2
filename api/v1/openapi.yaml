@@ -1,0 +1,375 @@
+openapi: 3.1.0
+info:
+  title: WMS Integration API
+  version: 1.0.0
+  description: |
+    Двусторонняя интеграция WMS с внешней системой (ERP/TMS/1С/маркетплейс).
+
+    - Аутентификация: OAuth 2.0 client_credentials, токен JWT HS256, TTL ≤ 60 минут.
+      Обновление — повторный запрос токена или `grant_type=refresh_token`.
+    - Формат: JSON, UTF-8. Все запросы по HTTPS (TLS 1.2+) на стороне прокси.
+    - Идемпотентность: `external_id` для заказов, `sku` для номенклатуры.
+      Повтор не создаёт дубликат и возвращает результат первой обработки.
+    - Пагинация: `page`, `page_size` (максимум 100).
+    - Rate limit: по умолчанию 100 запросов/сек на токен; при превышении — 429 и `Retry-After`.
+    - Трейсинг: `X-Request-Id` (генерируется, если не передан) пишется в журнал на 30 дней.
+    - Статусы отгрузки передаются вебхуками `order.status` с подписью HMAC-SHA256
+      (`X-Wms-Signature: sha256=<hex>`), повторы 1/5/30 минут, затем DEAD (outbox).
+  contact:
+    name: WMS TiMLog
+servers:
+  - url: https://wms.example.com/api/v1
+    description: Prod
+  - url: http://127.0.0.1:8001/api/v1
+    description: Dev
+tags:
+  - name: auth
+  - name: orders
+  - name: nomenclature
+  - name: stock
+  - name: ops
+paths:
+  /oauth/token:
+    post:
+      tags: [auth]
+      summary: Получить/обновить access_token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grant_type, client_id, client_secret]
+              properties:
+                grant_type:
+                  type: string
+                  enum: [client_credentials, refresh_token]
+                client_id: { type: string }
+                client_secret: { type: string }
+                refresh_token:
+                  type: string
+                  description: Действующий токен (для grant_type=refresh_token)
+      responses:
+        '200':
+          description: Токен выдан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, const: Bearer }
+                  expires_in: { type: integer, maximum: 3600 }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /orders:
+    post:
+      tags: [orders]
+      summary: Создать/обновить заказ (ERP → WMS)
+      description: |
+        Идемпотентно по `external_id`: повторная отправка возвращает 200 и результат
+        первой обработки (без создания дубликата).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderIn'
+      responses:
+        '201':
+          description: Заказ создан
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResult' }
+        '200':
+          description: Заказ уже существует (идемпотентный повтор)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResult' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /orders/{external_id}:
+    get:
+      tags: [orders]
+      summary: Статус заказа
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: external_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Заказ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  external_id: { type: string }
+                  order_id: { type: integer }
+                  doc_no: { type: string }
+                  status: { type: string }
+                  consignee: { type: string }
+                  created_at: { type: string }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /nomenclature:
+    post:
+      tags: [nomenclature]
+      summary: Создать/обновить номенклатуру и штрихкоды (ERP → WMS)
+      description: Идемпотентно по `sku` (201 — создано, 200 — обновлено).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sku, name]
+              properties:
+                sku: { type: string }
+                name: { type: string }
+                unit: { type: string, default: шт }
+                code: { type: string }
+                barcodes:
+                  type: array
+                  items: { type: string }
+                  description: Штрихкоды (EAN-13, Code128 и т.п.)
+      responses:
+        '201':
+          description: Номенклатура создана
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductResult' }
+        '200':
+          description: Номенклатура обновлена
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductResult' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Конфликт (код товара занят)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /stock:
+    get:
+      tags: [stock]
+      summary: Остатки по ячейкам (WMS → ERP)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Страница остатков
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/StockRow' }
+                  page: { type: integer }
+                  page_size: { type: integer }
+                  total: { type: integer }
+                  pages: { type: integer }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /webhooks:
+    get:
+      tags: [ops]
+      summary: Очередь исходящих вебхуков (outbox)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Последние 100 событий
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        event: { type: string }
+                        external_id: { type: string }
+                        status: { type: string, enum: [PENDING, RETRY, SENT, DEAD] }
+                        attempts: { type: integer }
+                        http_code: { type: integer }
+                        last_error: { type: string }
+                        created_at: { type: string }
+                        sent_at: { type: string }
+  /health:
+    get:
+      tags: [ops]
+      summary: Здоровье интеграции
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Метрики и алерты
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests_1h: { type: integer }
+                  errors_1h: { type: integer }
+                  bad_share: { type: number }
+                  webhooks_pending: { type: integer }
+                  webhooks_dead: { type: integer }
+                  alerts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        level: { type: string, enum: [error, warning] }
+                        code: { type: string }
+                        message: { type: string }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      schema: { type: string, maxLength: 64 }
+  responses:
+    Unauthorized:
+      description: Нет/просрочен токен
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Объект не найден
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Превышен лимит запросов
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: Через сколько секунд повторить
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServerError:
+      description: Внутренняя ошибка
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [code, message, details]
+      properties:
+        code:
+          type: string
+          examples: [VALIDATION_ERROR, UNAUTHORIZED, NOT_FOUND, RATE_LIMITED, INTERNAL_ERROR]
+        message: { type: string }
+        details:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    OrderLineIn:
+      type: object
+      required: [sku, qty]
+      properties:
+        sku: { type: string }
+        qty:
+          type: number
+          exclusiveMinimum: 0
+        name: { type: string }
+        unit: { type: string }
+        barcode: { type: string }
+    OrderIn:
+      type: object
+      required: [external_id, items]
+      properties:
+        external_id:
+          type: string
+          description: Идентификатор заказа во внешней системе (ключ идемпотентности)
+        number:
+          type: string
+          description: Номер заказа (если не задан — API-<external_id>)
+        contractor_id: { type: integer }
+        consignee: { type: string }
+        address: { type: string }
+        phone: { type: string }
+        warehouse_id: { type: integer, default: 1 }
+        comment: { type: string }
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/OrderLineIn' }
+    OrderResult:
+      type: object
+      properties:
+        external_id: { type: string }
+        order_id: { type: integer }
+        doc_no: { type: string }
+        status: { type: string }
+        created:
+          type: boolean
+          description: true — создан этим запросом, false — идемпотентный повтор
+    ProductResult:
+      type: object
+      properties:
+        sku: { type: string }
+        product_id: { type: integer }
+        created: { type: boolean }
+    StockRow:
+      type: object
+      properties:
+        sku: { type: string }
+        product_code: { type: string }
+        name: { type: string }
+        unit: { type: string }
+        owner: { type: string }
+        warehouse_id: { type: integer }
+        cell: { type: string }
+        pallet: { type: string }
+        pallet_type: { type: string }
+        qty: { type: number }
+        quality: { type: string }
+        receipt_no: { type: string }
+        prod_date: { type: [string, 'null'] }

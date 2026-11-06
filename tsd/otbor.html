@@ -36,7 +36,7 @@ table.mini{width:100%;border-collapse:collapse;font-size:14px}table.mini td,tabl
 .hidden{display:none}
 #navback{position:fixed;left:12px;bottom:16px;z-index:98;width:auto;padding:12px 18px;min-height:48px;font-size:16px;display:none;background:#fff;color:#1C2331;border:1px solid #EAEAEA;border-radius:12px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;margin:0}
 </style>
-</head>
+<script src="no-autokb.js"></script></head>
 <body>
 <header><div class="t"><a href="app.html">‹ Меню</a><b>ТСД — Отбор</b><span id="who" style="font-size:12px;color:#7CFC9A"></span></div><small id="dhead">роль → режим отбора</small></header>
 <main id="m"></main>
@@ -607,5 +607,6 @@ async function scrGate(){
 // Роль уже выбрана в меню (или известна из входа) — сразу к режимам отбора; экран выбора роли — если роль неизвестна.
 if(ROLE){go('mode',scrMode)}else{go('role',scrRole)}
 </script>
+<script src="auth-gate.js"></script>
 </body>
 </html>

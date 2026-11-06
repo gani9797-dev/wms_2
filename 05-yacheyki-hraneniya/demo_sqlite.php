@@ -16,7 +16,7 @@ require_once __DIR__ . '/../shared/StorageZones.php';
 
 $pdo = wms_storage_pdo();
 wms_storage_zones_ensure($pdo);
-$userId = 1;
+$userId = function_exists('wms_auth_actor_id') ? wms_auth_actor_id() : 1;
 
 // --- Сид из схемы 5, если пусто ---
 if ((int)$pdo->query("SELECT COUNT(*) FROM storage_cells")->fetchColumn() === 0) {

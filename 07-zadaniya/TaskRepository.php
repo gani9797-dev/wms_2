@@ -239,6 +239,14 @@ final class TaskRepository
     {
         $w = ['1=1'];
         $p = [];
+        // Учётная запись клиента: только задания с товаром его владельца (модуль 9).
+        if (function_exists('wms_data_owner_scope')) {
+            $scope = wms_data_owner_scope();
+            if ($scope !== '') {
+                $w[] = "EXISTS (SELECT 1 FROM task_items ti JOIN products pr ON pr.sku = ti.sku WHERE ti.task_id = t.id AND COALESCE(pr.owner,'') = :own_scope)";
+                $p[':own_scope'] = $scope;
+            }
+        }
         if ($f->search !== null) {
             $w[] = '(t.doc_no LIKE :q OR t.type LIKE :q OR t.executor_fio LIKE :q OR i.sku LIKE :q OR i.name LIKE :q OR t.doc_ref LIKE :q'
                 . ' OR EXISTS (SELECT 1 FROM task_list_items li JOIN task_lists l ON l.id = li.list_id'

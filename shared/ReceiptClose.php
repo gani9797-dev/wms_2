@@ -453,13 +453,20 @@ function wms_close_receipt(PDO $pdo, int $rid, ?int $userId = null, string $user
         ->execute([':st' => $newStatus, ':ex' => $excessQty, ':sh' => $shortQty, ':cm' => ($comment === '' ? null : $comment), ':id' => $rid]);
     // Логируем в историю документа (вкладка «История» в модуле поступлений).
     try {
-        $fio = $userFio;
-        if ($userId) {
-            $u = $pdo->prepare("SELECT fio FROM users WHERE id=:id");
-            $u->execute([':id' => (int)$userId]);
-            $v = $u->fetchColumn();
-            if ($v !== false && $v !== null && $v !== '') {
-                $fio = (string)$v;
+        // ФИО залогиненного на портал — приоритетнее переданного/локального.
+        $fio = function_exists('wms_auth_fio') ? wms_auth_fio('') : '';
+        if ($fio === '') {
+            $fio = $userFio;
+            if ($userId) {
+                try {
+                    $u = $pdo->prepare("SELECT fio FROM users WHERE id=:id");
+                    $u->execute([':id' => (int)$userId]);
+                    $v = $u->fetchColumn();
+                    if ($v !== false && $v !== null && $v !== '') {
+                        $fio = (string)$v;
+                    }
+                } catch (Throwable) {
+                }
             }
         }
         $pdo->prepare("INSERT INTO receipt_history (receipt_id,user_id,user_fio,action,field,old_value,new_value) VALUES (:r,:u,:f,'close','Статус',:o,:n)")

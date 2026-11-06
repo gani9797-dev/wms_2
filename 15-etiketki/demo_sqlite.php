@@ -16,7 +16,8 @@ function labels_now_sql(PDO $pdo): string
 
 function labels_default_templates(): array
 {
-    $zpl = <<<'ZPL'
+    // Исходный макет — 58×40 мм при 203 dpi (464×320 точек).
+    $zpl58 = <<<'ZPL'
 ^XA
 ^CI28
 ^PW464
@@ -24,6 +25,17 @@ function labels_default_templates(): array
 ^FO0,10^A0N,30,30^FB464,1,0,C^FD{{TITLE}}^FS
 ^FO55,80^BY2,2.0,110^BCN,110,Y,N,N^FD{{CODE}}^FS
 ^FO0,210^A0N,24,24^FB464,1,0,C^FD{{CODE}}^FS
+^XZ
+ZPL;
+    // Увеличенная копия — 70×48 мм при 203 dpi (560×384 точки).
+    $zpl70 = <<<'ZPL'
+^XA
+^CI28
+^PW560
+^LL384
+^FO0,12^A0N,36,36^FB560,1,0,C^FD{{TITLE}}^FS
+^FO60,100^BY2,2.0,130^BCN,130,Y,N,N^FD{{CODE}}^FS
+^FO0,248^A0N,28,28^FB560,1,0,C^FD{{CODE}}^FS
 ^XZ
 ZPL;
     $sqlShipment = <<<'SQL'
@@ -52,13 +64,23 @@ WHERE ps.id = :stock_id
   AND trim(ps.pallet) <> '';
 SQL;
     return [
-        ['shipment', 'Отгрузка', 'Отгрузка', 'S-', $zpl, $sqlShipment, 58, 40],
-        ['receipt', 'Приемка', 'Приемка', 'A-', $zpl, $sqlReceipt, 58, 40],
-        ['picking', 'Комплектация', 'Комплектация', 'PL-', $zpl, $sqlPicking, 58, 40],
-        ['stock_sscc', 'SSCC (товарный запас)', 'Комплектация', 'SSCC', $zpl, $sqlStock, 58, 40],
+        // Исходные (58×40) — печать.
+        ['shipment', 'Отгрузка 58×40', 'Отгрузка', 'S-', $zpl58, $sqlShipment, 58, 40],
+        ['receipt', 'Приемка 58×40', 'Приемка', 'A-', $zpl58, $sqlReceipt, 58, 40],
+        ['picking', 'Комплектация 58×40', 'Комплектация', 'PL-', $zpl58, $sqlPicking, 58, 40],
+        ['stock_sscc', 'SSCC (товарный запас) 58×40', 'Комплектация', 'SSCC', $zpl58, $sqlStock, 58, 40],
+        // Копии увеличенные (70×48) — печать.
+        ['shipment_70', 'Отгрузка 70×48', 'Отгрузка', 'S-', $zpl70, $sqlShipment, 70, 48],
+        ['receipt_70', 'Приемка 70×48', 'Приемка', 'A-', $zpl70, $sqlReceipt, 70, 48],
+        ['picking_70', 'Комплектация 70×48', 'Комплектация', 'PL-', $zpl70, $sqlPicking, 70, 48],
+        ['stock_sscc_70', 'SSCC 70×48', 'Комплектация', 'SSCC', $zpl70, $sqlStock, 70, 48],
+        // Служебные типы: только редактирование кода (печать из других модулей).
+        ['product', 'Товар', 'Товар', 'T-', $zpl70, '', 70, 48],
+        ['cell', 'Ячейка', 'Ячейка', 'C-', $zpl70, '', 70, 48],
+        ['pallet', 'Паллета', 'Паллета', 'P-', $zpl70, '', 70, 48],
+        ['blank', 'Пустая этикетка', 'Этикетка', '', $zpl70, '', 70, 48],
     ];
 }
-
 function labels_ensure_schema(PDO $pdo): void
 {
     $d = labels_driver($pdo);
@@ -164,15 +186,36 @@ function labels_ensure_schema(PDO $pdo): void
             user_id INTEGER, user_login TEXT, printed_at TEXT DEFAULT (datetime('now')))");
     }
     $exists = $pdo->prepare("SELECT COUNT(*) FROM label_templates WHERE label_type=:t");
-    $ins = $pdo->prepare("INSERT INTO label_templates (label_type,label_name,title,prefix,zpl_template,sql_query,width_mm,height_mm) VALUES (:t,:n,:title,:p,:zpl,:sql,58,40)");
+    $ins = $pdo->prepare("INSERT INTO label_templates (label_type,label_name,title,prefix,zpl_template,sql_query,width_mm,height_mm) VALUES (:t,:n,:title,:p,:zpl,:sql,:w,:h)");
     foreach (labels_default_templates() as $tpl) {
         $exists->execute([':t' => $tpl[0]]);
         if ((int)$exists->fetchColumn() === 0) {
             $ins->execute([
                 ':t' => $tpl[0], ':n' => $tpl[1], ':title' => $tpl[2], ':p' => $tpl[3],
-                ':zpl' => $tpl[4], ':sql' => $tpl[5],
+                ':zpl' => $tpl[4], ':sql' => $tpl[5], ':w' => (int)$tpl[6], ':h' => (int)$tpl[7],
             ]);
         }
+    }
+    // Размеры этикеток: исходные — 58×40 (восстанавливаем), копии — 70×48.
+    // Раньше базовые шаблоны были переведены на 70×48 — возвращаем размер и ZPL.
+    try {
+        $defs = [];
+        foreach (labels_default_templates() as $tpl) {
+            $defs[$tpl[0]] = $tpl;
+        }
+        $now = labels_now_sql($pdo);
+        $fix = $pdo->prepare("UPDATE label_templates SET width_mm=:w, height_mm=:h, zpl_template=:z, updated_at=$now
+                               WHERE label_type=:t AND (width_mm<>:w2 OR height_mm<>:h2 OR zpl_template LIKE '%^PW464%')");
+        foreach ($defs as $type => $tpl) {
+            if (!in_array($type, ['shipment', 'receipt', 'picking', 'stock_sscc'], true)) {
+                continue;
+            }
+            $fix->execute([
+                ':w' => (int)$tpl[6], ':h' => (int)$tpl[7], ':w2' => (int)$tpl[6], ':h2' => (int)$tpl[7],
+                ':z' => (string)$tpl[4], ':t' => $type,
+            ]);
+        }
+    } catch (Throwable) {
     }
 }
 
@@ -190,6 +233,17 @@ function labels_pdo(): PDO
         wms_ensure_cached($pdo, 'labels', 'labels_ensure_schema');
     } else {
         labels_ensure_schema($pdo);
+    }
+    // Новые типы этикеток и перевод на 70×48: схема могла быть создана раньше,
+    // а «готовность» закэширована — догоняем миграцию один раз.
+    try {
+        $n = (int)$pdo->query("SELECT COUNT(*) FROM label_templates WHERE label_type IN ('product','cell','pallet','blank')")->fetchColumn();
+        $sm = (int)$pdo->query("SELECT COUNT(*) FROM label_templates WHERE width_mm=70 AND height_mm=48")->fetchColumn();
+        $s58 = (int)$pdo->query("SELECT COUNT(*) FROM label_templates WHERE label_type IN ('shipment','receipt','picking','stock_sscc') AND width_mm=58 AND height_mm=40")->fetchColumn();
+        if ($n < 4 || $sm < 8 || $s58 < 4) {
+            labels_ensure_schema($pdo);
+        }
+    } catch (Throwable) {
     }
     return $pdo;
 }
@@ -209,6 +263,31 @@ function labels_zpl(array $tpl, string $code): string
     return rtrim($zpl) . "\r\n";
 }
 
+/** Запись действия печати в журнал этикеток (термо/PDF). */
+function labels_print_log_action(PDO $pdo, string $type, int $qty, string $target, string $mode): void
+{
+    try {
+        $actor = labels_actor();
+        $now = labels_now_sql($pdo);
+        $name = 'Этикетка';
+        if ($type !== '') {
+            $tpl = labels_template($pdo, $type);
+            if ($tpl) {
+                $name = (string)($tpl['label_name'] ?? $type);
+            }
+        }
+        $st = $pdo->prepare(
+            "INSERT INTO label_print_log (label_type,label_name,qty,code_from,code_to,user_id,user_login,user_fio,created_at)
+             VALUES (:t,:n,:q,:f,:to,:uid,:ul,:uf,$now)"
+        );
+        $st->execute([
+            ':t' => $type !== '' ? $type : 'custom', ':n' => $name . ' [' . $mode . ': ' . $target . ']',
+            ':q' => $qty, ':f' => null, ':to' => null,
+            ':uid' => $actor['id'] ?: null, ':ul' => $actor['login'] ?: null, ':uf' => $actor['fio'] ?: null,
+        ]);
+    } catch (Throwable) {
+    }
+}
 function labels_actor(): array
 {
     $u = wms_auth_user();
@@ -217,6 +296,28 @@ function labels_actor(): array
         'login' => $u ? (string)($u['login'] ?? '') : '',
         'fio' => $u ? (string)($u['fio'] ?? '') : '',
     ];
+}
+
+/**
+ * К тексту в UTF-8: PowerShell без консоли пишет в OEM-кодировке (cp866),
+ * из-за этого json_encode возвращал пустую строку и фронт получал
+ * «Unexpected end of JSON input».
+ */
+function labels_utf8(string $s): string
+{
+    if ($s === '') {
+        return '';
+    }
+    if (preg_match('//u', $s) === 1) {
+        return $s;
+    }
+    foreach (['CP866', 'Windows-1251'] as $enc) {
+        $c = @iconv($enc, 'UTF-8//IGNORE', $s);
+        if ($c !== false && $c !== '') {
+            return $c;
+        }
+    }
+    return (string)preg_replace('/[^\x20-\x7E\r\n\t]/', '?', $s);
 }
 
 function labels_run_process(array $cmd, int $timeout = 20): array
@@ -231,10 +332,12 @@ function labels_run_process(array $cmd, int $timeout = 20): array
     $out = '';
     $err = '';
     $started = microtime(true);
+    $lastStatus = null;
     while (true) {
         $out .= stream_get_contents($pipes[1]);
         $err .= stream_get_contents($pipes[2]);
         $status = proc_get_status($process);
+        $lastStatus = $status;
         if (!$status['running']) {
             break;
         }
@@ -253,8 +356,15 @@ function labels_run_process(array $cmd, int $timeout = 20): array
     foreach ($pipes as $pipe) {
         fclose($pipe);
     }
-    $code = proc_close($process);
-    return [$code, $out, $err];
+    // Классическая ловушка PHP: после proc_get_status() proc_close() возвращает -1.
+    // Берём код выхода из последнего статуса.
+    $code = ($lastStatus !== null && isset($lastStatus['exitcode']) && (int)$lastStatus['exitcode'] !== -1)
+        ? (int)$lastStatus['exitcode']
+        : (int)proc_close($process);
+    if ($code === -1 && $lastStatus !== null && isset($lastStatus['exitcode'])) {
+        $code = (int)$lastStatus['exitcode'];
+    }
+    return [$code, labels_utf8($out), labels_utf8($err)];
 }
 
 function labels_printers(): array
@@ -321,6 +431,29 @@ function labels_print_raw(string $printer, string $zpl): void
     }
 }
 
+function labels_open_printer_dialog(string $mode, string $printer = ''): void
+{
+    if (PHP_OS_FAMILY !== 'Windows') {
+        throw new RuntimeException('Окна Windows доступны только на Windows-сервере');
+    }
+    if ($mode === 'add') {
+        $cmd = 'start "" rundll32.exe printui.dll,PrintUIEntry /il';
+    } elseif ($mode === 'properties') {
+        $names = array_column(labels_printers(), 'name');
+        if (!in_array($printer, $names, true)) {
+            throw new RuntimeException('Принтер не найден');
+        }
+        $cmd = 'start "" rundll32.exe printui.dll,PrintUIEntry /p /n ' . escapeshellarg($printer);
+    } else {
+        throw new RuntimeException('Неизвестное действие с принтером');
+    }
+    $handle = @popen($cmd, 'r');
+    if (!is_resource($handle)) {
+        throw new RuntimeException('Не удалось открыть системное окно Windows');
+    }
+    pclose($handle);
+}
+
 function labels_log_batch(PDO $pdo, array $tpl, array $codes, array $actor, string $type, int $qty): int
 {
     $now = labels_now_sql($pdo);
@@ -355,7 +488,26 @@ function labels_log_batch(PDO $pdo, array $tpl, array $codes, array $actor, stri
 $pdo = labels_pdo();
 $action = $_GET['action'] ?? 'templates';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+require_once __DIR__ . '/../shared/LabelPrint.php';
+// Печать этикеток и просмотр кодов — только администратор и разработчик.
+if (!wms_labels_can_print()) {
+    wms_labels_deny_json();
+}
+
 header('Content-Type: application/json; charset=utf-8');
+
+/** JSON-ответ, который всегда отдаёт тело (даже при битой кодировке текста). */
+function labels_json_out(array $data, int $code = 200): void
+{
+    http_response_code($code);
+    header('Content-Type: application/json; charset=utf-8');
+    $s = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    if ($s === false) {
+        $s = json_encode(['error' => 'Не удалось сформировать ответ сервера (кодировка)'], JSON_UNESCAPED_UNICODE);
+    }
+    echo $s;
+    exit;
+}
 
 try {
     if ($action === 'templates') {
@@ -441,6 +593,11 @@ try {
         $b = json_decode(file_get_contents('php://input'), true) ?? [];
         $type = trim((string)($b['type'] ?? ''));
         $qty = (int)($b['qty'] ?? 1);
+        // Служебные типы (товар/ячейка/паллета/пустая) печатаются из других модулей,
+        // здесь — только редактирование кода.
+        if (in_array($type, ['product', 'cell', 'pallet', 'blank'], true)) {
+            throw new RuntimeException('Печать этого типа недоступна в модуле «Этикетки» — только редактирование кода');
+        }
         if ($type === '' || $type === 'stock_sscc') throw new RuntimeException('Неверный тип этикетки');
         if ($qty < 1 || $qty > 500) throw new RuntimeException('Количество должно быть от 1 до 500');
         $tpl = labels_template($pdo, $type);
@@ -488,6 +645,148 @@ try {
         exit;
     }
 
+    // --- Печать этикеток (Термо): растровый ZPL с настоящей кириллицей ---
+    // POST ?action=print_label {printer, type, codes:[...] | code, dpi?}
+    if ($action === 'print_label' && $method === 'POST') {
+        require_once __DIR__ . '/../shared/LabelPrint.php';
+        $b = json_decode(file_get_contents('php://input'), true) ?? [];
+        $printer = trim((string)($b['printer'] ?? ''));
+        $type = trim((string)($b['type'] ?? ''));
+        $codes = array_values(array_filter(array_map('trim', (array)($b['codes'] ?? [])), fn($v) => $v !== ''));
+        if (!$codes && trim((string)($b['code'] ?? '')) !== '') {
+            $codes = [trim((string)$b['code'])];
+        }
+        if ($printer === '' || !$codes) {
+            throw new RuntimeException('Не выбран принтер или нет кодов этикеток');
+        }
+        if (count($codes) > 500) {
+            throw new RuntimeException('Не больше 500 этикеток за одну печать');
+        }
+        $tpl = $type !== '' ? labels_template($pdo, $type) : null;
+        $title = $tpl ? (string)($tpl['title'] ?? '') : trim((string)($b['title'] ?? 'Этикетка'));
+        $wMm = $tpl ? (float)($tpl['width_mm'] ?? 58) : 58.0;
+        $hMm = $tpl ? (float)($tpl['height_mm'] ?? 40) : 40.0;
+        if (isset($b['w']) && (float)$b['w'] > 0) {
+            $wMm = (float)$b['w'];
+        }
+        if (isset($b['h']) && (float)$b['h'] > 0) {
+            $hMm = (float)$b['h'];
+        }
+        $dpi = in_array((int)($b['dpi'] ?? 203), [203, 300], true) ? (int)$b['dpi'] : 203;
+        $specs = [];
+        foreach ($codes as $code) {
+            $specs[] = wms_label_spec($title, (string)$code, (string)$code, $wMm, $hMm, $dpi, 1);
+        }
+        $joined = [
+            'text' => implode("NEXT\n", array_column($specs, 'text')),
+            'width' => $specs[0]['width'],
+            'height' => $specs[0]['height'],
+            'dpi' => $dpi,
+            'copies' => count($codes),
+        ];
+        labels_print_log_action($pdo, $type, count($codes), $printer, 'thermal');
+        wms_label_print_thermal($printer, $joined);
+        labels_json_out(['ok' => true, 'printer' => $printer, 'count' => count($codes)]);
+    }
+
+    // --- Пустая этикетка: произвольные данные, ШК сверху (по галке «Печать ШК») ---
+    // POST ?action=custom_print {printer, text, barcode?, barcode_top, w, h, copies, dpi?}
+    if ($action === 'custom_print' && $method === 'POST') {
+        require_once __DIR__ . '/../shared/LabelPrint.php';
+        $b = json_decode(file_get_contents('php://input'), true) ?? [];
+        $printer = trim((string)($b['printer'] ?? ''));
+        $text = (string)($b['text'] ?? '');
+        $barcode = trim((string)($b['barcode'] ?? ''));
+        $barcodeTop = !empty($b['barcode_top']);
+        $wMm = (float)($b['w'] ?? 70);
+        $hMm = (float)($b['h'] ?? 48);
+        $copies = max(1, min(500, (int)($b['copies'] ?? 1)));
+        $dpi = in_array((int)($b['dpi'] ?? 203), [203, 300], true) ? (int)$b['dpi'] : 203;
+        if ($printer === '') {
+            throw new RuntimeException('Не выбран принтер');
+        }
+        if (trim($text) === '' && $barcode === '') {
+            throw new RuntimeException('Нет данных для этикетки');
+        }
+        $spec = wms_label_spec_custom($text, $barcode, $wMm, $hMm, $dpi, $copies, $barcodeTop);
+        labels_print_log_action($pdo, 'blank', $copies, $printer, 'thermal');
+        wms_label_print_thermal($printer, $spec);
+        labels_json_out(['ok' => true, 'printer' => $printer, 'copies' => $copies]);
+    }
+
+    // GET/POST ?action=custom_pdf {text, barcode?, barcode_top, w, h}
+    if ($action === 'custom_pdf') {
+        require_once __DIR__ . '/../shared/Pdf.php';
+        $b = $method === 'POST' ? (json_decode(file_get_contents('php://input'), true) ?? []) : $_GET;
+        $text = (string)($b['text'] ?? '');
+        $barcode = trim((string)($b['barcode'] ?? ''));
+        $barcodeTop = !empty($b['barcode_top']);
+        $wMm = (float)($b['w'] ?? 70);
+        $hMm = (float)($b['h'] ?? 48);
+        if (trim($text) === '' && $barcode === '') {
+            throw new RuntimeException('Нет данных для этикетки');
+        }
+        $pdf = wms_pdf_label_pages([[
+            'title' => '', 'subtitle' => '', 'code' => $barcodeTop ? $barcode : '',
+            'barcode' => $barcode, 'lines' => preg_split('/\r\n|\r|\n/', $text) ?: [],
+            'barcode_top' => $barcodeTop,
+        ]], $wMm, $hMm);
+        labels_print_log_action($pdo, 'blank', 1, 'pdf', 'pdf');
+        if (!headers_sent()) {
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: inline; filename="label_custom.pdf"');
+            header('Content-Length: ' . strlen($pdf));
+            header('Cache-Control: no-store');
+        }
+        echo $pdf;
+        exit;
+    }
+    // --- PDF-этикетка (как в модуле «Номенклатура»): страница ровно по размеру ---
+    // GET ?action=pdf&batch_id=.. | &type=..&codes=code1,code2 | &code=..
+    if ($action === 'pdf') {
+        require_once __DIR__ . '/../shared/Pdf.php';
+        $type = trim((string)($_GET['type'] ?? ''));
+        $tpl = $type !== '' ? labels_template($pdo, $type) : null;
+        $title = $tpl ? (string)($tpl['title'] ?? '') : trim((string)($_GET['title'] ?? 'Этикетка'));
+        $wMm = $tpl ? (float)($tpl['width_mm'] ?? 58) : (float)($_GET['w'] ?? 58);
+        $hMm = $tpl ? (float)($tpl['height_mm'] ?? 40) : (float)($_GET['h'] ?? 40);
+        if (isset($_GET['w']) && (float)$_GET['w'] > 0) {
+            $wMm = (float)$_GET['w'];
+        }
+        if (isset($_GET['h']) && (float)$_GET['h'] > 0) {
+            $hMm = (float)$_GET['h'];
+        }
+        $codes = [];
+        $batchId = (int)($_GET['batch_id'] ?? 0);
+        if ($batchId > 0) {
+            $st = $pdo->prepare('SELECT code FROM label_codes WHERE batch_id=:b ORDER BY id');
+            $st->execute([':b' => $batchId]);
+            $codes = $st->fetchAll(PDO::FETCH_COLUMN);
+        }
+        if (!$codes && isset($_GET['codes'])) {
+            $codes = array_values(array_filter(array_map('trim', explode(',', (string)$_GET['codes'])), fn($v) => $v !== ''));
+        }
+        if (!$codes && isset($_GET['code'])) {
+            $codes = [trim((string)$_GET['code'])];
+        }
+        if (!$codes) {
+            throw new RuntimeException('Нет кодов для PDF-этикетки');
+        }
+        $labels = [];
+        foreach ($codes as $code) {
+            $labels[] = ['title' => $title, 'code' => (string)$code, 'barcode' => (string)$code];
+        }
+        $pdf = wms_pdf_label_pages($labels, $wMm, $hMm);
+        labels_print_log_action($pdo, $type, count($codes), 'pdf', 'pdf');
+        if (!headers_sent()) {
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: ' . (isset($_GET['download']) ? 'attachment' : 'inline') . '; filename="labels_' . preg_replace('/\W+/', '', $type ?: 'label') . '.pdf"');
+            header('Content-Length: ' . strlen($pdf));
+            header('Cache-Control: no-store');
+        }
+        echo $pdf;
+        exit;
+    }
     if ($action === 'print_raw' && $method === 'POST') {
         $b = json_decode(file_get_contents('php://input'), true) ?? [];
         $printer = trim((string)($b['printer'] ?? ''));
@@ -500,6 +799,15 @@ try {
         }
         labels_print_raw($printer, $zpl);
         echo json_encode(['ok' => true, 'printer' => $printer], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'printer_dialog' && $method === 'POST') {
+        $b = json_decode(file_get_contents('php://input'), true) ?? [];
+        $mode = trim((string)($b['mode'] ?? ''));
+        $printer = trim((string)($b['printer'] ?? ''));
+        labels_open_printer_dialog($mode, $printer);
+        echo json_encode(['ok' => true, 'mode' => $mode], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -551,6 +859,9 @@ try {
 
     throw new RuntimeException('Неизвестное действие');
 } catch (Throwable $e) {
-    http_response_code(400);
-    echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    require_once __DIR__ . '/../shared/ErrorLog.php';
+    wms_error_log_write('error', $e->getMessage(), [
+        'file' => $e->getFile(), 'line' => $e->getLine(), 'trace' => $e->getTraceAsString(),
+    ]);
+    labels_json_out(['error' => $e->getMessage()], 400);
 }

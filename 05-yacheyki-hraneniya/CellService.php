@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/CellStatus.php';
 require_once __DIR__ . '/../shared/CellZones.php';
+// ФИО залогиненного на портал (для истории изменений).
+require_once __DIR__ . '/../shared/Auth.php';
 
 // Сервис ячеек: создание / редактирование / копирование / блокировка / архив / перемещение / экспорт / импорт.
 // Каждое изменение значимого поля пишется в cell_history, движения товара — в cell_movements.
@@ -20,7 +22,7 @@ final class CellService
         'temp_from', 'temp_to', 'allowed_goods', 'max_weight_kg', 'max_pallets',
         'hazmat_allowed', 'comment',
         'beam_width', 'cell_height_mm', 'allowed_pallet_types', 'pallet_type',
-        'allow_multi_pallet_types', 'allow_mixed_goods',
+        'allow_multi_pallet_types', 'allow_mixed_goods', 'quality_lock',
     ];
 
     private const LABELS = [
@@ -35,6 +37,7 @@ final class CellService
         'allowed_pallet_types' => 'Типы тары', 'pallet_type' => 'Тип паллеты',
         'allow_multi_pallet_types' => 'Несколько типов паллет',
         'allow_mixed_goods' => 'Разные товары в ячейке',
+        'quality_lock' => 'Блокировка по качеству',
         'status' => 'Статус', 'is_locked' => 'Блокировка',
     ];
 
@@ -95,8 +98,9 @@ final class CellService
         return $out;
     }
 
-    public function setZones(int $cellId, string $primary, mixed $allZones, int $userId, string $userFio = 'Иванов И.И.', bool $hist = true): void
+    public function setZones(int $cellId, string $primary, mixed $allZones, int $userId, ?string $userFio = null, bool $hist = true): void
     {
+        $userFio = wms_resolve_fio($userFio);
         $primary = trim($primary);
         $this->assertZone($primary);
         $zones = $this->normalizeZoneList($allZones);
@@ -160,8 +164,9 @@ final class CellService
         return $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? 'NOW()' : "datetime('now')";
     }
 
-    public function create(array $b, int $userId, string $userFio = 'Иванов И.И.'): int
+    public function create(array $b, int $userId, ?string $userFio = null): int
     {
+        $userFio = wms_resolve_fio($userFio);
         $code = trim((string)($b['code'] ?? ''));
         if ($code === '') {
             throw new RuntimeException('Адрес ячейки обязателен');
@@ -219,8 +224,9 @@ final class CellService
      * Зоны отбора ячейки (дополнительные): manual=ручной отбор, driver=отбор водителем.
      * @param string[] $zones
      */
-    public function setPickZones(int $cellId, array $zones, int $userId, string $userFio = 'Иванов И.И.', bool $hist = true): void
+    public function setPickZones(int $cellId, array $zones, int $userId, ?string $userFio = null, bool $hist = true): void
     {
+        $userFio = wms_resolve_fio($userFio);
         $zones = array_values(array_filter($zones, fn($z) => in_array($z, CellStatus::pickZones(), true)));
         $cur = $this->pickZones($cellId);
         if (array_values($cur) === array_values($zones)) {
@@ -261,8 +267,9 @@ final class CellService
         }
     }
 
-    public function update(int $id, array $b, int $userId, string $userFio = 'Иванов И.И.'): void
+    public function update(int $id, array $b, int $userId, ?string $userFio = null): void
     {
+        $userFio = wms_resolve_fio($userFio);
         $cur = $this->pdo->prepare("SELECT * FROM storage_cells WHERE id = :id");
         $cur->execute([':id' => $id]);
         $old = $cur->fetch(PDO::FETCH_ASSOC);
@@ -317,8 +324,9 @@ final class CellService
         }
     }
 
-    public function copy(int $id, int $userId, string $userFio = 'Иванов И.И.'): int
+    public function copy(int $id, int $userId, ?string $userFio = null): int
     {
+        $userFio = wms_resolve_fio($userFio);
         $cur = $this->pdo->prepare("SELECT * FROM storage_cells WHERE id = :id");
         $cur->execute([':id' => $id]);
         $old = $cur->fetch(PDO::FETCH_ASSOC);
@@ -353,16 +361,18 @@ final class CellService
         return $nid;
     }
 
-    public function block(int $id, int $userId, string $reason = '', string $userFio = 'Иванов И.И.'): void
+    public function block(int $id, int $userId, string $reason = '', ?string $userFio = null): void
     {
+        $userFio = wms_resolve_fio($userFio);
         $this->guardExists($id);
         $this->pdo->prepare("UPDATE storage_cells SET is_locked = 1, status = 'blocked', lock_reason = :r WHERE id = :id")
             ->execute([':r' => $reason !== '' ? $reason : null, ':id' => $id]);
         $this->hist($id, $userId, $userFio, 'is_locked', 'Блокировка', 'Нет', 'Да' . ($reason !== '' ? " ($reason)" : ''));
     }
 
-    public function unblock(int $id, int $userId, string $userFio = 'Иванов И.И.'): void
+    public function unblock(int $id, int $userId, ?string $userFio = null): void
     {
+        $userFio = wms_resolve_fio($userFio);
         $cur = $this->pdo->prepare("SELECT qty FROM storage_cells WHERE id = :id");
         $cur->execute([':id' => $id]);
         $row = $cur->fetch(PDO::FETCH_ASSOC);
@@ -375,8 +385,9 @@ final class CellService
         $this->hist($id, $userId, $userFio, 'is_locked', 'Блокировка', 'Да', 'Нет');
     }
 
-    public function archive(int $id, int $userId, string $userFio = 'Иванов И.И.'): void
+    public function archive(int $id, int $userId, ?string $userFio = null): void
     {
+        $userFio = wms_resolve_fio($userFio);
         $cur = $this->pdo->prepare("SELECT qty FROM storage_cells WHERE id = :id");
         $cur->execute([':id' => $id]);
         $row = $cur->fetch(PDO::FETCH_ASSOC);
@@ -444,8 +455,9 @@ final class CellService
      * пробрасывается best-effort через product_stock (не блокирует операцию).
      * @return array{nom_sync: array}
      */
-    public function moveGoods(int $fromId, string $toCode, string $sku, float $qty, int $userId, string $docNo = '', string $userFio = 'Иванов И.И.'): array
+    public function moveGoods(int $fromId, string $toCode, string $sku, float $qty, int $userId, string $docNo = '', ?string $userFio = null): array
     {
+        $userFio = wms_resolve_fio($userFio);
         if ($qty <= 0) {
             throw new RuntimeException('Количество должно быть > 0');
         }
@@ -641,11 +653,12 @@ final class CellService
     }
 
     /** @param int[] $ids */
-    public function massUpdate(array $ids, array $patch, int $userId, string $userFio = 'Иванов И.И.'): int
+    public function massUpdate(array $ids, array $patch, int $userId, ?string $userFio = null): int
     {
+        $userFio = wms_resolve_fio($userFio);
         $allowed = ['status', 'zone', 'cell_type', 'category', 'allowed_goods', 'is_locked',
             'beam_width', 'cell_height_mm', 'allowed_pallet_types', 'pick_zones',
-            'allow_multi_pallet_types', 'allow_mixed_goods'];
+            'allow_multi_pallet_types', 'allow_mixed_goods', 'quality_lock'];
         $patch = array_intersect_key($patch, array_flip($allowed));
         if (!$ids || !$patch) {
             return 0;
@@ -732,8 +745,9 @@ final class CellService
      * Пример: A + 01..02, 01..01, 01..01, 01..02 => A01-01-01-01 ... A02-01-01-02.
      * @return array{created:int,skipped:int,total:int}
      */
-    public function bulkCreate(array $b, int $userId, string $userFio = 'Иванов И.И.'): array
+    public function bulkCreate(array $b, int $userId, ?string $userFio = null): array
     {
+        $userFio = wms_resolve_fio($userFio);
         $letter = trim((string)($b['letter'] ?? ''));
         $letter = function_exists('mb_strtoupper') ? mb_strtoupper($letter, 'UTF-8') : strtoupper($letter);
         if ($letter !== '' && !preg_match('/^[A-ZА-ЯЁ]$/u', $letter)) {
@@ -944,8 +958,11 @@ final class CellService
             if ($v === '' || $v === null) {
                 $out['cell_height_mm'] = null;
             } else {
-                if (!is_numeric($v) || (int)$v <= 0) {
-                    throw new RuntimeException('Высота ячейки должна быть > 0 мм');
+                if (!is_numeric($v) || (float)$v <= 0) {
+                    throw new RuntimeException('Высота ячейки: только число больше 0. Указывается в сантиметрах через точку, без запятой (например: 150 или 150.5)');
+                }
+                if ((float)$v < 20 || (float)$v > 5000) {
+                    throw new RuntimeException('Высота ячейки вне допустимого диапазона (20–5000 мм = 2–500 см)');
                 }
                 $out['cell_height_mm'] = (int)$v;
             }

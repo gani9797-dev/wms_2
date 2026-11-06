@@ -66,9 +66,17 @@ final class TaskService
 
     private function history(int $id, ?int $userId, string $action, ?string $field, ?string $old, ?string $new): void
     {
-        $this->pdo->prepare(
-            "INSERT INTO task_history (task_id,user_id,action,field,old_value,new_value) VALUES (?,?,?,?,?,?)"
-        )->execute([$id, $userId, $action, $field, $old, $new]);
+        // ФИО залогиненного на портал (колонка user_fio; на старых БД — без неё).
+        $fio = function_exists('wms_auth_fio') ? wms_auth_fio('') : '';
+        try {
+            $this->pdo->prepare(
+                "INSERT INTO task_history (task_id,user_id,user_fio,action,field,old_value,new_value) VALUES (?,?,?,?,?,?,?)"
+            )->execute([$id, $userId, $fio, $action, $field, $old, $new]);
+        } catch (Throwable) {
+            $this->pdo->prepare(
+                "INSERT INTO task_history (task_id,user_id,action,field,old_value,new_value) VALUES (?,?,?,?,?,?)"
+            )->execute([$id, $userId, $action, $field, $old, $new]);
+        }
     }
 
     private function recalc(int $id): void
@@ -267,16 +275,21 @@ final class TaskService
     }
 
     // Удаление задания вместе со строками и историей (явно, т.к. в SQLite нет FK).
+    // Выполненные задания (status=done) не удаляются — только отменённые/новые/в работе.
     public function delete(int $id, ?int $userId): void
     {
         if ($id <= 0) {
             throw new RuntimeException('Задание не найдено');
         }
-        $st = $this->pdo->prepare('SELECT id, doc_no FROM tasks WHERE id=:id');
+        $st = $this->pdo->prepare('SELECT id, doc_no, status FROM tasks WHERE id=:id');
         $st->execute([':id' => $id]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
             throw new RuntimeException('Задание не найдено');
+        }
+        if ((string)($row['status'] ?? '') === TaskStatus::Done->value) {
+            throw new RuntimeException('Нельзя удалить выполненное задание ' . (string)($row['doc_no'] ?? ('#' . $id))
+                . '. Выполненные задания не удаляются.');
         }
         $this->pdo->beginTransaction();
         try {
@@ -302,28 +315,45 @@ final class TaskService
         }
     }
 
-    /** Массовое удаление. Возвращает число удаленных заданий. */
-    public function deleteMany(array $ids, ?int $userId): int
+    /**
+     * Массовое удаление: удаляются только невыполненные задания.
+     * Выполненные (done) пропускаются — в ответе сколько удалено и сколько нет.
+     * @return array{deleted:int,skipped:int,skipped_ids:int[],not_found:int[]}
+     */
+    public function deleteMany(array $ids, ?int $userId): array
     {
         $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn(int $v) => $v > 0)));
         if (!$ids) {
             throw new RuntimeException('Ничего не выбрано для удаления');
         }
-        // Проверяем все заранее, чтобы не удалять частично.
         $ph = implode(',', array_fill(0, count($ids), '?'));
-        $st = $this->pdo->prepare("SELECT id FROM tasks WHERE id IN ($ph)");
+        $st = $this->pdo->prepare("SELECT id, status FROM tasks WHERE id IN ($ph)");
         $st->execute($ids);
-        $found = array_map('intval', (array)$st->fetchAll(PDO::FETCH_COLUMN));
-        $miss = array_diff($ids, $found);
-        if ($miss) {
-            throw new RuntimeException('Задания не найдены: ' . implode(', ', $miss));
+        $statusById = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $statusById[(int)$r['id']] = (string)($r['status'] ?? '');
         }
-        $n = 0;
+        $deleted = 0;
+        $skipped = [];
+        $notFound = [];
         foreach ($ids as $id) {
+            if (!array_key_exists($id, $statusById)) {
+                $notFound[] = $id;
+                continue;
+            }
+            if ($statusById[$id] === TaskStatus::Done->value) {
+                $skipped[] = $id;
+                continue;
+            }
             $this->delete($id, $userId);
-            $n++;
+            $deleted++;
         }
-        return $n;
+        return [
+            'deleted' => $deleted,
+            'skipped' => count($skipped),
+            'skipped_ids' => $skipped,
+            'not_found' => $notFound,
+        ];
     }
 
     // ТСД/отбор: отметить факт по строке (для будущих экранов ТСД).

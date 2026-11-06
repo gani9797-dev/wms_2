@@ -158,6 +158,18 @@ final class WmsCounterparties
      * @param PDO $nomPdo подключение к номенклатуре (таблица products)
      * @return array{sku:string,in:int,out:int,prod_date:int,contractor_id:?int,inherited_in:bool,inherited_out:bool}
      */
+    /**
+     * Нормализация названия контрагента для сопоставления с владельцем товара.
+     */
+    private static function normName(string $s): string
+    {
+        $s = (string)preg_replace('/\s+/u', ' ', trim($s));
+        if (function_exists('mb_strtolower')) {
+            return mb_strtolower($s, 'UTF-8');
+        }
+        return strtolower(strtr($s, 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'));
+    }
+
     public static function productFlags(PDO $nomPdo, string $sku): array
     {
         $sku = trim($sku);
@@ -168,7 +180,7 @@ final class WmsCounterparties
         }
         try {
             $st = $nomPdo->prepare(
-                'SELECT contractor_id, scan_serial_in_override, scan_serial_out_override, control_prod_date
+                'SELECT contractor_id, owner, scan_serial_in_override, scan_serial_out_override, control_prod_date
                    FROM products WHERE sku = :s LIMIT 1'
             );
             $st->execute([':s' => $sku]);
@@ -181,6 +193,17 @@ final class WmsCounterparties
         }
         $cid = (isset($p['contractor_id']) && $p['contractor_id'] !== '' && $p['contractor_id'] !== null)
             ? (int)$p['contractor_id'] : null;
+        // Нет привязки к контрагенту — берём владельца товара (поле «Владелец»)
+        // и наследуем флаги сканирования с/н из его карточки в модуле 09.
+        if (!$cid) {
+            $ownerName = trim((string)($p['owner'] ?? ''));
+            if ($ownerName !== '') {
+                $cp = self::findByName($nomPdo, $ownerName);
+                if ($cp && (int)($cp['id'] ?? 0) > 0) {
+                    $cid = (int)$cp['id'];
+                }
+            }
+        }
         $out['contractor_id'] = $cid;
         $out['prod_date'] = (int)($p['control_prod_date'] ?? 0) ? 1 : 0;
         $client = $cid ? self::serialFlags($nomPdo, $cid) : ['in' => 0, 'out' => 0];
@@ -228,13 +251,24 @@ final class WmsCounterparties
         try {
             $in = implode(',', array_fill(0, count($skus), '?'));
             $st = $nomPdo->prepare(
-                "SELECT sku, contractor_id, scan_serial_in_override, scan_serial_out_override, control_prod_date
+                "SELECT sku, contractor_id, owner, scan_serial_in_override, scan_serial_out_override, control_prod_date
                    FROM products WHERE sku IN ($in)"
             );
             $st->execute($skus);
             $rows = $st->fetchAll(PDO::FETCH_ASSOC);
         } catch (Throwable) {
             return $out;
+        }
+        // Владелец (поле owner) -> контрагент модуля 09: кэш по имени.
+        $byName = [];
+        try {
+            foreach (self::listAll($nomPdo, false) as $cp) {
+                $n = self::normName((string)($cp['name'] ?? ''));
+                if ($n !== '' && !isset($byName[$n])) {
+                    $byName[$n] = (int)($cp['id'] ?? 0);
+                }
+            }
+        } catch (Throwable) {
         }
         $clientCache = [];
         foreach ($rows as $p) {
@@ -244,6 +278,12 @@ final class WmsCounterparties
             }
             $cid = (isset($p['contractor_id']) && $p['contractor_id'] !== '' && $p['contractor_id'] !== null)
                 ? (int)$p['contractor_id'] : null;
+            if ($cid === null || $cid <= 0) {
+                $on = self::normName((string)($p['owner'] ?? ''));
+                if ($on !== '' && isset($byName[$on])) {
+                    $cid = $byName[$on];
+                }
+            }
             if ($cid !== null && !array_key_exists($cid, $clientCache)) {
                 $clientCache[$cid] = self::serialFlags($nomPdo, $cid);
             }

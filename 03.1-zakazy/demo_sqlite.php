@@ -42,6 +42,85 @@ function order_item_processed(PDO $pdo, int $orderId, string $sku): float
     }
 }
 
+/**
+ * Пересчёт итогов отгрузки после правки строк (кол-во/позиции/SKU/сумма).
+ */
+function order_recalc_shipment(PDO $pdo, int $sid): void
+{
+    try {
+        $sum = $pdo->prepare("SELECT COALESCE(SUM(qty),0), COUNT(*), COUNT(DISTINCT sku), COALESCE(SUM(qty*price),0) FROM shipment_items WHERE shipment_id=:s");
+        $sum->execute([':s' => $sid]);
+        $r = $sum->fetch(PDO::FETCH_NUM) ?: [0, 0, 0, 0];
+        $pdo->prepare("UPDATE shipments SET qty_total=:q, items_count=:i, sku_count=:k, total=:t WHERE id=:s")
+            ->execute([':q' => (float)$r[0], ':i' => (int)$r[1], ':k' => (int)$r[2], ':t' => (float)$r[3], ':s' => $sid]);
+    } catch (Throwable) {
+    }
+}
+
+/**
+ * Синхронизация строк заказа в привязанные отгрузки (модуль 03):
+ * добавленная/изменённая/удалённая строка заказа сразу видна в карточке отгрузки.
+ * mode: add | update | delete
+ */
+function order_sync_shipment_rows(PDO $pdo, int $oid, string $mode, int $itemId = 0, array $item = []): void
+{
+    try {
+        $q = $pdo->prepare("SELECT shipment_id FROM shipment_orders WHERE order_id=:o");
+        $q->execute([':o' => $oid]);
+        $shipIds = array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN));
+    } catch (Throwable) {
+        return;
+    }
+    if (!$shipIds) {
+        return;
+    }
+    $cols = [];
+    try {
+        $cols = wms_table_columns($pdo, 'shipment_items');
+    } catch (Throwable) {
+    }
+    $hasProd = in_array('prod_date', $cols, true);
+    $hasBatch = in_array('supplier_batch', $cols, true) && in_array('supplier_batch', wms_table_columns($pdo, 'client_order_items'), true);
+    foreach ($shipIds as $sid) {
+        try {
+            if ($mode === 'delete') {
+                $st = $pdo->prepare("DELETE FROM shipment_items WHERE shipment_id=:s AND order_id=:o AND sku=:sku");
+                $st->execute([':s' => $sid, ':o' => $oid, ':sku' => (string)($item['sku'] ?? '')]);
+            } elseif ($mode === 'update') {
+                $pdo->prepare("UPDATE shipment_items SET qty=:q, name=:n, unit=:u WHERE shipment_id=:s AND order_id=:o AND sku=:sku")
+                    ->execute([':q' => (float)($item['qty'] ?? 0), ':n' => (string)($item['name'] ?? ''),
+                        ':u' => (string)($item['unit'] ?? 'шт'), ':s' => $sid, ':o' => $oid, ':sku' => (string)($item['sku'] ?? '')]);
+            } else {
+                // add: копируем именно эту строку заказа
+                $sel = "SELECT :s, order_id, sku, name, unit, qty, 0, 0" . ($hasProd ? ", prod_date" : '') . ($hasBatch ? ", supplier_batch" : '') . "
+                        FROM client_order_items WHERE order_id=:o" . ($itemId > 0 ? " AND id=:iid" : "") . " LIMIT 1";
+                $ins = $pdo->prepare("INSERT INTO shipment_items (shipment_id,order_id,sku,name,unit,qty,price,sum" . ($hasProd ? ",prod_date" : '') . ($hasBatch ? ",supplier_batch" : '') . ") " . $sel);
+                $p = [':s' => $sid, ':o' => $oid];
+                if ($itemId > 0) {
+                    $p[':iid'] = $itemId;
+                }
+                $ins->execute($p);
+            }
+        } catch (Throwable) {
+            // Старая схема без prod_date/supplier_batch — без этих колонок.
+            if ($mode === 'add') {
+                try {
+                    $ins = $pdo->prepare("INSERT INTO shipment_items (shipment_id,order_id,sku,name,unit,qty,price,sum)
+                        SELECT :s, order_id, sku, name, unit, qty, 0, 0 FROM client_order_items WHERE order_id=:o" . ($itemId > 0 ? " AND id=:iid" : "") . " LIMIT 1");
+                    $p = [':s' => $sid, ':o' => $oid];
+                    if ($itemId > 0) {
+                        $p[':iid'] = $itemId;
+                    }
+                    $ins->execute($p);
+                } catch (Throwable) {
+                }
+            }
+        }
+        order_recalc_shipment($pdo, $sid);
+    }
+}
+
+
 if (in_array($action, ['create_order', 'delete', 'item_add', 'item_update', 'item_delete'], true)
     && $_SERVER['REQUEST_METHOD'] === 'POST') {
     wms_auth_require_permission('doc_edit_order');
@@ -176,6 +255,10 @@ if ($action === 'list') {
         if ($qty <= 0) {
             throw new RuntimeException('Количество должно быть больше нуля');
         }
+        if (abs($qty - round($qty)) > 0.0001) {
+            throw new RuntimeException('Количество в заказе — только целое число');
+        }
+        $qty = round($qty);
         $prodDate = trim((string)($b['prod_date'] ?? ''));
         $wmsCode = trim((string)($b['wms_code'] ?? '')) ?: null;
         $barcode = trim((string)($b['barcode'] ?? '')) ?: null;
@@ -194,7 +277,10 @@ if ($action === 'list') {
             ':batch' => trim((string)($b['supplier_batch'] ?? '')) ?: null,
             ':prod' => $prodDate !== '' ? $prodDate : null,
         ]);
-        echo json_encode(['ok' => true, 'id' => (int)$pdo->lastInsertId()], JSON_UNESCAPED_UNICODE);
+        $newItemId = (int)$pdo->lastInsertId();
+        // Добавленная строка сразу появляется в привязанной отгрузке.
+        order_sync_shipment_rows($pdo, $oid, 'add', $newItemId);
+        echo json_encode(['ok' => true, 'id' => $newItemId], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(400);
         echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
@@ -220,11 +306,20 @@ if ($action === 'list') {
         if ($qty <= 0) {
             throw new RuntimeException('Количество должно быть больше нуля');
         }
+        if (abs($qty - round($qty)) > 0.0001) {
+            throw new RuntimeException('Количество в заказе — только целое число');
+        }
+        $qty = round($qty);
         if ($qty + 0.0001 < $processed) {
             throw new RuntimeException('Нельзя указать меньше обработанного: ' . $processed);
         }
         $pdo->prepare('UPDATE client_order_items SET qty=:q WHERE id=:iid AND order_id=:oid')
             ->execute([':q' => $qty, ':iid' => $iid, ':oid' => $oid]);
+        // Сразу обновляем строку в привязанной отгрузке (карточка отгрузки).
+        order_sync_shipment_rows($pdo, $oid, 'update', $iid, [
+            'sku' => (string)$item['sku'], 'name' => (string)($item['name'] ?? ''),
+            'unit' => (string)($item['unit'] ?? 'шт'), 'qty' => $qty,
+        ]);
         echo json_encode(['ok' => true, 'item' => ['id' => $iid, 'qty' => $qty, 'processed_qty' => $processed]], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(400);
@@ -255,6 +350,8 @@ if ($action === 'list') {
         if ($st->rowCount() === 0) {
             throw new RuntimeException('Строка не найдена');
         }
+        // Убираем строку и из привязанной отгрузки.
+        order_sync_shipment_rows($pdo, $oid, 'delete', $iid, ['sku' => (string)$item['sku']]);
         echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(400);

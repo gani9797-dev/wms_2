@@ -1,8 +1,9 @@
 # WMS TiMLog — архитектура, связи и результаты проверки
 
-Дата проверки: 2026-10-28.
+Дата проверки: 2026-10-28; обновление документации: 2026-11-06 (интеграция API v1 — 2026-11-05).
 Схемы: [`wms-overview.svg`](./wms-overview.svg) — обзор; [`wms-architecture.drawio`](./wms-architecture.drawio) — 7 страниц: обзор, приход, заказ/отгрузка, склад, БД прихода, БД отгрузки, этикетки.
 Отчёт smoke-теста: [`qa-report.json`](./qa-report.json).
+Интеграция с ERP и внешними системами: [`ИНТЕГРАЦИЯ-API-ERP.md`](./ИНТЕГРАЦИЯ-API-ERP.md), контракт — [`api/v1/openapi.yaml`](../api/v1/openapi.yaml), тесты — [`api/v1/tests/report.md`](../api/v1/tests/report.md).
 
 ## 1. Как работает система
 
@@ -35,7 +36,7 @@
 | 02.1 Приём поступлений | `02.1-priem-postupleniy/app.html` | — | статический макет | — | 02 |
 | 03 Отгрузки | `03-otgruzki/app.html` | `03-otgruzki/demo_sqlite.php` | рабочий | `shipments`, `shipment_items`, `shipment_orders`, `tsd_picks` | 03.1, 05, 08, ТСД Отбор |
 | 03.1 Заказы | `03.1-zakazy/app.html` | `03.1-zakazy/demo_sqlite.php` | рабочий | `client_orders`, `client_order_items` | 03, 08 |
-| 03.2 Упаковка заказов | `03.2-upakovka-zakazov/app.html` | — | статический макет | `packing_tasks` (пусто) | 03 |
+| 03.2 Упаковка заказов | `03.2-upakovka-zakazov/app.html` | `03.2-upakovka-zakazov/demo_sqlite.php` | рабочий | `packing_tasks`, `shipment_pallets` | 03, 08.1 |
 | 03.3 Проверка заказов | `03.3-proverka-zakazov/app.html` | — | статический макет | `order_checks` (пусто) | 03 |
 | 04 Внутрискладские операции | `04-vnutriskladskie-operatsii/app.html` | — | статический макет | `internal_ops` (пусто) | 05 |
 | 05 Ячейки хранения | `05-yacheyki-hraneniya/app.html` | `05-yacheyki-hraneniya/demo_sqlite.php` | рабочий | `storage_cells`, `cell_content`, `cell_history`, `cell_movements` | 07, 08, ТСД |
@@ -49,15 +50,18 @@
 | 10 Сотрудники | `10-sotrudniki/app.html` | `10-sotrudniki/demo_sqlite.php` | рабочий | `employees`, `employee_*`, `wms_roles` | авторизация всех модулей |
 | 10.1 KPI | `10.1-nachisleniya-kpi/app.html` | — | статический макет | `kpi_*` (пусто) | 10 |
 | 10.2 Просмотр сделки | `10.2-prosmotr-sdelki/app.html` | — | статический макет | `deals` (пусто) | 09 |
-| 11 Отчёты | `11-otchety/app.html` | — | статический макет | `reports` (пусто) | 02, 03 |
+| 11 Наблюдения | `11-nablyudeniya/app.html` | — | рабочий (онлайн-экраны ТСД в iframe) | — | ТСД |
+| 11 Отчёты (старый адрес) | `11-otchety/app.html` | — | редирект на 11 «Наблюдения» | `reports` (пусто) | — |
 | 12 Уведомления | `12-uvedomleniya/app.html` | 08 API (`notif_*`) | UI + API 08 | `notifications`, `notification_subscriptions` | 08 |
-| 13 Настройки | `13-nastroyki/app.html` | `13-nastroyki/demo_sqlite.php` | рабочий | `wms_roles`, `role_access`, `role_permissions`, `settings` | 02, 03, 10, ТСД |
+| 13 Настройки | `13-nastroyki/app.html` | `13-nastroyki/demo_sqlite.php` | рабочий | `wms_roles`, `role_access`, `role_permissions`, `settings`, `robot_settings`, `wms_api_*`, `wms_webhook_outbox` | 02, 03, 10, ТСД, API v1 |
 | 13.1 Авто-накладные | `13.1-avtoformirovanie-nakladnyh/app.html` | — | UI/local | `auto_invoice_*` (пусто) | 02, 03 |
 | 13.2 Авто-счета | `13.2-avtoformirovanie-schetov/app.html` | — | статический макет | `auto_bill_*` (пусто) | 09 |
 | 13.3 Печать линейки | `13.3-pechat-lineyki/app.html` | — | статический макет | `print_templates` (пусто) | 08 |
 | 13.4 Настройка KPI | `13.4-nastroyka-kpi/app.html` | — | статический макет | `kpi_rules` (пусто) | 10 |
 | 14 Журнал | `14-zhurnal/app.html` | `14-zhurnal/demo_sqlite.php` | рабочий | `wms_journal`, `wms_serial_journal` | все модули |
 | 15 Этикетки | `15-etiketki/app.html` | `15-etiketki/demo_sqlite.php` | рабочий | `label_templates`, `label_sequences`, `label_print_log`, `label_codes` | 08.1, Auth, все модули |
+| 16 Биллинги | `16-billing/app.html` | `16-billing/demo_sqlite.php` | рабочий | `billing_*` (16 таблиц) | 08, 09, 02, 03 |
+| API v1 (интеграция) | — (без UI) | `api/v1/index.php`, `shared/IntegrationApi.php` | рабочий | `wms_api_settings`, `wms_api_log`, `wms_api_rate`, `wms_webhook_outbox`, `client_orders.external_id` | 03, 03.1, 08, 13 |
 | ТСД | `tsd/*.html`, `tsd/*.php` | `tsd/api.php`, `prihod.php`, `otbor.php`, `sort.php`, `ship.php`, `tasks.php`, `info.php` | рабочий | те же `receipts`, `shipments`, `storage_cells`, `tasks` | 02, 03, 05, 07, 14 |
 
 > `с/app.html` — посторонняя копия 3.1 в каталоге `с`; в меню не используется.
@@ -81,6 +85,7 @@
 15 UI → `label_templates` / `label_sequences` → `label_codes` + `label_print_log`. ZPL 58×40 мм, максимум 500 шт. за печать.
 
 В окне печати показывается предпросмотр одной этикетки и список Windows-принтеров (`?action=printers`); после выбора принтера ZPL сразу отправляется в RAW-очередь через `15-etiketki/print-zpl.ps1` (`?action=print_raw`).
+Кнопка «Добавить принтер» открывает системный мастер Windows, кнопка «Свойства» — свойства выбранного принтера (`?action=printer_dialog`, `rundll32 printui.dll,PrintUIEntry`). Эти окна открываются на компьютере, где запущен портал.
 Новый тип этикетки создаётся в UI 15 (`?action=template_create`): код, название, заголовок, префикс, размеры, ZPL и SQL.
 08.1 → ПКМ «Печатать SSCC» → `print_sscc` (существующий SSCC строки запаса).
 
@@ -88,6 +93,21 @@
 05 UI → `storage_cells`, `cell_content`, `cell_history`, `cell_movements`
 07 UI / ТСД → `tasks`, `task_items`, `task_history`
 Задания ссылаются на документы через `tasks.doc_ref` / `shipment_ids` (без FK), на SKU — через `task_items.sku` (без FK).
+
+### Интеграция с внешними системами (API v1)
+`api/v1/index.php` (Bearer JWT, без сессии) → `shared/IntegrationApi.php`:
+- **ERP → WMS**: `POST /orders` (upsert в `client_orders` по `external_id`, 201/200),
+  `POST /nomenclature` (upsert в `products` + `product_barcodes` по `sku`).
+- **WMS → ERP**: `GET /stock` (из `product_stock`, пагинация ≤ 100);
+  вебхуки `order.status` при смене статуса отгрузки (`ShipmentService::changeStatus`,
+  `wms_ship_pallet_ship`) → `wms_webhook_outbox` → POST на callback URL с HMAC-SHA256,
+  повторы 1/5/30 минут, затем `DEAD`.
+- **Служебное**: `POST /oauth/token` (JWT, TTL ≤ 60 мин), `GET /health`,
+  `GET /webhooks`. Все запросы логируются в `wms_api_log` (30 дней, секреты и ПДн
+  маскируются), лимит — `rate_limit` запросов/сек на токен (429 + `Retry-After`).
+- Настройка и журналы — **13 → «Интеграция и логирование»** (вкладки «Настройки»,
+  «Журнал API», «Вебхуки (outbox)», алерты по 5xx и `DEAD`).
+- Полная инструкция по обеим сторонам: [`ИНТЕГРАЦИЯ-API-ERP.md`](./ИНТЕГРАЦИЯ-API-ERP.md).
 
 ## 4. Связи таблиц
 
@@ -227,6 +247,12 @@
 | Этикетки | `label_sequences` | 0 | 0 |
 | Этикетки | `label_print_log` | 0 | 0 |
 | Этикетки | `label_codes` | 0 | 0 |
+| Интеграция API | `wms_api_settings` | 1 | 0 |
+| Интеграция API | `wms_api_log` | 199 | 0 |
+| Интеграция API | `wms_api_rate` | 0 | 0 |
+| Интеграция API | `wms_webhook_outbox` | 0 | 0 |
+| Склад (робот) | `robot_settings` | 1 | 0 |
+| Отгрузка (паллеты) | `shipment_pallets` | 2 | 1 |
 | Прочее / пустые | `gate_slots` | 0 | 2 |
 | Прочее / пустые | `gates` | 0 | 1 |
 | Прочее / пустые | `internal_op_items` | 0 | 1 |
@@ -244,7 +270,15 @@
 - Smoke-тест: **136 проверок, 0 ошибок**.
 - Проверены: 35 HTML-страниц WMS/ТСД, `session.php`, `table-tools.js`, `auth-client.js`, чтение всех demo API, TSD read API, создание/редактирование/удаление тестовых прихода, заказа, сотрудника и роли.
 - Тестовые записи удалены; временный QA-пользователь удалён.
-- Этикетки: проверены создание нового типа, печать custom-шаблона, список принтеров, отклонение несуществующего принтера и JS-предпросмотр; тестовые шаблоны/коды/последовательности удалены.
+- Этикетки: проверены создание нового типа, печать custom-шаблона, список принтеров, отклонение несуществующего принтера, валидация вызовов «Добавить принтер»/«Свойства» и JS-предпросмотр; тестовые шаблоны/коды/последовательности удалены.
+
+### Интеграция API v1 (2026-11-05)
+- `php -l` без ошибок: `shared/IntegrationApi.php`, `api/v1/index.php`, `13-nastroyki/demo_sqlite.php`, `api/v1/tests/config.php`.
+- `python api/v1/tests/smoke.py --rate`: **25/25** — токены (выдача, TTL ≤ 60 мин, неверный секрет 401), идемпотентность заказов и номенклатуры, валидация (SKU, пустой items, битый JSON), пагинация остатков, HMAC-подпись вебхуков, `RETRY → SENT` после восстановления получателя, 429 + `Retry-After`, health/алерты.
+- Повторная отправка `external_id` возвращает `200` и результат первой обработки — дублей нет.
+- Тестовые заказы, SKU, вебхуки удалены; настройки интеграции восстановлены (`api/v1/tests/config.php restore`).
+- UI: раздел «Интеграция и логирование» в модуле 13 проверен headless (3 вкладки, JS без ошибок).
+- Отчёт: [`api/v1/tests/report.md`](../api/v1/tests/report.md).
 
 ### Целостность БД
 Проверено 40 связей (FK и логические). Выполнена очистка:
@@ -260,8 +294,9 @@
 Остальные проверки — 0 нарушений: нет orphan-строк по FK, нет дублей `receipts.doc_no`, `shipments.doc_no`, `client_orders.doc_no`, `products.sku`, `products.code`, `storage_cells.code`, нет дублей логинов, нет отрицательных остатков в `cell_content` / `product_stock`, нет переотбора в `shipment_items` относительно `tsd_picks`.
 
 ### Статические модули
-`01`, `01.1`, `01.2`, `02.1`, `03.2`, `03.3`, `04`, `05.1`, `06`, `09.1`, `10.1`, `10.2`, `11`, `13.2`, `13.3`, `13.4` — страницы-заглушки (≈6 КБ, без серверного API).
+`01`, `01.1`, `01.2`, `02.1`, `03.3`, `04`, `05.1`, `06`, `09.1`, `10.1`, `10.2`, `13.2`, `13.3`, `13.4` — страницы-заглушки (≈6 КБ, без серверного API).
 `13.1` — UI без серверного API; `12` использует API модуля 08; `00` — дашборд-агрегатор.
+`03.2` (упаковка, SSCC, PDF), `11` (наблюдения ТСД), `16` (биллинги) и `api/v1` — рабочие.
 `с/app.html` — посторонняя копия 3.1, не входит в меню.
 
 ## 7. Как открыть схему
@@ -284,3 +319,6 @@
 - Публикация идёт через Tailscale Funnel. Локальный PHP-сервер должен быть запущен, а ПК — не уходить в сон; иначе ссылка перестанет отвечать.
 - GitHub Pages не используется: приложение на PHP работает на локальном сервере.
 - SQLite-базы и `cleanup-backup-*.json` исключены из репозитория через `.gitignore`; данные PostgreSQL остаются на сервере и в GitHub не публикуются.
+- Внешнее API: `https://<домен>/api/v1` (роут в `router.php` до проверки сессии). Настройка —
+  `13 → Интеграция и логирование`; боевые `client_secret`/`webhook_secret` храните в
+  secrets manager, не в git. Для внешнего доступа нужен HTTPS с TLS 1.2+ на прокси.

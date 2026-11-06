@@ -70,6 +70,7 @@ final class EmployeeService
     {
         $d = $this->normalize($data);
         $password = trim((string)($data['password'] ?? ''));
+        $this->assertCanChangePassword($password);
         $this->validate($d);
         $this->validateCredentials($d['login'], $password, true, 0);
 
@@ -143,6 +144,7 @@ final class EmployeeService
         $d = array_merge($d, $merged);
         $this->validate($d);
         $password = trim((string)($data['password'] ?? ''));
+        $this->assertCanChangePassword($password);
         if ($d['login'] !== '' || $password !== '') {
             $this->validateCredentials($d['login'], $password, false, $id);
         }
@@ -170,6 +172,8 @@ final class EmployeeService
         if ($password !== '') {
             $sets[] = 'password_hash = :password_hash';
             $p[':password_hash'] = password_hash($password, PASSWORD_DEFAULT);
+            // Пароль храним только в виде необратимого хэша — открытый текст не сохраняем.
+            $sets[] = 'password_plain = NULL';
             $this->log($id, 'password_hash', 'Пароль', '—', 'изменён', $userId);
         }
         if ($sets) {
@@ -590,10 +594,30 @@ final class EmployeeService
         }
     }
 
+
+    /** Смена пароля сотруднику — только администратор и разработчик. */
+    private function assertCanChangePassword(string $password): void
+    {
+        if ($password === '') {
+            return;
+        }
+        require_once __DIR__ . '/../shared/Auth.php';
+        if (!function_exists('wms_auth_is_admin_or_dev') || !wms_auth_is_admin_or_dev()) {
+            throw new RuntimeException('Смена пароля доступна только администратору и разработчику');
+        }
+    }
     /** Проверка логина/пароля учётной записи. */
     private function validateCredentials(string $login, string $password, bool $isCreate, int $id): void
     {
         $login = trim($login);
+        // Правка существующей карточки: если логин ещё не заведён, менять пароль можно
+        // без его дублирования — логин останется пустым (задаётся отдельно при необходимости).
+        if (!$isCreate && $login === '') {
+            if ($password !== '' && (function_exists('mb_strlen') ? mb_strlen($password, 'UTF-8') : strlen($password)) < 4) {
+                throw new RuntimeException('Пароль — не менее 4 символов');
+            }
+            return;
+        }
         if ($login === '') {
             throw new RuntimeException('Укажите логин для входа');
         }
@@ -602,6 +626,14 @@ final class EmployeeService
         }
         if ($isCreate && $password === '') {
             throw new RuntimeException('Укажите пароль для входа');
+        }
+        // Логин admin — служебный вход портала, сотрудникам недоступен.
+        if (strcasecmp($login, 'admin') === 0) {
+            $adm = $this->pdo->prepare("SELECT id FROM employees WHERE LOWER(login)='admin' LIMIT 1");
+            $adm->execute();
+            if ((int)($adm->fetchColumn() ?: 0) !== $id) {
+                throw new RuntimeException('Логин admin зарезервирован системой');
+            }
         }
         if ($password !== '') {
             if (function_exists('mb_strlen') ? mb_strlen($password, 'UTF-8') < 4 : strlen($password) < 4) {
@@ -647,6 +679,13 @@ final class EmployeeService
     /** ФИО пользователя, изменившего карточку. */
     private function userFio(int $userId): string
     {
+        // ФИО того, кто залогинился на портал (вкладка «История изменений»).
+        if (function_exists('wms_auth_fio')) {
+            $fio = wms_auth_fio('');
+            if ($fio !== '') {
+                return $fio;
+            }
+        }
         if ($userId <= 0) {
             return 'Система';
         }

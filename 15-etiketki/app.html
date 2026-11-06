@@ -57,32 +57,27 @@ pre.zpl{white-space:pre-wrap;background:#0F172A;color:#D7E2F0;padding:12px;borde
 .lp-bars i{display:block;background:#111;height:100%}
 .lp-code{font:12px/1.2 monospace;letter-spacing:.4px}
 .print-status{font-size:12px;min-height:18px;margin-top:6px;color:#4A5568}
+.printer-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;margin-top:6px}
+.printer-row{display:flex;gap:6px;align-items:stretch}
+.printer-pick{flex:1;text-align:left;border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 10px;cursor:pointer;font:13px Arial,Helvetica,sans-serif;color:var(--ink)}
+.printer-pick:hover{border-color:#C9B8FF;background:#FAF8FF}
+.printer-pick:disabled{opacity:.55;cursor:default}
+.printer-row .btn.sm{white-space:nowrap}
 .new-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media(max-width:760px){.res-grid,.new-grid{grid-template-columns:1fr}.label-preview{width:100%;max-width:290px}}
 </style>
 <style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}</style>
 </head>
 <body>
-<aside><nav class="nav">
-<a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a>
-<a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a>
-<a class="mi" href="../03.1-zakazy/app.html">📤 3.1 Заказы</a>
-<a class="mi" href="../03-otgruzki/app.html">📦 3 Отгрузки</a>
-<a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a>
-<a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a>
-<a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a>
-<a class="mi" href="../08.1-tovarny-zapas/app.html">📦 8.1 Товарный запас</a>
-<a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a>
-<a class="mi on" href="../15-etiketki/app.html">🏷️ 15 Этикетки</a>
-<a class="mi" href="../tsd/app.html">📱 ТСД</a>
-</nav></aside>
+<aside><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-nablyudeniya/app.html">📊 11 Наблюдения</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a><a class="mi on" href="../15-etiketki/app.html">🏷️ 15 Этикетки</a><a class="mi" href="../16-billing/app.html">💳 16 Биллинги</a><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
 <main>
 <div class="top"><h1>Этикетки</h1><div class="user"><span class="ava">?</span><span>Загрузка...</span></div></div>
-<div class="hint">Печать этикеток 58×40 мм. Отгрузка — S-, Приемка — A-, Комплектация — PL-. Не более 500 штук за раз. ПКМ по карточке — редактирование ZPL/SQL.</div>
+<div class="hint">Печать этикеток 58×40 и 70×48 мм. Отгрузка — S-, Приемка — A-, Комплектация — PL-. Не более 500 штук за раз. ПКМ по карточке — редактирование ZPL/SQL.</div>
 <div class="tabs"><span id="tabPrint" class="on">Печать</span><span id="tabLog">Логирование этикеток</span></div>
 
 <section id="vPrint">
-  <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px">
+    <button class="btn" id="blankLabelBtn">Пустая этикетка</button>
     <button class="btn" id="newLabelBtn">＋ Новая этикетка</button>
   </div>
   <div class="cards" id="cards">Загрузка...</div>
@@ -113,7 +108,11 @@ pre.zpl{white-space:pre-wrap;background:#0F172A;color:#D7E2F0;padding:12px;borde
   <div class="res-grid">
     <div class="res-side">
       <label>Принтер</label>
-      <select id="printerSel" disabled><option value="">Загрузка...</option></select>
+      <div class="printer-list" id="printerList"><div class="hint">Загрузка...</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn sm" id="addPrinterBtn" type="button">＋ Добавить принтер</button>
+        <button class="btn sm" id="refreshPrintersBtn" type="button">Обновить список</button>
+      </div>
       <div class="hint" id="printerHint"></div>
       <div class="print-status" id="printStatus"></div>
       <label>Предпросмотр одной этикетки</label>
@@ -126,7 +125,7 @@ pre.zpl{white-space:pre-wrap;background:#0F172A;color:#D7E2F0;padding:12px;borde
       <pre class="zpl" id="resZpl"></pre>
     </div>
   </div>
-  <div class="mfoot"><button class="btn" id="resCopy">Скопировать ZPL</button><button class="btn pri" id="resDownload">Скачать .zpl</button><button class="btn" id="resDone">Готово</button></div>
+  <div class="mfoot"><button class="btn" id="resCopy">Скопировать ZPL</button><button class="btn" id="resPdf">PDF (этикетка)</button><button class="btn" id="resDownload">Скачать .zpl</button><button class="btn pri" id="resDone">Готово</button></div>
 </div></div>
 
 <div class="modal" id="newModal"><div class="mbox wide">
@@ -146,6 +145,28 @@ pre.zpl{white-space:pre-wrap;background:#0F172A;color:#D7E2F0;padding:12px;borde
   <textarea id="newSql" class="codebox" style="min-height:120px"></textarea>
   <div class="mfoot"><button class="btn" id="newCancel">Отмена</button><button class="btn pri" id="newSave">Создать</button></div>
 </div></div>
+<div class="modal" id="blankModal"><div class="mbox" style="width:560px;max-width:96vw">
+  <div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">Пустая этикетка</h2><span id="blankClose" style="cursor:pointer;color:var(--vio);font-size:20px">✕</span></div>
+  <div class="hint">Введите любые данные — они напечатаются на этикетке. Размер можно изменить.</div>
+  <div class="frow" style="display:flex;gap:10px;margin-top:10px">
+    <div style="flex:1"><label>Ширина, мм</label><input id="bl_w" type="number" min="20" max="250" value="70"></div>
+    <div style="flex:1"><label>Высота, мм</label><input id="bl_h" type="number" min="15" max="250" value="48"></div>
+    <div style="flex:1"><label>Копий</label><input id="bl_n" type="number" min="1" max="100" value="1"></div>
+  </div>
+  <label>Данные (каждая строка — новая строка на этикетке)</label>
+  <textarea id="bl_text" rows="5" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;font:13px Arial" placeholder="Например:&#10;Товар: Стретч-плёнка&#10;Партия: A-105110&#10;Ячейка: DOK-01"></textarea>
+  <label class="chk" style="display:flex;align-items:center;gap:6px;font-weight:400;margin-top:8px"><input type="checkbox" id="bl_bc_on"> Печать ШК (штрихкод сверху, подпись под ним)</label>
+  <div id="bl_bcbox" style="display:none;margin-top:6px"><label>Значение ШК</label><input id="bl_barcode" placeholder="4607001234567"></div>
+  <div class="frow" style="display:flex;gap:10px;margin-top:10px">
+    <div style="flex:1"><label>Термопринтер</label><select id="bl_printer"><option value="">Загрузка…</option></select></div>
+    <div style="flex:1"><label>Разрешение</label><select id="bl_dpi"><option value="203" selected>203 dpi</option><option value="300">300 dpi</option></select></div>
+  </div>
+  <div class="mfoot" style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
+    <button class="btn" id="bl_pdf">PDF этикетка</button>
+    <button class="btn pri" id="bl_print">Термо</button>
+  </div>
+</div></div>
+
 <div id="toast"></div>
 
 <script>
@@ -155,13 +176,25 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
 let templates={},ctxType='',tplType='',lastResult=null,printing=false;
 const BASE_TYPES=['shipment','receipt','picking'];
+// Печатаемые типы (58×40 и 70×48) и служебные (только редактирование кода).
+const PRINT_TYPES=['shipment','receipt','picking','stock_sscc','shipment_70','receipt_70','picking_70','stock_sscc_70'];
+const CODE_TYPES=['product','cell','pallet'];
 const DEFAULT_ZPL='^XA\n^CI28\n^PW464\n^LL320\n^FO0,10^A0N,30,30^FB464,1,0,C^FD{{TITLE}}^FS\n^FO55,80^BY2,2.0,110^BCN,110,Y,N,N^FD{{CODE}}^FS\n^FO0,210^A0N,24,24^FB464,1,0,C^FD{{CODE}}^FS\n^XZ';
 
 function cardTypes(){
-  const custom=Object.keys(templates).filter(t=>!BASE_TYPES.includes(t)&&t!=='stock_sscc');
-  return BASE_TYPES.filter(t=>templates[t]).concat(custom);
+  return PRINT_TYPES.filter(t=>templates[t]);
 }
+function codeTypes(){
+  return CODE_TYPES.filter(t=>templates[t]);
+}
+function lblAllowed(){return !window.wmsCanPrintLabels||window.wmsCanPrintLabels()}
 async function loadTemplates(){
+  if(!lblAllowed()){
+    $('cards').innerHTML='<div class="card red" style="background:#FFF3F3;border:1px solid #EF9A9A;border-radius:10px;padding:14px">Печать этикеток и просмотр кодов доступны только <b>администратору</b> и <b>разработчику</b>.</div>';
+    const nb=$('newLabelBtn');if(nb)nb.style.display='none';
+    const bb=$('blankLabelBtn');if(bb)bb.style.display='none';
+    return;
+  }
   const r=await fetch(API+'?action=templates');const j=await r.json();
   templates={};for(const x of (j.rows||[]))templates[x.label_type]=x;
   $('cards').innerHTML=cardTypes().map(t=>{const x=templates[t]||{label_name:t,title:t,prefix:t};return `<div class="card" data-type="${t}">
@@ -169,7 +202,14 @@ async function loadTemplates(){
     <div class="hint">${esc(x.title||'')} · ${esc(x.width_mm||58)}×${esc(x.height_mm||40)} мм</div>
     <div class="row"><input type="number" min="1" max="500" value="1" data-qty="${t}"><button class="btn pri" data-print="${t}">Печать</button><span class="hint">до 500 шт.</span></div>
   </div>`}).join('');
+  // Служебные этикетки (товар/ячейка/паллета) — только редактирование кода, без печати.
+  const codeHtml = codeTypes().map(t=>{const x=templates[t]||{};return `<div class="card" data-code="${t}">
+    <h3>${esc(x.label_name||t)}</h3><div class="pref">${esc(x.prefix||'')}</div>
+    <div class="hint">Только редактирование кода · ${esc(x.width_mm||70)}×${esc(x.height_mm||48)} мм</div>
+    <div class="row"><button class="btn" data-editcode="${t}">Редактировать код</button></div></div>`}).join('');
+  if(codeHtml){$('cards').innerHTML+='<div class="hint" style="margin:16px 0 6px">Служебные типы (печать — из модулей «Ячейки», «Товарный запас», «Номенклатура»)</div>'+codeHtml;}
   document.querySelectorAll('[data-print]').forEach(b=>b.onclick=e=>{e.stopPropagation();printType(b.dataset.print)});
+  document.querySelectorAll('[data-editcode]').forEach(b=>b.onclick=e=>{e.stopPropagation();openTemplate(b.dataset.editcode)});
   document.querySelectorAll('.card[data-type]').forEach(c=>{
     c.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();ctxType=c.dataset.type;const m=$('ctx');m.style.display='block';m.style.left=Math.min(e.clientX,innerWidth-240)+'px';m.style.top=Math.min(e.clientY,innerHeight-100)+'px';};
   });
@@ -200,39 +240,60 @@ function showResult(j){
   loadLog();
 }
 async function loadPrinters(){
-  const sel=$('printerSel'),hint=$('printerHint');
-  sel.innerHTML='<option value="">Загрузка...</option>';sel.disabled=true;hint.textContent='';
+  const box=$('printerList'),hint=$('printerHint');
+  box.innerHTML='<div class="hint">Загрузка...</div>';hint.textContent='';
   try{
     const r=await fetch(API+'?action=printers');const j=await r.json();
     const rows=j.rows||[];
     if(!rows.length){
-      sel.innerHTML='<option value="">Принтеры не найдены</option>';
+      box.innerHTML='<div class="hint">Принтеры не найдены</div>';
       hint.textContent=j.error||'Прямая печать недоступна. Скачайте .zpl или настройте принтер на сервере.';
       return;
     }
-    sel.innerHTML='<option value="">Выберите принтер</option>'+rows.map(p=>`<option value="${esc(p.name)}">${esc(p.name)}${p.default?' (по умолчанию)':''}</option>`).join('');
-    sel.disabled=false;
-    hint.textContent='После выбора принтера печать начнётся сразу.';
+    box.innerHTML=rows.map(p=>`<div class="printer-row">
+      <button class="printer-pick" type="button" data-printer="${esc(p.name)}">${esc(p.name)}${p.default?' <span class="hint">(по умолчанию)</span>':''}</button>
+      <button class="btn sm" type="button" data-props="${esc(p.name)}">Свойства</button>
+    </div>`).join('');
+    box.querySelectorAll('[data-printer]').forEach(b=>b.onclick=()=>printToPrinter(b.dataset.printer));
+    box.querySelectorAll('[data-props]').forEach(b=>b.onclick=()=>openPrinterDialog('properties',b.dataset.props));
+    hint.textContent='Клик по принтеру — термопечать (этикетка рисуется шрифтом Arial, кириллица корректно). Кнопка «PDF (этикетка)» — печатная форма ровно по размеру.';
   }catch(e){
-    sel.innerHTML='<option value="">Ошибка списка принтеров</option>';
+    box.innerHTML='<div class="hint">Ошибка списка принтеров</div>';
     hint.textContent=e.message||'Не удалось получить принтеры';
   }
 }
-async function printToPrinter(){
-  const printer=$('printerSel').value;
+async function printToPrinter(printer){
   if(!printer||!lastResult||printing)return;
-  printing=true;$('printerSel').disabled=true;$('printStatus').textContent='Отправка на '+printer+'...';
+  const picks=[...$('printerList').querySelectorAll('.printer-pick')];
+  printing=true;picks.forEach(b=>b.disabled=true);$('printStatus').textContent='Отправка на '+printer+'...';
   try{
-    const r=await fetch(API+'?action=print_raw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({printer,zpl:lastResult.zpl})});
-    const j=await r.json();if(!r.ok)throw new Error(j.error||'Ошибка печати');
-    $('printStatus').textContent='Отправлено на '+printer+'.';
+    // Термо: сервер рисует этикетку (Arial, кириллица) и отправляет ZPL-растр на принтер.
+    const body={printer,type:lastResult.type,codes:(lastResult.codes&&lastResult.codes.length?lastResult.codes:[lastResult.code]).filter(Boolean),dpi:+(lastResult.dpi||203)};
+    let r=await fetch(API+'?action=print_label',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    let txt=await r.text();let j={};try{j=txt?JSON.parse(txt):{}}catch(_){}
+    if(!r.ok&&/только на Windows/i.test(String(j.error||''))){
+      // Запасной путь: отправляем ZPL, сформированный по шаблону.
+      r=await fetch(API+'?action=print_raw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({printer,zpl:lastResult.zpl})});
+      txt=await r.text();try{j=txt?JSON.parse(txt):{}}catch(_){}
+    }
+    if(!r.ok)throw new Error(j.error||('HTTP '+r.status+(txt?': '+txt.slice(0,300):' (пустой ответ сервера)')));
+    $('printStatus').textContent='Термо: отправлено на '+printer+' ('+(j.count||1)+' шт.).';
     toast('Печать: '+printer);
   }catch(e){
     $('printStatus').textContent='Ошибка: '+e.message;
     toast('Ошибка печати: '+e.message);
   }finally{
-    printing=false;$('printerSel').disabled=false;
+    printing=false;picks.forEach(b=>b.disabled=false);
   }
+}
+async function openPrinterDialog(mode,printer){
+  const body={mode};if(printer)body.printer=printer;
+  try{
+    const r=await fetch(API+'?action=printer_dialog',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const txt=await r.text();let j={};try{j=txt?JSON.parse(txt):{}}catch(_){}
+    if(!r.ok)throw new Error(j.error||('HTTP '+r.status+(txt?': '+txt.slice(0,300):' (пустой ответ сервера)')));
+    toast(mode==='add'?'Окно добавления принтера открыто на сервере':'Свойства принтера открыты на сервере');
+  }catch(e){toast('Ошибка: '+e.message)}
 }
 function downloadZpl(){
   if(!lastResult||!lastResult.zpl){toast('Нет ZPL');return}
@@ -285,12 +346,65 @@ $('tplClose').onclick=$('tplCancel').onclick=()=>$('tplModal').classList.remove(
 $('tplTabZpl').onclick=()=>setTplTab('zpl');$('tplTabSql').onclick=()=>setTplTab('sql');$('tplSave').onclick=saveTemplate;
 $('resClose').onclick=$('resDone').onclick=()=>$('resModal').classList.remove('open');
 $('resDownload').onclick=downloadZpl;
+// PDF-тракт (как в модуле «Номенклатура»): страница ровно по размеру этикетки.
+$('resPdf').onclick=()=>{
+  if(!lastResult)return;
+  const p=new URLSearchParams({action:'pdf'});
+  if(lastResult.batch_id)p.set('batch_id',lastResult.batch_id);
+  if(lastResult.type)p.set('type',lastResult.type);
+  if(!lastResult.batch_id&&(lastResult.codes||[]).length)p.set('codes',lastResult.codes.join(','));
+  window.open(API+'?'+p.toString(),'_blank');
+};
 $('resCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('resZpl').textContent);toast('ZPL скопирован')}catch(e){toast('Не удалось скопировать')}};
-$('printerSel').onchange=printToPrinter;
+$('addPrinterBtn').onclick=()=>openPrinterDialog('add');
+$('refreshPrintersBtn').onclick=loadPrinters;
 $('newLabelBtn').onclick=openNewLabel;
+// --- Пустая этикетка: произвольные данные, ШК сверху по галке ---
+function blankOpen(){
+  $('blankModal').classList.add('open');
+  loadBlankPrinters();
+  const e=$('bl_text'); if(e) setTimeout(()=>e.focus(),50);
+}
+async function loadBlankPrinters(){
+  const sel=$('bl_printer'); if(!sel) return;
+  sel.innerHTML='<option value="">Загрузка…</option>';
+  try{
+    const j=await (await fetch(API+'?action=printers')).json();
+    const rows=j.rows||[];
+    sel.innerHTML=rows.length?rows.map(p=>`<option value="${esc(p.name)}"${p.default?' selected':''}>${esc(p.name)}</option>`).join(''):'<option value="">Принтеры не найдены</option>';
+  }catch(e){sel.innerHTML='<option value="">Ошибка списка принтеров</option>'}
+}
+function blankBody(){
+  return {text:$('bl_text').value,barcode:$('bl_barcode').value.trim(),barcode_top:$('bl_bc_on').checked?1:0,
+    w:Math.min(250,Math.max(20,parseFloat($('bl_w').value)||70)),h:Math.min(250,Math.max(15,parseFloat($('bl_h').value)||48)),
+    copies:Math.min(100,Math.max(1,parseInt($('bl_n').value)||1)),dpi:parseInt($('bl_dpi').value)||203};
+}
+if($('blankLabelBtn'))$('blankLabelBtn').onclick=blankOpen;
+if($('blankClose'))$('blankClose').onclick=()=>$('blankModal').classList.remove('open');
+if($('bl_bc_on'))$('bl_bc_on').onchange=()=>{$('bl_bcbox').style.display=$('bl_bc_on').checked?'block':'none'};
+if($('bl_print'))$('bl_print').onclick=async()=>{
+  const b=blankBody(); const printer=$('bl_printer').value;
+  if(!printer){toast('Выбери термопринтер');return}
+  if(!b.text.trim()&&!b.barcode){toast('Введите данные для этикетки');return}
+  const btn=$('bl_print');btn.disabled=true;const old=btn.textContent;btn.textContent='Печать…';
+  try{
+    const r=await fetch(API+'?action=custom_print',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({printer},b))});
+    const txt=await r.text();let j={};try{j=txt?JSON.parse(txt):{}}catch(_){}
+    if(!r.ok)throw new Error(j.error||('HTTP '+r.status+(txt?': '+txt.slice(0,200):'')));
+    toast('Отправлено на '+printer+' · '+b.copies+' шт.');
+    $('blankModal').classList.remove('open');
+  }catch(e){toast('Ошибка печати: '+e.message,5000)}
+  finally{btn.disabled=false;btn.textContent=old}
+};
+if($('bl_pdf'))$('bl_pdf').onclick=()=>{
+  const b=blankBody();
+  if(!b.text.trim()&&!b.barcode){toast('Введите данные для этикетки');return}
+  const p=new URLSearchParams({action:'custom_pdf',text:b.text,barcode:b.barcode,barcode_top:b.barcode_top?1:0,w:b.w,h:b.h});
+  window.open(API+'?'+p.toString(),'_blank');
+};
 $('newClose').onclick=$('newCancel').onclick=()=>$('newModal').classList.remove('open');
 $('newSave').onclick=saveNewLabel;
 loadTemplates();loadLog();
 </script>
-</body>
+<script>document.addEventListener("click",function(e){var c=e.target.closest(".caret");if(!c)return;var g=c.closest(".grp");if(g)g.classList.toggle("open");});</script></body>
 </html>

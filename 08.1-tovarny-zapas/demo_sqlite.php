@@ -11,6 +11,9 @@ declare(strict_types=1);
 // Дата производства партии — product_stock.prod_date; срок хранения артикула —
 // products.shelf_life_days; контроль даты производства — products.control_prod_date.
 // Дата окончания срока = prod_date + shelf_life_days, осталось дней = дата - CURRENT_DATE.
+// Фильтры реестра: поиск, склад, ячейка (полный/частичный код), зона ячейки,
+// владелец товара, код прихода, резерв по отгрузке и по заказу (только строки,
+// стоящие в резерве активных заданий отбора по этому документу).
 
 require_once __DIR__ . '/../shared/db.php';
 
@@ -58,6 +61,8 @@ function stock_ensure_pallet_col(PDO $pdo): void
     wms_ensure_column($pdo, 'product_stock', 'quality', "VARCHAR(20) NULL DEFAULT 'новый'", "quality TEXT DEFAULT 'новый'", "VARCHAR(20) NULL DEFAULT 'новый'");
     wms_ensure_column($pdo, 'product_stock', 'receipt_no', 'VARCHAR(50) NULL', 'receipt_no TEXT', 'VARCHAR(50) NULL');
     wms_ensure_column($pdo, 'product_stock', 'receipt_id', 'BIGINT NULL', 'receipt_id INTEGER', 'BIGINT NULL');
+    wms_ensure_column($pdo, 'product_stock', 'no_serial', 'TINYINT(1) NOT NULL DEFAULT 0', 'INTEGER NOT NULL DEFAULT 0', 'SMALLINT NOT NULL DEFAULT 0');
+    wms_ensure_column($pdo, 'product_stock', 'reject_reason', 'VARCHAR(255) NULL', 'TEXT NULL', 'VARCHAR(255) NULL');
 }
 
 stock_ensure_pallet_col($pdo);
@@ -135,6 +140,51 @@ function stock_cell_allows(?string $allowedRaw, string $palletType): bool
     return in_array(stock_norm_pallet_type($palletType), $parts, true);
 }
 
+
+/**
+ * Даты создания SSCC (tsd_pallets.created_at) по номерам паллет:
+ * используется для столбца «Дата паллеты», если она не заполнена в остатке.
+ * @return array<string,string>
+ */
+function stock_pallet_created_map(array $pallets): array
+{
+    $pallets = array_values(array_unique(array_filter(array_map(
+        fn($v) => trim((string)$v), $pallets
+    ), fn($v) => $v !== '')));
+    if (!$pallets) {
+        return [];
+    }
+    $out = [];
+    try {
+        $rdb = wms_receipts_pdo();
+        if (function_exists('wms_table_columns') && !wms_table_columns($rdb, 'tsd_pallets')) {
+            return [];
+        }
+        foreach (array_chunk($pallets, 300) as $chunk) {
+            $in = implode(',', array_fill(0, count($chunk), '?'));
+            $st = $rdb->prepare("SELECT sscc, MIN(COALESCE(closed_at, created_at)) AS created_at
+                                   FROM tsd_pallets WHERE sscc IN ($in) GROUP BY sscc");
+            $st->execute($chunk);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $sscc = trim((string)$r['sscc']);
+                $dt = substring_date((string)($r['created_at'] ?? ''));
+                if ($sscc !== '' && $dt !== '') {
+                    $out[$sscc] = $dt;
+                }
+            }
+        }
+    } catch (Throwable) {
+    }
+    return $out;
+}
+
+/** Первые 10 символов даты (YYYY-MM-DD). */
+function substring_date(string $v): string
+{
+    $v = trim($v);
+    return $v === '' ? '' : substr($v, 0, 10);
+}
+
 /** Карта ячеек склада {warehouse_id|cell => [allowed_pallet_types, pallet_type]} одним запросом. */
 function stock_cells_map(array $rows): array
 {
@@ -166,7 +216,7 @@ function stock_cells_map(array $rows): array
             return $out;
         }
         $st = $spdo->prepare(
-            'SELECT warehouse_id, code, allowed_pallet_types, pallet_type, cell_height_mm
+            'SELECT warehouse_id, code, zone, allowed_pallet_types, pallet_type, cell_height_mm
              FROM storage_cells WHERE ' . implode(' OR ', $conds) . ' LIMIT 500'
         );
         $st->execute($params);
@@ -252,6 +302,7 @@ function stock_enrich_row(array &$r, array $cellsMap, array $palletCells = []): 
     $ck = ((int)($r['warehouse_id'] ?? 0)) . '|' . trim((string)($r['cell'] ?? ''));
     $cell = $cellsMap[$ck] ?? null;
     $r['cell_allowed'] = $cell['allowed_pallet_types'] ?? 'euro,fin';
+    $r['cell_zone'] = $cell['zone'] ?? null;
     $r['cell_pallet_type'] = $cell['pallet_type'] ?? null;
     $r['cell_allows_current'] = stock_cell_allows($r['cell_allowed'], $pt);
     // Резерв: разбивка на «Отгрузка» (номера через запятую) и «Резерв» (сумма).
@@ -275,6 +326,9 @@ function stock_enrich_row(array &$r, array $cellsMap, array $palletCells = []): 
     $r['pallet_cells'] = array_values(array_unique(array_column($places, 'cell')));
     $r['pallet_conflict'] = count($places) > 1;
     // Качество: 'новый' (по умолчанию) или 'Брак'.
+    // Приёмка без с/н: признак и причина отбраковки (красным жирным в таблице).
+    $r['no_serial'] = (int)($r['no_serial'] ?? 0) ? 1 : 0;
+    $r['reject_reason'] = trim((string)($r['reject_reason'] ?? ''));
     $r['quality'] = trim((string)($r['quality'] ?? 'новый'));
     if ($r['quality'] === '') {
         $r['quality'] = 'новый';
@@ -345,11 +399,176 @@ function stock_reserve_map(PDO $tpdo, array $skus): array
     return $out;
 }
 
+/**
+ * PDO с таблицей storage_cells: в PostgreSQL модули живут в одной схеме
+ * (главный PDO), в SQLite — отдельный файл ячеек.
+ */
+function stock_storage_pdo(PDO $main): PDO
+{
+    try {
+        if (wms_table_columns($main, 'storage_cells')) {
+            return $main;
+        }
+    } catch (Throwable) {
+    }
+    return wms_storage_pdo();
+}
+
+/** Коды ячеек выбранной зоны (для фильтра «Зона ячейки»). */
+function stock_zone_cells(PDO $main, string $zone, int $whId): array
+{
+    $out = [];
+    try {
+        $sp = stock_storage_pdo($main);
+        $sql = 'SELECT DISTINCT code FROM storage_cells WHERE zone = :z';
+        $p = [':z' => $zone];
+        if ($whId > 0) {
+            $sql .= ' AND warehouse_id = :w';
+            $p[':w'] = $whId;
+        }
+        $st = $sp->prepare($sql . ' LIMIT 5000');
+        $st->execute($p);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $c) {
+            $c = trim((string)$c);
+            if ($c !== '') {
+                $out[] = $c;
+            }
+        }
+    } catch (Throwable) {
+    }
+    return array_values(array_unique($out));
+}
+
+/**
+ * Позиции (sku + паллета) активных заданий отбора по номерам документов
+ * (отгрузка/заказ) — именно они считаются «в резерве» для фильтра.
+ * @return array<int,array{0:string,1:string}>
+ */
+function stock_reserve_pairs(PDO $main, array $docNos, array $sids = [], array $orderRefs = []): array
+{
+    $out = [];
+    $docNos = array_values(array_unique(array_filter(array_map('trim', array_map('strval', $docNos)), fn($v) => $v !== '')));
+    $orderRefs = array_values(array_unique(array_filter(array_map('trim', array_map('strval', $orderRefs)), fn($v) => $v !== '')));
+    $sids = array_values(array_unique(array_filter(array_map('intval', $sids), fn($v) => $v > 0)));
+    if (!$docNos && !$sids && !$orderRefs) {
+        return $out;
+    }
+    require_once __DIR__ . '/../shared/PickIssue.php';
+    $pdos = wms_tasks_pdos();
+    foreach ($pdos as $tpdo) {
+        try {
+            $tbl = wms_task_tables($tpdo);
+            $rows = [];
+            if ($docNos || $sids) {
+                $rows = wms_find_pick_tasks($tpdo, $sids, $docNos);
+            }
+            // Заказ может быть указан и в шапке задания (order_ref).
+            if ($orderRefs) {
+                $hasOrd = wms_task_has_col($tpdo, $tbl['t'], 'order_ref');
+                if ($hasOrd) {
+                    $conds = [];
+                    $params = [];
+                    foreach ($orderRefs as $i => $ref) {
+                        $conds[] = "(COALESCE(order_ref,'') = :o{$i}a OR REPLACE(COALESCE(order_ref,''),' ','') LIKE :o{$i}b)";
+                        $params[":o{$i}a"] = $ref;
+                        $params[":o{$i}b"] = '%' . str_replace(' ', '', $ref) . '%';
+                    }
+                    $st = $tpdo->prepare(
+                        "SELECT id, doc_no, status, shipment_ids, doc_ref, order_ref FROM {$tbl['t']}
+                          WHERE flags LIKE '%pick%' AND status IN ('new','work','paused') AND (" . implode(' OR ', $conds) . ')'
+                    );
+                    foreach ($params as $k => $v) {
+                        $st->bindValue($k, $v);
+                    }
+                    $st->execute();
+                    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                        $id = (int)$r['id'];
+                        $rows[$id] = [
+                            'id' => $id,
+                            'doc_no' => (string)($r['doc_no'] ?? ''),
+                            'status' => (string)($r['status'] ?? ''),
+                            'shipment_ids' => array_map('intval', array_filter(explode(',', (string)($r['shipment_ids'] ?? '')), fn($v) => trim($v) !== '')),
+                            'doc_nos' => array_values(array_filter(array_map('trim', explode(',', (string)($r['doc_ref'] ?? ''))))),
+                        ];
+                    }
+                }
+            }
+            if (!$rows) {
+                continue;
+            }
+            $ids = array_map(fn($r) => (int)$r['id'], array_values($rows));
+            $in = implode(',', array_fill(0, count($ids), '?'));
+            $st = $tpdo->prepare(
+                "SELECT sku, pallet, plan_qty, fact_qty FROM {$tbl['i']} WHERE task_id IN ($in)"
+            );
+            $st->execute($ids);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $need = (float)($r['plan_qty'] ?? 0) - (float)($r['fact_qty'] ?? 0);
+                if ($need <= 0) {
+                    continue;
+                }
+                $sku = trim((string)($r['sku'] ?? ''));
+                if ($sku === '') {
+                    continue;
+                }
+                $out[] = [$sku, trim((string)($r['pallet'] ?? ''))];
+            }
+        } catch (Throwable) {
+        }
+    }
+    // Уникализируем пары.
+    $seen = [];
+    $uniq = [];
+    foreach ($out as $pair) {
+        $k = $pair[0] . "\x00" . $pair[1];
+        if (!isset($seen[$k])) {
+            $seen[$k] = true;
+            $uniq[] = $pair;
+        }
+    }
+    return $uniq;
+}
+
+/** Отгрузки заказа (номер заказа из 3.1 → документы отгрузки). */
+function stock_order_shipments(PDO $main, string $orderNo): array
+{
+    $res = ['doc_nos' => [], 'ids' => []];
+    if ($orderNo === '') {
+        return $res;
+    }
+    try {
+        $ship = wms_shipments_pdo();
+        $st = $ship->prepare(
+            'SELECT s.id, s.doc_no FROM client_orders o
+               JOIN shipment_orders so ON so.order_id = o.id
+               JOIN shipments s ON s.id = so.shipment_id
+              WHERE o.doc_no = :q'
+        );
+        $st->execute([':q' => $orderNo]);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $res['ids'][] = (int)$r['id'];
+            $dn = trim((string)$r['doc_no']);
+            if ($dn !== '') {
+                $res['doc_nos'][] = $dn;
+            }
+        }
+    } catch (Throwable) {
+    }
+    return $res;
+}
+
 if ($action === 'list') {
     $page = max(1, (int)($_GET['page'] ?? 1));
     $perPage = wms_per_page($_GET['per_page'] ?? 20, 20, 100, 1);
     $w = ['1=1'];
     $p = [];
+    // Учётная запись клиента: только товар его владельца (модуль 9).
+    require_once __DIR__ . '/../shared/Auth.php';
+    $ownScope = wms_data_owner_scope();
+    if ($ownScope !== '') {
+        $w[] = "COALESCE(p.owner,'') = :own_scope";
+        $p[':own_scope'] = $ownScope;
+    }
     if (!empty($_GET['search'])) {
         $q = '%' . trim((string)$_GET['search']) . '%';
         $w[] = '(p.sku LIKE :q OR p.code LIKE :q OR p.name LIKE :q OR s.cell LIKE :q OR s.pallet LIKE :q OR s.supplier_batch LIKE :qb OR s.receipt_no LIKE :q)';
@@ -393,6 +612,89 @@ if ($action === 'list') {
     } elseif ($fProdDate === '0') {
         $w[] = 's.prod_date IS NULL';
     }
+    // Фильтр: код ячейки — полный или частичный (%dok% / dok → все ячейки,
+    // в коде которых встречается эта часть).
+    $fCell = trim((string)($_GET['cell'] ?? ''));
+    if ($fCell !== '') {
+        $like = (str_contains($fCell, '%') || str_contains($fCell, '_')) ? $fCell : ('%' . $fCell . '%');
+        $w[] = 'LOWER(s.cell) LIKE LOWER(:fcell)';
+        $p[':fcell'] = $like;
+    }
+    // Фильтр: зона ячейки (storage/shipment/receiving/quarantine) — по справочнику ячеек.
+    $fZone = trim((string)($_GET['zone'] ?? ''));
+    $zoneCells = [];
+    if ($fZone !== '') {
+        $zoneCells = stock_zone_cells($pdo, $fZone, (int)($_GET['warehouse_id'] ?? 0));
+        if ($zoneCells) {
+            $ph = [];
+            foreach ($zoneCells as $i => $code) {
+                $k = ':zc' . $i;
+                $ph[] = $k;
+                $p[$k] = $code;
+            }
+            $w[] = 's.cell IN (' . implode(',', $ph) . ')';
+        } else {
+            $w[] = '1=0';
+        }
+    }
+    // Фильтр: владелец товара (products.owner).
+    $fOwner = trim((string)($_GET['owner'] ?? ''));
+    if ($fOwner !== '') {
+        $w[] = 'COALESCE(p.owner, \'\') = :fowner';
+        $p[':fowner'] = $fOwner;
+    }
+    // Фильтр: код прихода (product_stock.receipt_no) — полный или частичный.
+    $fReceipt = trim((string)($_GET['receipt'] ?? ''));
+    if ($fReceipt !== '') {
+        $like = (str_contains($fReceipt, '%') || str_contains($fReceipt, '_')) ? $fReceipt : ('%' . $fReceipt . '%');
+        $w[] = "LOWER(s.receipt_no) LIKE LOWER(:frec)";
+        $p[':frec'] = $like;
+    }
+    // Фильтр: отгрузка / заказ — только строки, которые стоят в резерве
+    // активных заданий отбора по этому документу.
+    $fShipment = trim((string)($_GET['shipment'] ?? ''));
+    $fOrder = trim((string)($_GET['order'] ?? ''));
+    $reservePairs = [];
+    if ($fShipment !== '') {
+        $shipIds = [];
+        try {
+            $shipDb = wms_shipments_pdo();
+            $stq = $shipDb->prepare('SELECT id FROM shipments WHERE doc_no = :q LIMIT 1');
+            $stq->execute([':q' => $fShipment]);
+            $shipIds[] = (int)$stq->fetchColumn();
+        } catch (Throwable) {
+        }
+        $reservePairs = stock_reserve_pairs($pdo, [$fShipment], $shipIds);
+    } elseif ($fOrder !== '') {
+        $ship = stock_order_shipments($pdo, $fOrder);
+        $reservePairs = stock_reserve_pairs($pdo, $ship['doc_nos'], $ship['ids'], [$fOrder]);
+    }
+    if ($fShipment !== '' || $fOrder !== '') {
+        if ($reservePairs) {
+            $conditions = 0;
+            $conds = [];
+            $n = 0;
+            foreach ($reservePairs as $pair) {
+                if ($conditions >= 500) {
+                    break;
+                }
+                [$rsku, $rpal] = $pair;
+                $n++;
+                $conditions++;
+                if ($rpal !== '') {
+                    $conds[] = "(p.sku = :rsk$n AND TRIM(s.pallet) = :rpal$n)";
+                    $p[":rpal$n"] = $rpal;
+                } else {
+                    $conds[] = "(p.sku = :rsk$n)";
+                }
+                $p[":rsk$n"] = $rsku;
+            }
+            $w[] = '(' . implode(' OR ', $conds) . ')';
+        } else {
+            // Резерва по документу нет — показываем пустой список, а не весь склад.
+            $w[] = '1=0';
+        }
+    }
     $activeFilters = 0;
     if (!empty($_GET['search'])) {
         $activeFilters++;
@@ -407,6 +709,21 @@ if ($action === 'list') {
         $activeFilters++;
     }
     if ($fProdDate === '1' || $fProdDate === '0') {
+        $activeFilters++;
+    }
+    if ($fCell !== '') {
+        $activeFilters++;
+    }
+    if ($fZone !== '') {
+        $activeFilters++;
+    }
+    if ($fOwner !== '') {
+        $activeFilters++;
+    }
+    if ($fReceipt !== '') {
+        $activeFilters++;
+    }
+    if ($fShipment !== '' || $fOrder !== '') {
         $activeFilters++;
     }
     $where = 'WHERE ' . implode(' AND ', $w);
@@ -443,11 +760,11 @@ if ($action === 'list') {
     // s.pallet_type может отсутствовать в старых файлах — миграция выше уже отработала.
     $st = $pdo->prepare(
         "SELECT s.id, s.cell, s.pallet, s.supplier_batch, s.pallet_date, s.pallet_type, s.qty, s.receipt_no, s.warehouse_id,
-                w.name AS warehouse, p.sku, p.code AS product_code, p.name AS product_name, p.unit,
+                w.name AS warehouse, p.sku, p.code AS product_code, p.name AS product_name, p.unit, p.owner,
                 p.length_mm, p.width_mm, p.height_mm, p.weight_g, p.volume_m3 AS prod_volume_m3,
                 p.pallet_type AS prod_pallet_type, p.pallet_height_mm AS prod_pallet_height_mm,
                 s.prod_date, p.shelf_life_days, p.control_prod_date,
-                s.quality,
+                s.quality, s.no_serial, s.reject_reason,
                 {$shelf['expire']} AS shelf_expire_date, {$shelf['days']} AS shelf_days_left
          FROM product_stock s
          LEFT JOIN products p ON p.id = s.product_id
@@ -475,10 +792,17 @@ if ($action === 'list') {
     } catch (Throwable) {
     }
     $cellsMap = stock_cells_map($rows);
+    // «Дата паллеты»: если не заполнена — дата создания SSCC (tsd_pallets).
+    $palletCreated = stock_pallet_created_map(array_column($rows, 'pallet'));
     // Контроль «одна паллета — одна ячейка» — по всей таблице, не только по странице.
     $palletCells = stock_pallet_cells($pdo);
     foreach ($rows as &$r) {
         stock_enrich_row($r, $cellsMap, $palletCells);
+        $pal = trim((string)($r['pallet'] ?? ''));
+        if (trim((string)($r['pallet_date'] ?? '')) === '' && $pal !== '' && isset($palletCreated[$pal])) {
+            $r['pallet_date'] = $palletCreated[$pal];
+            $r['pallet_date_source'] = 'sscc';
+        }
     }
     unset($r);
     echo json_encode([
@@ -655,7 +979,31 @@ if ($action === 'list') {
     } catch (Throwable) {
         $wh = [];
     }
-    echo json_encode(['warehouses' => $wh, 'pallet_specs' => stock_pallet_specs()], JSON_UNESCAPED_UNICODE);
+    // Владельцы товара — для фильтра «Владелец товара».
+    $owners = [];
+    try {
+        $owners = $pdo->query(
+            "SELECT DISTINCT TRIM(owner) AS owner FROM products
+              WHERE owner IS NOT NULL AND TRIM(owner) <> '' ORDER BY owner"
+        )->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable) {
+    }
+    // Зоны ячеек — для фильтра «Зона ячейки».
+    $zones = [];
+    try {
+        require_once __DIR__ . '/../05-yacheyki-hraneniya/CellStatus.php';
+        $sp = stock_storage_pdo($pdo);
+        $codes = $sp->query('SELECT DISTINCT zone FROM storage_cells')->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($codes as $zc) {
+            $zc = trim((string)$zc);
+            if ($zc !== '') {
+                $zones[] = ['code' => $zc, 'label' => CellStatus::zoneLabel($zc)];
+            }
+        }
+    } catch (Throwable) {
+    }
+    echo json_encode(['warehouses' => $wh, 'owners' => array_values(array_filter($owners, fn($v) => $v !== '')),
+        'zones' => $zones, 'pallet_specs' => stock_pallet_specs()], JSON_UNESCAPED_UNICODE);
 } elseif ($action === 'columns_get') {
     require_once __DIR__ . '/../shared/UserColumns.php';
     echo json_encode(['user' => wms_columns_user(), 'form' => (string)($_GET['form'] ?? ''), 'cols' => wms_columns_get($pdo, (string)($_GET['form'] ?? ''))], JSON_UNESCAPED_UNICODE);

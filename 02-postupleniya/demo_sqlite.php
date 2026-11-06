@@ -209,8 +209,37 @@ if ($action === 'list') {
 } elseif ($action === 'items') {
     $rid = (int)($_GET['id'] ?? 0);
     $items = $repo->items($rid);
+    // Артикул WMS (внутренний код номенклатуры, напр. T-129) и штрихкод товара.
+    // В receipt_items.code лежит код поставщика/штрихкод — это не артикул WMS.
+    $nom = null;
+    try {
+        $nom = wms_nomenclature_pdo();
+    } catch (Throwable) {
+        $nom = null;
+    }
+    $hasBarcode = in_array('barcode', wms_table_columns($pdo, 'receipt_items'), true);
     foreach ($items as &$item) {
         $item['processed_qty'] = $service->processedQty($rid, $item);
+        $wmsCode = '';
+        $prodName = '';
+        if ($nom) {
+            try {
+                $pq = $nom->prepare("SELECT code, name FROM products WHERE sku=:s LIMIT 1");
+                $pq->execute([':s' => (string)$item['sku']]);
+                if ($pr = $pq->fetch(PDO::FETCH_ASSOC)) {
+                    $wmsCode = (string)($pr['code'] ?? '');
+                    $prodName = (string)($pr['name'] ?? '');
+                }
+            } catch (Throwable) {
+            }
+        }
+        $item['wms_code'] = $wmsCode !== '' ? $wmsCode : (string)($item['code'] ?? '');
+        if (!isset($item['barcode']) || trim((string)$item['barcode']) === '') {
+            $item['barcode'] = $hasBarcode ? (string)($item['barcode'] ?? '') : (string)($item['code'] ?? '');
+        }
+        if (trim((string)($item['name'] ?? '')) === '' && $prodName !== '') {
+            $item['name'] = $prodName;
+        }
     }
     unset($item);
     echo json_encode($items, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -313,7 +342,7 @@ if ($action === 'list') {
 } elseif ($action === 'priority' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $b = json_decode(file_get_contents('php://input'), true) ?? [];
     try {
-        $service->priority((int)($_GET['id'] ?? 0), (string)($b['priority'] ?? 'normal'), 1);
+        $service->priority((int)($_GET['id'] ?? 0), (string)($b['priority'] ?? 'normal'), function_exists('wms_auth_actor_id') ? wms_auth_actor_id() : 1);
         echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(400);

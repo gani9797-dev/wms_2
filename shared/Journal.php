@@ -121,12 +121,8 @@ final class WmsJournal
                 $op = 'Приход';
             }
             $t = wms_ext_table($pdo, 'wms_serial_journal');
-            $st = $pdo->prepare(
-                "INSERT INTO $t (serial_no, sku, product_name, op_type, receipt_doc_no,
-                        shipment_doc_no, pallet, qty, cell, doc_date, user_id, user_fio)
-                 VALUES (:sn, :sku, :pn, :op, :rd, :sd, :pal, :q, :cell, :d, :uid, :uf)"
-            );
-            $st->execute([
+            $agg = self::s($r['aggregation'] ?? null);
+            $params = [
                 ':sn' => $sn,
                 ':sku' => self::s($r['sku'] ?? null),
                 ':pn' => self::s($r['product_name'] ?? null),
@@ -139,7 +135,24 @@ final class WmsJournal
                 ':d' => trim((string)($r['doc_date'] ?? '')) !== '' ? (string)$r['doc_date'] : date('Y-m-d H:i:s'),
                 ':uid' => isset($r['user_id']) && $r['user_id'] !== '' ? (int)$r['user_id'] : null,
                 ':uf' => self::s($r['user_fio'] ?? null),
-            ]);
+            ];
+            // Агрегированный QR-код (несколько с/н через «;») — если колонка есть.
+            try {
+                $st = $pdo->prepare(
+                    "INSERT INTO $t (serial_no, sku, product_name, op_type, receipt_doc_no,
+                            shipment_doc_no, pallet, qty, cell, doc_date, user_id, user_fio, aggregation)
+                     VALUES (:sn, :sku, :pn, :op, :rd, :sd, :pal, :q, :cell, :d, :uid, :uf, :agg)"
+                );
+                $st->execute($params + [':agg' => ($agg !== '' ? $agg : null)]);
+                return (int)$pdo->lastInsertId();
+            } catch (Throwable) {
+            }
+            $st = $pdo->prepare(
+                "INSERT INTO $t (serial_no, sku, product_name, op_type, receipt_doc_no,
+                        shipment_doc_no, pallet, qty, cell, doc_date, user_id, user_fio)
+                 VALUES (:sn, :sku, :pn, :op, :rd, :sd, :pal, :q, :cell, :d, :uid, :uf)"
+            );
+            $st->execute($params);
             return (int)$pdo->lastInsertId();
         } catch (Throwable) {
             return 0;
@@ -252,6 +265,14 @@ final class WmsJournal
         if (!empty($f['pallet'])) {
             $w[] = 'pallet = :pal';
             $p[':pal'] = (string)$f['pallet'];
+        }
+        // Учётная запись клиента: во всех журналах только товар его владельца.
+        if (function_exists('wms_data_owner_scope')) {
+            $scope = wms_data_owner_scope();
+            if ($scope !== '') {
+                $w[] = "sku IN (SELECT sku FROM products WHERE COALESCE(owner,'') = :own_scope)";
+                $p[':own_scope'] = $scope;
+            }
         }
         if (!empty($f['search'])) {
             $q = '%' . (string)$f['search'] . '%';

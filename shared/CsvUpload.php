@@ -694,14 +694,9 @@ function csv_upload_import_receipt(PDO $rcp, PDO $nom, array $rows, int $supplie
                 $row = $find->fetch(PDO::FETCH_ASSOC);
                 $pid = $row ? $row['id'] : null;
             }
-        } elseif ($group !== null && trim((string)($ex['chz_group'] ?? '')) === '') {
-            // У существующего группа пуста — заполняем из документа (заведенную вручную не трогаем)
-            try {
-                $nom->prepare("UPDATE products SET chz_group = :g WHERE id = :id")
-                    ->execute([':g' => $group, ':id' => $pid]);
-            } catch (Throwable) {
-            }
         }
+        // Существующую карточку импорт НЕ обновляет: поля карточки (владелец, группа,
+        // наименование и т.п.) задаются вручную в номенклатуре и не перетираются загрузкой.
         if ($pid) {
             $barcodesAdded += csv_upload_add_barcodes($nom, (int)$pid, $info['barcodes']);
         }

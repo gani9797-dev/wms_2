@@ -219,6 +219,14 @@ final class ProductRepository
     private function buildWhere(ProductFilter $f): array
     {
         $w = ['1=1']; $p = [];
+        // Учётная запись клиента: виден только товар его владельца (модуль 9).
+        if (function_exists('wms_data_owner_scope')) {
+            $scope = wms_data_owner_scope();
+            if ($scope !== '') {
+                $w[] = "COALESCE(p.owner,'') = :own_scope";
+                $p[':own_scope'] = $scope;
+            }
+        }
         if ($f->search !== null) {
             $w[] = '(p.sku LIKE :q OR p.code LIKE :q OR p.name LIKE :q OR b.barcode LIKE :q)';
             $p[':q'] = '%' . $f->search . '%';

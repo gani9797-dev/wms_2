@@ -317,7 +317,151 @@ try {
             'stats' => wms09_stats($pdo, $id),
             'consignees' => wms09_consignees($pdo, $id),
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    } elseif ($action === 'zones') {
+    } elseif ($action === 'account_refs') {
+    // Данные для вкладки «Учётная запись»: модули, отчёты дашборда, владельцы товара.
+    require_once __DIR__ . '/../10-sotrudniki/EmployeeAccess.php';
+    $modules = [];
+    foreach (EmployeeAccess::WMS_MODULES as $k => $label) {
+        $modules[] = ['key' => $k, 'label' => $label];
+    }
+    $reports = [
+        ['key' => 'in', 'label' => 'Приход'],
+        ['key' => 'out', 'label' => 'Расход'],
+        ['key' => 'all', 'label' => 'Приход / Расход'],
+    ];
+    $owners = [];
+    try {
+        $owners = $pdo->query("SELECT DISTINCT TRIM(owner) AS o FROM products WHERE owner IS NOT NULL AND TRIM(owner) <> '' ORDER BY o")
+            ->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable) {
+    }
+    try {
+        $counterparties = $pdo->query("SELECT DISTINCT TRIM(name) AS n FROM $CP WHERE name IS NOT NULL AND TRIM(name) <> '' ORDER BY n")
+            ->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable) {
+        $counterparties = [];
+    }
+    echo json_encode([
+        'modules' => $modules, 'reports' => $reports,
+        'owners' => array_values(array_filter(array_map('strval', $owners))),
+        'counterparties' => array_values(array_filter(array_map('strval', $counterparties))),
+    ], JSON_UNESCAPED_UNICODE);
+} elseif ($action === 'account_get') {
+    // Учётная запись, привязанная к контрагенту.
+    $cpId = (int)($_GET['counterparty_id'] ?? $_GET['id'] ?? 0);
+    $emp = wms_employees_pdo();
+    $st = $emp->prepare('SELECT * FROM employees WHERE counterparty_id=:c ORDER BY id LIMIT 1');
+    $st->execute([':c' => $cpId]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        echo json_encode(['account' => null], JSON_UNESCAPED_UNICODE);
+        return;
+    }
+    $levels = [];
+    try {
+        $a = $emp->prepare("SELECT module_key, level FROM employee_access WHERE employee_id=:id AND scope='wms'");
+        $a->execute([':id' => (int)$row['id']]);
+        foreach ($a->fetchAll(PDO::FETCH_ASSOC) as $x) {
+            $levels[(string)$x['module_key']] = (string)$x['level'];
+        }
+    } catch (Throwable) {
+    }
+    echo json_encode(['account' => [
+        'id' => (int)$row['id'],
+        'login' => (string)($row['login'] ?? ''),
+        'fio' => (string)($row['fio'] ?? ''),
+        'has_password' => trim((string)($row['password_hash'] ?? '')) !== '',
+        'is_blocked' => (int)($row['is_blocked'] ?? 0),
+        'data_owner' => (string)($row['data_owner'] ?? ''),
+        'dashboard_reports' => (string)($row['dashboard_reports'] ?? ''),
+        'modules' => $levels,
+    ]], JSON_UNESCAPED_UNICODE);
+} elseif ($action === 'account_save' && $isPost) {
+    // Создание/правка учётной записи клиента: логин, пароль, модули, отчёты, владелец товара.
+    require_once __DIR__ . '/../10-sotrudniki/EmployeeAccess.php';
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    $cpId = (int)($b['counterparty_id'] ?? 0);
+    $login = trim((string)($b['login'] ?? ''));
+    $password = (string)($b['password'] ?? '');
+    $owner = trim((string)($b['data_owner'] ?? ''));
+    $reports = array_values(array_filter(array_map('trim', (array)($b['reports'] ?? [])), fn($v) => $v !== ''));
+    $modules = (array)($b['modules'] ?? []);
+    if ($cpId <= 0) {
+        throw new RuntimeException('Не выбран контрагент');
+    }
+    if ($login === '' || (function_exists('mb_strlen') ? mb_strlen($login) : strlen($login)) < 3) {
+        throw new RuntimeException('Логин — не короче 3 символов');
+    }
+    if (!preg_match('/^[A-Za-z0-9_.@-]{3,50}$/', $login)) {
+        throw new RuntimeException('Логин: латиница, цифры, . _ @ - (3–50)');
+    }
+    if (strcasecmp($login, 'admin') === 0) {
+        throw new RuntimeException('Логин admin зарезервирован системой');
+    }
+    $st = $pdo->prepare("SELECT * FROM $CP WHERE id=:id LIMIT 1");
+    $st->execute([':id' => $cpId]);
+    $cp = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$cp) {
+        throw new RuntimeException('Контрагент не найден');
+    }
+    $emp = wms_employees_pdo();
+    $find = $emp->prepare('SELECT * FROM employees WHERE counterparty_id=:c ORDER BY id LIMIT 1');
+    $find->execute([':c' => $cpId]);
+    $row = $find->fetch(PDO::FETCH_ASSOC) ?: null;
+
+    // Логин должен быть уникален (кроме собственной записи).
+    $dup = $emp->prepare('SELECT id FROM employees WHERE LOWER(login)=LOWER(:l) AND id<>:id LIMIT 1');
+    $dup->execute([':l' => $login, ':id' => $row ? (int)$row['id'] : 0]);
+    if ($dup->fetchColumn()) {
+        throw new RuntimeException('Логин уже занят другим сотрудником');
+    }
+    if (!$row && $password === '') {
+        throw new RuntimeException('Задайте пароль для новой учётной записи');
+    }
+    if ($password !== '' && strlen($password) < 4) {
+        throw new RuntimeException('Пароль — не короче 4 символов');
+    }
+    $now = wms_now_sql($emp);
+    if ($row) {
+        $sets = ['login=:l', 'data_owner=:o', 'dashboard_reports=:r', 'updated_at=' . $now];
+        $p = [':l' => $login, ':o' => ($owner !== '' ? $owner : null), ':r' => ($reports ? implode(',', $reports) : null), ':id' => (int)$row['id']];
+        if ($password !== '') {
+            $sets[] = 'password_hash=:ph';
+            $p[':ph'] = password_hash($password, PASSWORD_DEFAULT);
+        }
+        $emp->prepare('UPDATE employees SET ' . implode(', ', $sets) . ' WHERE id=:id')->execute($p);
+        $empId = (int)$row['id'];
+    } else {
+        $emp->prepare(
+            "INSERT INTO employees (fio, last_name, first_name, position, code, department, personnel_no,
+                login, password_hash, status, role, zone, counterparty_id, data_owner, dashboard_reports,
+                tsd_access, is_active, is_blocked, allow_unplanned_exit, created_at, updated_at)
+             VALUES (:fio, '', '', '', '', 'Клиент', '', :l, :ph, 'active', '', 'Все зоны', :cp, :o, :r,
+                0, 1, 0, 0, $now, $now)"
+        )->execute([
+            ':fio' => (string)$cp['name'], ':l' => $login,
+            ':ph' => password_hash($password, PASSWORD_DEFAULT),
+            ':cp' => $cpId, ':o' => ($owner !== '' ? $owner : null),
+            ':r' => ($reports ? implode(',', $reports) : null),
+        ]);
+        $empId = (int)$emp->lastInsertId();
+    }
+    // Модули: персональные права учётной записи (важнее прав роли).
+    try {
+        $emp->prepare('DELETE FROM employee_access WHERE employee_id=:id')->execute([':id' => $empId]);
+        $ins = $emp->prepare('INSERT INTO employee_access (employee_id, scope, module_key, level) VALUES (:id,:sc,:k,:lv)');
+        foreach (EmployeeAccess::WMS_MODULES as $key => $_label) {
+            $lv = (string)($modules[$key] ?? '');
+            if ($lv === '' || $lv === 'none') {
+                continue;
+            }
+            $ins->execute([':id' => $empId, ':sc' => EmployeeAccess::SCOPE_WMS, ':k' => $key, ':lv' => $lv]);
+        }
+    } catch (Throwable $e) {
+        throw new RuntimeException('Не удалось сохранить права по модулям: ' . $e->getMessage());
+    }
+    echo json_encode(['ok' => true, 'employee_id' => $empId, 'login' => $login], JSON_UNESCAPED_UNICODE);
+} elseif ($action === 'zones') {
         $rows = [];
         try {
             $st = $pdo->query("SELECT code, name FROM storage_zones WHERE COALESCE(is_active,1)=1 ORDER BY code");

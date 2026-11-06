@@ -596,6 +596,14 @@ if ($action === 'confirm' && $method === 'POST') {
     $pallet = trim((string)($b['pallet_id'] ?? $b['pallet'] ?? ''));
     $serials = array_values(array_filter(array_map('trim', (array)($b['serials'] ?? []))));
     $markings = array_values(array_filter(array_map('trim', (array)($b['markings'] ?? []))));
+    // Карта «серийный номер -> агрегационный QR-код».
+    $serialAggs = [];
+    foreach ((array)($b['serial_aggs'] ?? []) as $k => $v) {
+        $k = trim((string)$k);
+        if ($k !== '') {
+            $serialAggs[$k] = trim((string)$v);
+        }
+    }
     $uid = (int)($b['user_id'] ?? 0) ?: null;
     if ($sid <= 0 || $itemId <= 0) {
         sj(['error' => 'нужны shipment_id и item_id'], 422);
@@ -762,6 +770,7 @@ if ($action === 'confirm' && $method === 'POST') {
                         'pallet' => ($pallet !== '' ? $pallet : null),
                         'qty' => 1,
                         'user_id' => $uid,
+                        'aggregation' => ($serialAggs[$sn] ?? ''),
                     ]);
                 }
             } catch (Throwable) {

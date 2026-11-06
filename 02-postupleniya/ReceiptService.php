@@ -147,6 +147,10 @@ final class ReceiptService
             if ($qty <= 0) {
                 throw new RuntimeException('Количество должно быть больше нуля');
             }
+            if (abs($qty - round($qty)) > 0.0001) {
+                throw new RuntimeException('Количество в поступлении — только целое число');
+            }
+            $qty = round($qty);
             if ($qty + 0.0001 < $processed) {
                 throw new RuntimeException('Нельзя указать меньше обработанного: ' . $processed);
             }
@@ -218,6 +222,10 @@ final class ReceiptService
             if ($qty <= 0) {
                 throw new RuntimeException('Количество должно быть больше нуля');
             }
+            if (abs($qty - round($qty)) > 0.0001) {
+                throw new RuntimeException('Количество в поступлении — только целое число');
+            }
+            $qty = round($qty);
             if ($price < 0) {
                 throw new RuntimeException('Цена не может быть отрицательной');
             }
@@ -468,6 +476,16 @@ final class ReceiptService
                     ->execute([':d' => $nv, ':id' => $id]);
                 $this->history($id, $userId, 'update', 'Дата прибытия',
                     $ov === null ? null : (string)$ov, $nv === null ? null : (string)$nv);
+            }
+        }
+        // Флаг «кросс-док»: по нему ТСД идёт по ветке приёмки кросс-дока (без вопроса).
+        if (array_key_exists('crossdock', $b)) {
+            $nv = (int)(bool)$b['crossdock'];
+            $ov = (int)($row['crossdock'] ?? 0);
+            if ($nv !== $ov) {
+                $this->pdo->prepare("UPDATE receipts SET crossdock=:d WHERE id=:id")
+                    ->execute([':d' => $nv, ':id' => $id]);
+                $this->history($id, $userId, 'update', 'Кросс-док', $ov ? 'да' : 'нет', $nv ? 'да' : 'нет');
             }
         }
         if (array_key_exists('vehicle', $b)) {

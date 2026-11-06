@@ -258,8 +258,9 @@ final class CellRepository
         $r['beam_label'] = number_format($r['beam_width'], 1, ',', '') . ' м';
         $r['pallet_types_label'] = self::palletTypesLabel($r['allowed_pallet_types'] ?? null);
         $r['pallet_type_label'] = self::palletTypeLabel($r['pallet_type'] ?? null);
-        $r['height_label'] = isset($r['cell_height_mm']) && $r['cell_height_mm'] !== null && (int)$r['cell_height_mm'] > 0
-            ? ((int)$r['cell_height_mm'] . ' мм') : '—';
+        // Высота ячейки отображается в сантиметрах (как и вводится в настройках).
+        $r['height_label'] = isset($r['cell_height_mm']) && $r['cell_height_mm'] !== null && (float)$r['cell_height_mm'] > 0
+            ? (rtrim(rtrim(number_format((float)$r['cell_height_mm'] / 10, 1, '.', ''), '0'), '.') . ' см') : '—';
         $this->decorateRobotTare($r);
     }
 
@@ -391,9 +392,16 @@ final class CellRepository
             $w[] = 'c.warehouse_id = :wh';
             $p[':wh'] = $f->warehouseId;
         }
-        if ($f->zone) {
-            $w[] = '(c.zone = :zone OR EXISTS (SELECT 1 FROM storage_cell_extra_zones ez WHERE ez.cell_id = c.id AND ez.zone = :zone))';
-            $p[':zone'] = $f->zone;
+        $zoneList = $f->zones ?: ($f->zone ? [$f->zone] : []);
+        if ($zoneList) {
+            $zph = [];
+            foreach ($zoneList as $zi => $z) {
+                $zk = ':zone' . $zi;
+                $zph[] = $zk;
+                $p[$zk] = $z;
+            }
+            $zin = implode(',', $zph);
+            $w[] = '(c.zone IN (' . $zin . ') OR EXISTS (SELECT 1 FROM storage_cell_extra_zones ez WHERE ez.cell_id = c.id AND ez.zone IN (' . $zin . ')))';
         }
         // Доп. зона отбора (ручной отбор / отбор водителем) — у ячейки может быть несколько зон.
         if ($f->pickZone) {

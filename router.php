@@ -15,6 +15,15 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 
 require_once __DIR__ . '/shared/Auth.php';
+require_once __DIR__ . '/shared/ErrorLog.php';
+
+// Журнал ошибок: необработанные исключения, фатальные, предупреждения и
+// ответы API со статусом ошибки. Буферизуем ответ, чтобы зафиксировать текст
+// ошибки из catch-блоков модулей (они отдают JSON сами).
+wms_error_log_install();
+if (ob_get_level() === 0) {
+    ob_start();
+}
 
 const AUTH_USER = 'admin';
 // bcrypt-хэш пароля (смена пароля = заменить хэш, получить: php -r "echo password_hash('новый', PASSWORD_DEFAULT), PHP_EOL;")
@@ -112,6 +121,12 @@ if ($uri === '/logout') {
 if ($uri === '/') {
     header('Location: ' . (isAuthed() ? wms_auth_landing_url() : '/login'));
     http_response_code(302);
+    exit;
+}
+
+// --- Внешнее API: /api/v1/* — Bearer-токен, сессия не нужна ---
+if (str_starts_with($uri, '/api/v1/') || $uri === '/api/v1') {
+    require __DIR__ . '/api/v1/index.php';
     exit;
 }
 
@@ -233,6 +248,48 @@ if (preg_match('/\.html$/i', $uri)) {
         && is_file($real)) {
         $html = (string)file_get_contents($real);
         $authJsonFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+        // ФИО залогиненного сотрудника подставляем уже в HTML (без мигания демо-имени).
+        $pubUser = wms_auth_public_user($authUser);
+        if ($pubUser) {
+            $fioLive = (string)($pubUser['fio'] ?? '');
+            if ($fioLive === '') {
+                $fioLive = (string)($pubUser['login'] ?? '');
+            }
+            if ($fioLive !== '') {
+                $html = str_replace(
+                    ['Иванов И.И.', 'Половинкин Сергей', 'Ивантеев Михаил'],
+                    [$fioLive, $fioLive, $fioLive],
+                    $html
+                );
+            }
+            // В модулях без шапки пользователя (нет .user) — блок с ФИО в сайдбаре.
+            if (stripos($html, 'class="user"') === false && stripos($html, 'wms-auth-aside') === false
+                && preg_match('/<\/aside>/i', $html)) {
+                $fioH = htmlspecialchars($fioLive, ENT_QUOTES, 'UTF-8');
+                $posH = htmlspecialchars((string)($pubUser['position'] ?? '') ?: (string)($pubUser['role'] ?? ''), ENT_QUOTES, 'UTF-8');
+                $loginH = htmlspecialchars((string)($pubUser['login'] ?? ''), ENT_QUOTES, 'UTF-8');
+                $ini = '';
+                $parts = preg_split('/\s+/', trim($fioLive)) ?: [];
+                if ($parts) {
+                    $c0 = preg_split('//u', (string)$parts[0], -1, PREG_SPLIT_NO_EMPTY) ?: [];
+                    $ini = (string)($c0[0] ?? '');
+                    if (isset($parts[1])) {
+                        $c1 = preg_split('//u', (string)$parts[1], -1, PREG_SPLIT_NO_EMPTY) ?: [];
+                        $ini .= (string)($c1[0] ?? '');
+                    }
+                }
+                $iniH = htmlspecialchars($ini, ENT_QUOTES, 'UTF-8');
+                $block = '<div class="wms-auth-aside" style="display:flex;gap:8px;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid #333">'
+                    . '<span class="ava" style="width:30px;height:30px;border-radius:50%;background:#2A3446;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex:0 0 auto">' . $iniH . '</span>'
+                    . '<span style="display:block;line-height:1.2;min-width:0">'
+                    . '<b style="font-weight:700;color:#fff">' . $fioH . '</b><br>'
+                    . '<small style="display:block;color:#8A92A6;font-size:11px">' . $posH . ($loginH !== '' ? ' · ' . $loginH : '') . '</small>'
+                    . '</span>'
+                    . '<a href="/logout" title="Выйти из аккаунта" style="color:#B39DFF;text-decoration:none;font-size:12px;margin-left:auto;white-space:nowrap">Выйти</a>'
+                    . '</div>';
+                $html = preg_replace('/<\/aside>/i', $block . '</aside>', $html, 1);
+            }
+        }
         $authInj = '<script>window.WMS_USER=' . json_encode(wms_auth_public_user($authUser), $authJsonFlags)
             . ';window.WMS_MODULE=' . json_encode($moduleKey)
             . ';window.WMS_MODULE_LEVEL=' . json_encode($moduleLevel)

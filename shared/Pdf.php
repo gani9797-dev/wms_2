@@ -1925,6 +1925,245 @@ function wms_pdf_product_barcode(string $sku, string $name, string $barcode): st
     return $pdf->render();
 }
 
+/**
+ * PDF-этикетка ровно по размеру (мм): заголовок, подзаголовок, штрихкод Code128,
+ * подпись под штрихкодом. Кириллица — встроенным шрифтом Arial (как в модуле 8).
+ * Тот же макет, что и у термо-тракта (shared/render-label.ps1).
+ */
+/** Обрезка строки для этикетки (UTF-8-безопасно, без mbstring). */
+function wms_pdf_cut(string $s, int $max): string
+{
+    if (strlen($s) <= $max) {
+        return $s;
+    }
+    $cut = substr($s, 0, $max);
+    while ($cut !== '' && (ord($cut[strlen($cut) - 1]) & 0xC0) === 0x80) {
+        $cut = substr($cut, 0, -1);
+    }
+    if ($cut !== '' && (ord($cut[strlen($cut) - 1]) & 0x80) !== 0) {
+        $cut = substr($cut, 0, -1);
+    }
+    return $cut . '…';
+}
+function wms_pdf_label(
+    string $title,
+    string $code,
+    string $barcode = '',
+    float $wMm = 58.0,
+    float $hMm = 40.0,
+    string $subtitle = ''
+): string {
+    return wms_pdf_label_pages([[
+        'title' => $title, 'code' => $code, 'barcode' => $barcode, 'subtitle' => $subtitle,
+    ]], $wMm, $hMm);
+}
+
+/**
+ * Многостраничная PDF-этикетка: страница на каждую позицию, размер страницы = этикетке.
+ * @param array<int,array{title?:string,code?:string,barcode?:string,subtitle?:string}> $labels
+ */
+function wms_pdf_label_pages(array $labels, float $wMm = 58.0, float $hMm = 40.0): string
+{
+    [$regFile, $boldFile] = wms_pdf_font_files();
+    $reg = new WmsTtf($regFile);
+    $bold = new WmsTtf($boldFile);
+    $regBytes = (string)file_get_contents($regFile);
+    $boldBytes = (string)file_get_contents($boldFile);
+
+    $wMm = min(250.0, max(20.0, $wMm));
+    $hMm = min(250.0, max(15.0, $hMm));
+    $k = 72.0 / 25.4;
+    $PW = $wMm * $k;
+    $PH = $hMm * $k;
+
+    $fsTitle = max(6.0, min(22.0, $PH * 0.115));
+    $fsSub = max(5.0, $PH * 0.09);
+    $fsCap = max(5.0, $PH * 0.09);
+    $pad = 1.6 * $k;
+    $capBase = $pad + 1.5;
+    $barBottom = $capBase + $fsCap * 1.15 + 2.0;
+    $barH = max(8.0, $PH * 0.30);
+    if ($barBottom + $barH > $PH - $pad - $fsTitle * 1.4) {
+        $barH = max(6.0, $PH - $pad - $fsTitle * 1.4 - $barBottom);
+    }
+
+    // Нормализация позиций + биты штрихкодов.
+    $prepared = [];
+    $useR = [];
+    $useB = [];
+    $mark = static function (string $s, bool $b) use (&$useR, &$useB) {
+        foreach (WmsTtf::cps($s) as $cp) {
+            if ($b) $useB[$cp] = true;
+            else $useR[$cp] = true;
+        }
+    };
+    if (!$labels) {
+        $labels = [['title' => '', 'code' => '']];
+    }
+    foreach ($labels as $l) {
+        $title = wms_pdf_clean((string)($l['title'] ?? ''));
+        $subtitle = wms_pdf_clean((string)($l['subtitle'] ?? ''));
+        $code = wms_pdf_clean((string)($l['code'] ?? ''));
+        $barsText = trim((string)($l['barcode'] ?? '')) !== '' ? trim((string)$l['barcode']) : $code;
+        $bits = '';
+        if ($barsText !== '') {
+            try {
+                $mods = WmsCode128::modules($barsText);
+                foreach ($mods as $i => $w) {
+                    $bits .= str_repeat(($i % 2 === 0) ? '1' : '0', $w);
+                }
+            } catch (Throwable) {
+                $bits = '';
+            }
+        }
+        $mark($title, true);
+        $mark($subtitle, false);
+        $mark($code, false);
+        // Произвольные строки (пустая этикетка) и вариант «ШК сверху».
+        $lines = array_values(array_filter(array_map(
+            fn($s) => wms_pdf_clean((string)$s),
+            (array)($l['lines'] ?? [])
+        ), fn($s) => $s !== ''));
+        $lines = array_slice($lines, 0, 10);
+        foreach ($lines as $ln) {
+            $mark(wms_pdf_cut($ln, 120), false);
+        }
+        $prepared[] = [
+            'title' => $title, 'subtitle' => $subtitle, 'code' => $code, 'bits' => $bits,
+            'lines' => array_map(fn($s) => wms_pdf_cut($s, 120), $lines),
+            'barcode_top' => !empty($l['barcode_top']),
+        ];
+    }
+
+    $pdf = new WmsPdf();
+    $fontObjs = [];
+    foreach ([['F1', $reg, $regBytes, $useR], ['F2', $bold, $boldBytes, $useB]] as [$tag, $fnt, $bytes, $used]) {
+        $gids = [];
+        foreach (array_keys($used) as $cp) $gids[$fnt->gid($cp)] = true;
+        $gids = array_keys($gids);
+        sort($gids);
+        $w = '';
+        $run = null;
+        foreach ($gids as $g) {
+            $ww = (int)round($fnt->pdfW($g));
+            if ($run === null || $g !== $run[1] + 1) {
+                if ($run !== null) $w .= $run[0] . ' [' . implode(' ', $run[2]) . '] ';
+                $run = [$g, $g, []];
+            }
+            $run[1] = $g;
+            $run[2][] = $ww;
+        }
+        if ($run !== null) $w .= $run[0] . ' [' . implode(' ', $run[2]) . '] ';
+        $tu = "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n"
+            . "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n"
+            . "/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n"
+            . "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"
+            . count($used) . " beginbfchar\n";
+        foreach (array_keys($used) as $cp) {
+            $tu .= sprintf('<%04X> <%s>', $fnt->gid($cp), strtoupper(bin2hex(WmsTtf::utf16be($cp)))) . "\n";
+        }
+        $tu .= "endbfchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n";
+        $ps = $fnt->psName;
+        $bb = $fnt->bbox;
+        $asc = (int)round($fnt->ascent * 1000 / $fnt->upm);
+        $desc = (int)round($fnt->descent * 1000 / $fnt->upm);
+        $fileId = $pdf->add("<< /Length " . strlen($bytes) . " /Length1 " . strlen($bytes) . " >>\nstream\n" . $bytes . "\nendstream");
+        $descId = $pdf->add("<< /Type /FontDescriptor /FontName /$ps /Flags 32 "
+            . "/FontBBox [$bb[0] $bb[1] $bb[2] $bb[3]] /ItalicAngle 0 /Ascent $asc /Descent $desc /StemV 80 /FontFile2 $fileId 0 R >>");
+        $dw = (int)round($fnt->pdfW(0));
+        $cidId = $pdf->add("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /$ps "
+            . "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> "
+            . "/DW $dw /W [$w] /FontDescriptor $descId 0 R >>");
+        $tuId = $pdf->add("<< /Length " . strlen($tu) . " >>\nstream\n" . $tu . "endstream");
+        $t0Id = $pdf->add("<< /Type /Font /Subtype /Type0 /BaseFont /$ps /Encoding /Identity-H "
+            . "/DescendantFonts [$cidId 0 R] /ToUnicode $tuId 0 R >>");
+        $fontObjs[$tag] = $t0Id;
+    }
+
+    $enc = static function (WmsTtf $fnt, string $s): string {
+        $h = '';
+        foreach (WmsTtf::cps($s) as $cp) $h .= sprintf('%04X', $fnt->gid($cp));
+        return $h;
+    };
+    $T = static function (string $tag, float $size, float $x, float $y, string $hex): string {
+        return "BT /$tag " . rtrim(rtrim(sprintf('%.2F', $size), '0'), '.') . " Tf 1 0 0 1 "
+            . sprintf('%.2F %.2F', $x, $y) . " Tm <$hex> Tj ET\n";
+    };
+
+    $pagesId = $pdf->add('@@KIDS@@');
+    $kids = [];
+    foreach ($prepared as $lab) {
+        $s = '';
+        $yTop = $PH - $pad;
+        if ($lab['title'] !== '') {
+            $tw = $bold->strW($lab['title'], $fsTitle);
+            $s .= $T('F2', $fsTitle, max($pad, ($PW - $tw) / 2), $yTop - $fsTitle, $enc($bold, $lab['title']));
+            $yTop -= $fsTitle * 1.2;
+        }
+        if ($lab['subtitle'] !== '') {
+            $sw = $reg->strW($lab['subtitle'], $fsSub);
+            $s .= $T('F1', $fsSub, max($pad, ($PW - $sw) / 2), $yTop - $fsSub, $enc($reg, $lab['subtitle']));
+            $yTop -= $fsSub * 1.35;
+        }
+        $bits = (string)$lab['bits'];
+        // ШК сверху + подпись под ним; ниже — произвольные строки.
+        if (!empty($lab['barcode_top']) && $bits !== '') {
+            $barTopY = $PH - $pad - $barH;
+            $n = strlen($bits);
+            $modW = min(2.2, ($PW - 2 * $pad) / max(1, $n));
+            $cx = ($PW - $n * $modW) / 2;
+            for ($i = 0; $i < $n; $i++) {
+                if ($bits[$i] === '1') {
+                    $s .= sprintf('%.2F %.2F %.2F %.2F re f' . "\n", $cx, $barTopY, $modW + 0.15, $barH);
+                }
+                $cx += $modW;
+            }
+            $capYTop = $barTopY - $fsCap * 1.15;
+            $capText = $lab['code'] !== '' ? $lab['code'] : $lab['subtitle'];
+            if ($capText !== '') {
+                $cw = $reg->strW($capText, $fsCap);
+                $s .= $T('F1', $fsCap, max($pad, ($PW - $cw) / 2), $capYTop, $enc($reg, $capText));
+            }
+            $yTop = $capYTop - $fsCap * 0.55;
+        }
+        // Произвольные строки.
+        if (!empty($lab['lines'])) {
+            $rows = $lab['lines'];
+            $n = count($rows);
+            $avail = max(4.0, $yTop - $pad - 1.0);
+            $lh = min($fsSub * 1.4, $avail / max(1, $n));
+            $fsL = max(3.6, min($fsSub, $lh * 0.76));
+            $y = $yTop;
+            foreach ($rows as $ln) {
+                $y -= $lh;
+                $lw = $reg->strW($ln, $fsL);
+                $s .= $T('F1', $fsL, max($pad, ($PW - $lw) / 2), $y + ($lh - $fsL) * 0.25, $enc($reg, $ln));
+            }
+        }
+        // ШК снизу (обычный макет этикетки).
+        if (empty($lab['barcode_top']) && $bits !== '') {
+            $n = strlen($bits);
+            $modW = min(2.2, ($PW - 2 * $pad) / max(1, $n));
+            $cx = ($PW - $n * $modW) / 2;
+            for ($i = 0; $i < $n; $i++) {
+                if ($bits[$i] === '1') {
+                    $s .= sprintf('%.2F %.2F %.2F %.2F re f' . "\n", $cx, $barBottom, $modW + 0.15, $barH);
+                }
+                $cx += $modW;
+            }
+        }
+        if (empty($lab['barcode_top']) && $lab['code'] !== '') {
+            $cw = $reg->strW($lab['code'], $fsCap);
+            $s .= $T('F1', $fsCap, max($pad, ($PW - $cw) / 2), $capBase, $enc($reg, $lab['code']));
+        }
+        $contentId = $pdf->add("<< /Length " . strlen($s) . " >>\nstream\n" . $s . "endstream");
+        $kids[] = $pdf->add("<< /Type /Page /Parent $pagesId 0 R /MediaBox [0 0 " . sprintf('%.2F %.2F', $PW, $PH) . "] "
+            . "/Contents $contentId 0 R /Resources << /Font << /F1 {$fontObjs['F1']} 0 R /F2 {$fontObjs['F2']} 0 R >> >> >>");
+    }
+    $pdf->objs[$pagesId - 1] = "<< /Type /Pages /Kids [" . implode(' 0 R, ', $kids) . " 0 R] /Count " . count($kids) . " >>";
+    $pdf->add("<< /Type /Catalog /Pages $pagesId 0 R >>");
+    return $pdf->render();
+}
 function wms_pdf_filename(string $title, int $id = 0): string
 {
     // Явные карты обоих регистров (без mbstring).

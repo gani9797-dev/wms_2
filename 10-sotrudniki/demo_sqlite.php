@@ -14,9 +14,10 @@ require_once __DIR__ . '/EmployeeService.php';
 require_once __DIR__ . '/EmployeeController.php';
 
 require_once __DIR__ . '/../shared/db.php';
+require_once __DIR__ . '/../shared/LabelPrint.php';
 
 $pdo = wms_employees_pdo();
-$userId = 1;
+$userId = function_exists('wms_auth_actor_id') ? wms_auth_actor_id() : 1;
 $isSqlite = (string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
 
 if ($isSqlite) {
@@ -222,7 +223,35 @@ try {
         $controller->exits($id);
     } elseif ($action === 'defaults') {
         $controller->defaults();
-    } elseif ($action === 'print') {
+    } elseif (($action === 'printers' || $action === 'print_thermal') && !wms_labels_can_print()) {
+        wms_labels_deny_json();
+    } elseif ($action === 'printers') {
+        require_once __DIR__ . '/../shared/LabelPrint.php';
+        try {
+            echo json_encode(['rows' => wms_label_printers(), 'supported' => wms_label_can_print_direct()], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['rows' => [], 'supported' => wms_label_can_print_direct(), 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    } elseif ($action === 'print_thermal' && $isPost) {
+        // Прямая печать личного ШК (Термо): растровый ZPL, кириллица Arial.
+        require_once __DIR__ . '/../shared/LabelPrint.php';
+        try {
+            $d = $service->printData((int)($body['id'] ?? $id));
+            $printer = trim((string)($body['printer'] ?? ''));
+            if ($printer === '') {
+                throw new RuntimeException('Не выбран принтер');
+            }
+            $w = (float)($body['w'] ?? 58.0);
+            $h = (float)($body['h'] ?? 40.0);
+            $n = max(1, min(999, (int)($body['copies'] ?? 1)));
+            $dpi = in_array((int)($body['dpi'] ?? 203), [203, 300], true) ? (int)$body['dpi'] : 203;
+            $spec = wms_label_spec((string)$d['code'], (string)$d['code'], (string)$d['code'], $w, $h, $dpi, $n, (string)$d['name']);
+            $res = wms_label_print_thermal($printer, $spec);
+            echo json_encode(['ok' => true, 'printer' => $res['printer'], 'copies' => $n], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        }    } elseif ($action === 'print') {
         $controller->print($id, $_GET);
     } elseif ($action === 'export') {
         $controller->export($_GET);

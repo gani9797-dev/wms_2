@@ -131,19 +131,34 @@ final class ShipmentService
 
     private function history(int $id, ?int $userId, string $action, ?string $old, ?string $new): void
     {
+        [$fio, $pos] = $this->actor();
         $st = $this->pdo->prepare(
-            "INSERT INTO shipment_history (shipment_id,user_id,action,old_status,new_status) VALUES (?,?,?,?,?)"
+            "INSERT INTO shipment_history (shipment_id,user_id,user_fio,position,action,old_status,new_status) VALUES (?,?,?,?,?,?,?)"
         );
-        $st->execute([$id, $userId, $action, $old, $new]);
+        $st->execute([$id, $userId, $fio, $pos, $action, $old, $new]);
+    }
+
+    /** ФИО и должность залогиненного на портал сотрудника. */
+    private function actor(): array
+    {
+        if (function_exists('wms_auth_user')) {
+            $u = wms_auth_user();
+            if ($u) {
+                return [(string)($u['fio'] ?? ''), (string)($u['position'] ?? '')];
+            }
+        }
+        $fio = function_exists('wms_auth_fio') ? wms_auth_fio('') : '';
+        return [$fio, ''];
     }
 
     /** История с полем/значением (для флагов документа). */
     private function historyField(int $id, ?int $userId, string $action, string $field, ?string $old, ?string $new): void
     {
+        [$fio, $pos] = $this->actor();
         $st = $this->pdo->prepare(
-            "INSERT INTO shipment_history (shipment_id,user_id,action,field,old_value,new_value) VALUES (?,?,?,?,?,?)"
+            "INSERT INTO shipment_history (shipment_id,user_id,user_fio,position,action,field,old_value,new_value) VALUES (?,?,?,?,?,?,?,?)"
         );
-        $st->execute([$id, $userId, $action, $field, $old, $new]);
+        $st->execute([$id, $userId, $fio, $pos, $action, $field, $old, $new]);
     }
 
     // Задания на отбор, блокирующие удаление/расформирование документа.
@@ -404,6 +419,12 @@ final class ShipmentService
         // Журнал склада (модуль 14): отгрузка — паллеты ушли со склада.
         if ($to === ShipmentStatus::Delivering) {
             $this->journalShipment($id, (string)($row['doc_no'] ?? ''), $userId);
+        }
+        // Интеграция: вебхук смены статуса заказа во внешнюю систему (outbox).
+        try {
+            require_once __DIR__ . '/../shared/IntegrationApi.php';
+            wms_webhook_shipment_status($this->pdo, $id, $to->value, ['user_id' => $userId]);
+        } catch (Throwable) {
         }
     }
 
@@ -1104,17 +1125,19 @@ final class ShipmentService
         }
         $head['sscc'] = $sscc;
         try {
-            // LIMIT 1 без ORDER BY отдавал произвольную строку, если артикул
-            // встречается в отгрузке несколько раз — делаем выборку детерминированной.
+            // PG не разрешает коррелированные подзапросы к негруппированным столбцам:
+            // агрегируем факт отдельно и подклеиваем справочник по sku через MIN(id).
             $rows = $this->pdo->prepare(
-                "SELECT COALESCE((SELECT i.code FROM shipment_items i WHERE i.shipment_id = p.shipment_id AND i.sku = p.sku ORDER BY i.id LIMIT 1), '') AS code,
-                        p.sku,
-                        COALESCE((SELECT i.name FROM shipment_items i WHERE i.shipment_id = p.shipment_id AND i.sku = p.sku ORDER BY i.id LIMIT 1), p.sku) AS name,
-                        COALESCE((SELECT i.unit FROM shipment_items i WHERE i.shipment_id = p.shipment_id AND i.sku = p.sku ORDER BY i.id LIMIT 1), 'шт') AS unit,
-                        SUM(p.qty) AS qty
-                 FROM tsd_picks p WHERE p.shipment_id = :id AND p.sscc = :sscc GROUP BY p.sku ORDER BY MIN(p.id)"
+                "SELECT COALESCE(i.code, '') AS code, t.sku,
+                        COALESCE(i.name, t.sku) AS name, COALESCE(i.unit, 'шт') AS unit, t.qty
+                   FROM (SELECT sku, SUM(qty) AS qty, MIN(id) AS fid FROM tsd_picks
+                          WHERE shipment_id = :id AND sscc = :sscc GROUP BY sku) t
+                   LEFT JOIN (SELECT sku, MIN(id) AS id FROM shipment_items
+                               WHERE shipment_id = :id2 GROUP BY sku) mi ON mi.sku = t.sku
+                   LEFT JOIN shipment_items i ON i.id = mi.id
+                  ORDER BY t.fid"
             );
-            $rows->execute([':id' => $id, ':sscc' => $sscc]);
+            $rows->execute([':id' => $id, ':id2' => $id, ':sscc' => $sscc]);
             $items = $rows->fetchAll(PDO::FETCH_ASSOC);
         } catch (Throwable) {
             $items = [];

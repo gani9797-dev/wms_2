@@ -15,6 +15,7 @@ enum ShipmentStatus: string
     case OnCheck         = 'on_check';         // На проверке
     case Checked         = 'checked';          // Проверено
     case Ready           = 'ready';            // Готов к отгрузке / Подготовлено к отгрузке
+    case Shipped         = 'shipped';          // Отгружено (ТСД «Отгрузить ТС»: все SSCC отсканированы)
     case AwaitingPayment = 'awaiting_payment'; // Ожидает оплаты
     case Delivering      = 'delivering';       // Доставляется
     case Delivered       = 'delivered';        // Доставлена
@@ -33,6 +34,7 @@ enum ShipmentStatus: string
             self::OnCheck         => 'На проверке',
             self::Checked         => 'Проверено',
             self::Ready           => 'Готов к отгрузке',
+            self::Shipped         => 'Отгружено',
             self::AwaitingPayment => 'Ожидает оплаты',
             self::Delivering      => 'Доставляется',
             self::Delivered       => 'Доставлена',
@@ -58,14 +60,15 @@ enum ShipmentStatus: string
             self::Draft           => in_array($to, [self::Created, self::Assembling, self::Cancelled], true),
             self::Created         => in_array($to, [self::Assembling, self::Cancelled], true),
             self::Assembling      => in_array($to, [self::Assembled, self::Packing, self::Cancelled], true),
-            self::Assembled       => in_array($to, [self::Packing, self::OnCheck, self::AwaitingPayment, self::Delivering, self::Cancelled], true),
+            self::Assembled       => in_array($to, [self::Packing, self::OnCheck, self::AwaitingPayment, self::Shipped, self::Delivering, self::Cancelled], true),
             self::Packing         => in_array($to, [self::Packed, self::Cancelled], true),
-            self::Packed          => in_array($to, [self::OnCheck, self::Ready, self::Cancelled], true),
+            self::Packed          => in_array($to, [self::OnCheck, self::Ready, self::Shipped, self::Cancelled], true),
             self::OnCheck         => in_array($to, [self::Checked, self::Cancelled], true),
-            self::Checked         => in_array($to, [self::Ready, self::AwaitingPayment, self::Cancelled], true),
-            self::Ready           => in_array($to, [self::AwaitingPayment, self::Delivering, self::Cancelled], true),
-            self::AwaitingPayment => in_array($to, [self::Delivering, self::Cancelled], true),
-            self::Delivering      => in_array($to, [self::Delivered, self::Cancelled], true),
+            self::Checked         => in_array($to, [self::Ready, self::Shipped, self::AwaitingPayment, self::Cancelled], true),
+            self::Ready           => in_array($to, [self::Shipped, self::AwaitingPayment, self::Delivering, self::Cancelled], true),
+            self::Shipped         => in_array($to, [self::Delivering, self::Delivered, self::Cancelled, self::Archived], true),
+            self::AwaitingPayment => in_array($to, [self::Shipped, self::Delivering, self::Cancelled], true),
+            self::Delivering      => in_array($to, [self::Delivered, self::Cancelled, self::Archived], true),
             self::Delivered       => in_array($to, [self::Archived], true),
             self::Cancelled       => in_array($to, [self::Assembling, self::Archived], true), // Вернуть в работу
             self::Archived        => false,

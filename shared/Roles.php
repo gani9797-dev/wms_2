@@ -39,7 +39,8 @@ function wms_roles_ensure(PDO $pdo): void
             }
         } catch (Throwable) {
         }
-        foreach (['Администратор', 'Кладовщик', 'Водитель', 'Приемщик', 'Менеджер'] as $name) {
+        // «Разработчик» — служебная роль с полным доступом и правом видеть журнал ошибок.
+        foreach (['Администратор', 'Кладовщик', 'Водитель', 'Приемщик', 'Менеджер', 'Разработчик'] as $name) {
             try {
                 if (wms_is_pgsql($pdo)) {
                     $pdo->prepare("INSERT INTO wms_roles (name) VALUES (:n) ON CONFLICT (name) DO NOTHING")
@@ -51,6 +52,31 @@ function wms_roles_ensure(PDO $pdo): void
                 }
             } catch (Throwable) {
             }
+        }
+        // «Разработчик» — полный доступ ко всем модулям (и всем правам, включая журнал ошибок).
+        try {
+            $has = $pdo->prepare("SELECT id FROM wms_roles WHERE name = 'Разработчик' LIMIT 1");
+            $has->execute();
+            if ($has->fetchColumn() !== false) {
+                $keys = function_exists('wms_auth_module_keys')
+                    ? wms_auth_module_keys()
+                    : ['dashboard', 'reestr', 'post', 'otg', 'orders', 'pack', 'check', 'int',
+                        'yacheyki', 'karta', 'inv', 'zad', 'nomen', 'stock', 'cp', 'billing',
+                        'emp', 'kpi', 'reports', 'notif', 'settings', 'journal', 'labels'];
+                foreach ($keys as $mk) {
+                    if (wms_is_pgsql($pdo)) {
+                        $pdo->prepare("INSERT INTO role_access (role,scope,module_key,level) VALUES ('Разработчик','wms',:k,'full') ON CONFLICT DO NOTHING")
+                            ->execute([':k' => $mk]);
+                    } elseif (wms_is_mysql($pdo)) {
+                        $pdo->prepare("INSERT IGNORE INTO role_access (role,scope,module_key,level) VALUES ('Разработчик','wms',:k,'full')")
+                            ->execute([':k' => $mk]);
+                    } else {
+                        $pdo->prepare("INSERT OR IGNORE INTO role_access (role,scope,module_key,level) VALUES ('Разработчик','wms',:k,'full')")
+                            ->execute([':k' => $mk]);
+                    }
+                }
+            }
+        } catch (Throwable) {
         }
     } catch (Throwable) {
     }
@@ -186,6 +212,9 @@ function wms_permissions_catalog(): array
     return [
         'doc_edit_receipt' => 'Редактирование приходных документов (строки)',
         'doc_edit_order' => 'Редактирование расходных заказов (строки)',
+        'dev_errors' => 'Журнал ошибок (колокольчик, только «Разработчик»)',
+        'labels_print' => 'Печать этикеток и просмотр кодов (Администратор/Разработчик)',
+        'emp_password' => 'Смена пароля сотрудникам (Администратор/Разработчик)',
     ];
 }
 
@@ -221,15 +250,19 @@ function wms_role_permissions_ensure(PDO $pdo): void
         }
         foreach (wms_permissions_catalog() as $key => $_label) {
             try {
-                if ($drv === 'pgsql') {
-                    $pdo->prepare("INSERT INTO role_permissions (role, permission_key, allowed) VALUES ('Администратор', :k, 1) ON CONFLICT (role, permission_key) DO NOTHING")
-                        ->execute([':k' => $key]);
-                } elseif ($drv === 'mysql') {
-                    $pdo->prepare("INSERT IGNORE INTO role_permissions (role, permission_key, allowed) VALUES ('Администратор', :k, 1)")
-                        ->execute([':k' => $key]);
-                } else {
-                    $pdo->prepare("INSERT OR IGNORE INTO role_permissions (role, permission_key, allowed) VALUES ('Администратор', :k, 1)")
-                        ->execute([':k' => $key]);
+                // Администратор и «Разработчик» получают все права каталога
+                // (включая dev_errors — журнал ошибок в колокольчике).
+                foreach (['Администратор', 'Разработчик'] as $__grantRole) {
+                    if ($drv === 'pgsql') {
+                        $pdo->prepare("INSERT INTO role_permissions (role, permission_key, allowed) VALUES (:r, :k, 1) ON CONFLICT (role, permission_key) DO NOTHING")
+                            ->execute([':r' => $__grantRole, ':k' => $key]);
+                    } elseif ($drv === 'mysql') {
+                        $pdo->prepare("INSERT IGNORE INTO role_permissions (role, permission_key, allowed) VALUES (:r, :k, 1)")
+                            ->execute([':r' => $__grantRole, ':k' => $key]);
+                    } else {
+                        $pdo->prepare("INSERT OR IGNORE INTO role_permissions (role, permission_key, allowed) VALUES (:r, :k, 1)")
+                            ->execute([':r' => $__grantRole, ':k' => $key]);
+                    }
                 }
             } catch (Throwable) {
             }
@@ -263,6 +296,19 @@ function wms_role_permissions_get(PDO $pdo, string $role): array
         }
         // Если для администратора строк ещё нет — не запираем редактирование.
         if ($role === 'Администратор' && !$rows) {
+            foreach ($out as $key => $_v) {
+                $out[$key] = true;
+            }
+        }
+        // Администратору печать этикеток и смена паролей доступны всегда,
+        // даже если строки в role_permissions ещё не созданы.
+        if ($role === 'Администратор') {
+            $out['emp_password'] = true;
+            $out['labels_print'] = true;
+        }
+        // «Разработчик» — служебная роль: права всегда полные (включая журнал ошибок),
+        // даже если строки в role_permissions ещё не созданы.
+        if ($role === 'Разработчик') {
             foreach ($out as $key => $_v) {
                 $out[$key] = true;
             }

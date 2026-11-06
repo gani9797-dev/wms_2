@@ -52,6 +52,8 @@ final class ShipmentRepository
         // ТС, Ворота, Тип загрузки, Склад, Статус, Сумма, SKU, шт, Готовность, Флаги, Приоритет...
         // Заказ/Контрагент оставлены для совместимости; заказы N:1 via shipment_orders.
         $sql = "SELECT s.id, s.doc_no, s.doc_date, o.doc_no AS order_no,
+                       COALESCE(s.order_id, (SELECT so3.order_id FROM shipment_orders so3 WHERE so3.shipment_id = s.id ORDER BY so3.id LIMIT 1)) AS order_link_id,
+                       (SELECT COUNT(*) FROM shipment_orders so4 WHERE so4.shipment_id = s.id) AS orders_count,
                        c.name AS contractor, s.consignee, w.name AS warehouse, s.status,
                        s.total_with_vat AS total, s.items_count, s.sku_count, s.qty_total,
                        s.plan_shipment_date, s.fact_shipment_date,
@@ -82,6 +84,7 @@ final class ShipmentRepository
         } catch (Throwable $e) {
             // Fallback для старой БД без новых колонок
             $sql2 = "SELECT s.id, s.doc_no, s.doc_date, o.doc_no AS order_no,
+                           NULL AS order_link_id, 0 AS orders_count,
                            c.name AS contractor, w.name AS warehouse, s.status,
                            s.total_with_vat AS total, s.items_count,
                            s.plan_shipment_date, u.fio AS created_by,
@@ -308,6 +311,14 @@ final class ShipmentRepository
     {
         $w = ['1=1'];
         $p = [];
+        // Учётная запись клиента: только отгрузки с товаром его владельца (модуль 9).
+        if (function_exists('wms_data_owner_scope')) {
+            $scope = wms_data_owner_scope();
+            if ($scope !== '') {
+                $w[] = "EXISTS (SELECT 1 FROM shipment_items si JOIN products pr ON pr.sku = si.sku WHERE si.shipment_id = s.id AND COALESCE(pr.owner,'') = :own_scope)";
+                $p[':own_scope'] = $scope;
+            }
+        }
         if ($f->search !== null) {
             $w[] = '(s.doc_no LIKE :q OR o.doc_no LIKE :q OR c.name LIKE :q OR s.ttn LIKE :q)';
             $p[':q'] = '%' . $f->search . '%';

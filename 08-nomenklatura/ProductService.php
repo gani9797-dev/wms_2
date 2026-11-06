@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../shared/ProductCode.php';
 require_once __DIR__ . '/../shared/Counterparties.php';
+// ФИО залогиненного на портал (для истории изменений).
+require_once __DIR__ . '/../shared/Auth.php';
 
 // Сервис карточек номенклатуры: создание / редактирование / копирование / блокировка / архив / печать / экспорт / импорт.
 // Каждое изменение значимого поля пишется в product_history (вкладка "История").
@@ -62,8 +64,9 @@ final class ProductService
      * $strictBarcodes — проверять ли формат EAN-13 у новых штрихкодов
      * (при импорте выключаем: исторические ШК могут быть нестандартными).
      */
-    public function create(array $b, int $userId, string $userFio = 'Иванов И.И.', bool $strictBarcodes = true): int
+    public function create(array $b, int $userId, ?string $userFio = null, bool $strictBarcodes = true): int
     {
+        $userFio = wms_resolve_fio($userFio);
         $b = $this->normalize($b);
         $sku = trim((string)($b['sku'] ?? ''));
         if ($sku === '') throw new RuntimeException('Артикул обязателен');
@@ -116,8 +119,9 @@ final class ProductService
         return $id;
     }
 
-    public function update(int $id, array $b, int $userId, string $userFio = 'Иванов И.И.'): void
+    public function update(int $id, array $b, int $userId, ?string $userFio = null): void
     {
+        $userFio = wms_resolve_fio($userFio);
         $b = $this->normalize($b);
         $cur = $this->pdo->prepare("SELECT * FROM products WHERE id = :id");
         $cur->execute([':id' => $id]);
@@ -168,8 +172,9 @@ final class ProductService
         }
     }
 
-    public function copy(int $id, int $userId, string $userFio = 'Иванов И.И.'): int
+    public function copy(int $id, int $userId, ?string $userFio = null): int
     {
+        $userFio = wms_resolve_fio($userFio);
         $cur = $this->pdo->prepare("SELECT * FROM products WHERE id = :id");
         $cur->execute([':id' => $id]);
         $old = $cur->fetch(PDO::FETCH_ASSOC);
@@ -199,27 +204,31 @@ final class ProductService
         return $nid;
     }
 
-    public function block(int $id, int $userId, string $userFio = 'Иванов И.И.'): void
+    public function block(int $id, int $userId, ?string $userFio = null): void
     {
+        $userFio = wms_resolve_fio($userFio);
         $this->pdo->prepare("UPDATE products SET is_active = 0 WHERE id = :id")->execute([':id' => $id]);
         $this->hist($id, $userId, $userFio, 'is_active', 'Статус', 'Активный', 'Не активный');
     }
 
-    public function unblock(int $id, int $userId, string $userFio = 'Иванов И.И.'): void
+    public function unblock(int $id, int $userId, ?string $userFio = null): void
     {
+        $userFio = wms_resolve_fio($userFio);
         $this->pdo->prepare("UPDATE products SET is_active = 1, is_archived = 0 WHERE id = :id")->execute([':id' => $id]);
         $this->hist($id, $userId, $userFio, 'is_active', 'Статус', 'Не активный', 'Активный');
     }
 
-    public function archive(int $id, int $userId, string $userFio = 'Иванов И.И.'): void
+    public function archive(int $id, int $userId, ?string $userFio = null): void
     {
+        $userFio = wms_resolve_fio($userFio);
         $this->pdo->prepare("UPDATE products SET is_archived = 1, is_active = 0 WHERE id = :id")->execute([':id' => $id]);
         $this->hist($id, $userId, $userFio, 'is_archived', 'Архив', 'Нет', 'Да');
     }
 
     /** Удаление карточки (корзина в шапке). Только если нет остатков и резервов. */
-    public function delete(int $id, int $userId, string $userFio = 'Иванов И.И.'): void
+    public function delete(int $id, int $userId, ?string $userFio = null): void
     {
+        $userFio = wms_resolve_fio($userFio);
         $st = $this->pdo->prepare("SELECT qty, reserved_qty, sku FROM products WHERE id = :id");
         $st->execute([':id' => $id]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
@@ -269,8 +278,9 @@ final class ProductService
     }
 
     /** @param int[] $ids */
-    public function massUpdate(array $ids, array $patch, int $userId, string $userFio = 'Иванов И.И.'): int
+    public function massUpdate(array $ids, array $patch, int $userId, ?string $userFio = null): int
     {
+        $userFio = wms_resolve_fio($userFio);
         $allowed = array_intersect(array_keys($patch), self::EDITABLE);
         if (!$ids || !$allowed) return 0;
         $n = 0;

@@ -49,6 +49,8 @@ function wms_auth_module_for_uri(string $uri): ?string
         '/10-sotrudniki/' => 'emp',
         '/10.1-nachisleniya-kpi/' => 'kpi',
         '/10.2-prosmotr-sdelki/' => 'kpi',
+        '/16-billing/' => 'billing',
+        '/11-nablyudeniya/' => 'reports',
         '/11-otchety/' => 'reports',
         '/12-uvedomleniya/' => 'notif',
         '/13-nastroyki/' => 'settings',
@@ -128,6 +130,10 @@ function wms_auth_normalize_employee(array $row): array
         'is_blocked' => (int)($row['is_blocked'] ?? 0),
         'warehouse_id' => isset($row['warehouse_id']) ? (int)$row['warehouse_id'] : null,
         'tsd_access' => (int)($row['tsd_access'] ?? 0),
+        // Учётная запись клиента (модуль 9): контрагент, владелец товара, отчёты.
+        'counterparty_id' => isset($row['counterparty_id']) ? (int)$row['counterparty_id'] : null,
+        'data_owner' => trim((string)($row['data_owner'] ?? '')),
+        'dashboard_reports' => trim((string)($row['dashboard_reports'] ?? '')),
         'virtual' => false,
     ];
 }
@@ -184,16 +190,51 @@ function wms_auth_attempt(string $login, string $password): ?array
 }
 
 /** Первый сотрудник-администратор — для совместимости со старым входом admin. */
+/**
+ * Служебный вход admin → реальная карточка сотрудника с логином admin.
+ *
+ * Раньше вход под admin «приклеивался» к первому сотруднику с ролью
+ * «Администратор» (в демо-данных это Иванов А.В.), из-за чего в шапке
+ * показывался человек, которого оператор не выбирал. Теперь учётная запись
+ * admin единая: при первом входе создаётся карточка «Администратор» с логином
+ * admin (пароль — тот же служебный), она видна в модуле «Сотрудники».
+ */
 function wms_auth_admin_employee(): array
 {
     try {
         $pdo = wms_employees_pdo();
-        $st = $pdo->query("SELECT * FROM employees WHERE role = 'Администратор' ORDER BY id LIMIT 1");
-        $row = $st ? $st->fetch(PDO::FETCH_ASSOC) : null;
+        $st = $pdo->prepare("SELECT * FROM employees WHERE LOWER(login) = 'admin' LIMIT 1");
+        $st->execute();
+        $row = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+
+        if (!$row) {
+            // Первый вход под admin: создаём единую учётную запись администратора.
+            $now = function_exists('wms_now_sql') ? wms_now_sql($pdo) : "datetime('now')";
+            $hash = defined('AUTH_HASH') ? (string)AUTH_HASH : '';
+            $ins = $pdo->prepare(
+                "INSERT INTO employees (fio, last_name, first_name, middle_name, position, code, department,
+                    personnel_no, login, password_hash, status, role, zone, is_active, is_blocked,
+                    allow_unplanned_exit, created_at, updated_at)
+                 VALUES (:fio, 'Администратор', '', '', 'Администратор', 'А', 'Администрирование',
+                    'ADMIN', 'admin', :ph, 'active', 'Администратор', 'Все зоны', 1, 0, 0, $now, $now)"
+            );
+            $ins->execute([':fio' => 'Администратор', ':ph' => ($hash !== '' ? $hash : null)]);
+            $st->execute();
+            $row = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+
         if ($row) {
+            // Досоздаём служебный пароль, если карточку создали без него (первый вход).
+            if (trim((string)($row['password_hash'] ?? '')) === '' && defined('AUTH_HASH') && (string)AUTH_HASH !== '') {
+                try {
+                    $pdo->prepare('UPDATE employees SET password_hash = :ph WHERE id = :id')
+                        ->execute([':ph' => (string)AUTH_HASH, ':id' => (int)$row['id']]);
+                    $row['password_hash'] = (string)AUTH_HASH;
+                } catch (Throwable) {
+                }
+            }
             $u = wms_auth_normalize_employee($row);
             if ((int)$u['is_blocked'] === 0 && !in_array($u['status'], ['fired', 'blocked'], true)) {
-                $u['login'] = $u['login'] !== '' ? $u['login'] : 'admin';
                 return $u;
             }
         }
@@ -230,6 +271,69 @@ function wms_auth_logout(): void
     }
 }
 
+
+/**
+ * Владелец товара, доступный текущей учётной записи ('' = весь товар).
+ * Используется во всех модулях для сквозного ограничения данных.
+ */
+function wms_data_owner_scope(): string
+{
+    static $loaded = false;
+    static $scope = '';
+    if ($loaded) {
+        return $scope;
+    }
+    $loaded = true;
+    try {
+        $u = wms_auth_user();
+        if (is_array($u)) {
+            $scope = trim((string)($u['data_owner'] ?? ''));
+        }
+    } catch (Throwable) {
+    }
+    return $scope;
+}
+
+/** Отчёты дашборда, доступные учётной записи (пусто = все). */
+function wms_auth_dashboard_reports(): array
+{
+    try {
+        $u = wms_auth_user();
+        $raw = is_array($u) ? trim((string)($u['dashboard_reports'] ?? '')) : '';
+        if ($raw === '') {
+            return [];
+        }
+        return array_values(array_filter(array_map('trim', explode(',', $raw)), fn($v) => $v !== ''));
+    } catch (Throwable) {
+        return [];
+    }
+}
+
+/** SQL-условие по владельцу товара для алиаса products: '' = без ограничения. */
+function wms_owner_sql(string $alias = 'p', string $param = ':owner_scope'): string
+{
+    $scope = wms_data_owner_scope();
+    return $scope === '' ? '' : ' AND COALESCE(' . $alias . ".owner,'') = $param";
+}
+
+/** Значение параметра владельца для привязки (или null, если ограничения нет). */
+function wms_owner_param(): ?string
+{
+    $scope = wms_data_owner_scope();
+    return $scope === '' ? null : $scope;
+}
+
+/** Администратор или разработчик (служебные действия: пароли, коды этикеток). */
+function wms_auth_is_admin_or_dev(): bool
+{
+    try {
+        $u = wms_auth_user();
+        $role = is_array($u) ? trim((string)($u['role'] ?? '')) : '';
+        return $role === 'Администратор' || $role === 'Разработчик';
+    } catch (Throwable) {
+        return false;
+    }
+}
 /** Текущий сотрудник (перечитывается из БД на каждом запросе). */
 function wms_auth_user(): ?array
 {
@@ -268,6 +372,56 @@ function wms_auth_actor_id(): int
     return $id > 0 ? $id : 1;
 }
 
+/**
+ * ФИО того, кто залогинился на портал. Единая точка для всех модулей:
+ * заголовки, журналы, истории, поля «Приемщик/Кладовщик/Изменил».
+ * Если сессии нет (CLI, робот) — вернёт $fallback.
+ */
+function wms_auth_fio(string $fallback = 'Система'): string
+{
+    $u = wms_auth_user();
+    if (!$u) {
+        return $fallback;
+    }
+    $fio = trim((string)($u['fio'] ?? ''));
+    if ($fio !== '') {
+        return $fio;
+    }
+    $login = trim((string)($u['login'] ?? ''));
+    return $login !== '' ? $login : $fallback;
+}
+
+/** Должность/роль для подписи под ФИО. */
+function wms_auth_position(): string
+{
+    $u = wms_auth_user();
+    if (!$u) {
+        return '';
+    }
+    $pos = trim((string)($u['position'] ?? ''));
+    if ($pos !== '') {
+        return $pos;
+    }
+    return trim((string)($u['role'] ?? ''));
+}
+
+/**
+ * ФИО для записи в журнал/историю. Если передано пустое значение или старое
+ * демо-значение «Иванов И.И.» — подставляем ФИО залогиненного на портал сотрудника.
+ */
+function wms_resolve_fio(?string $fio, string $fallback = 'Система'): string
+{
+    $fio = trim((string)$fio);
+    if ($fio !== '' && $fio !== 'Иванов И.И.') {
+        return $fio;
+    }
+    $real = wms_auth_fio('');
+    if ($real !== '') {
+        return $real;
+    }
+    return $fio !== '' ? $fio : $fallback;
+}
+
 /** Уровни доступа по модулям для роли текущего сотрудника. */
 function wms_auth_module_levels(): array
 {
@@ -286,6 +440,30 @@ function wms_auth_module_levels(): array
         return $levels = array_fill_keys($keys, 'full');
     }
     $role = trim((string)($u['role'] ?? ''));
+    // Персональные права применяем только для учётной записи клиента (модуль 9):
+    // у обычных сотрудников доступ по-прежнему задаётся ролью.
+    $isClientAccount = !empty($u['counterparty_id']);
+    try {
+        if (!$isClientAccount) {
+            throw new RuntimeException('role-based');
+        }
+        $epdo = wms_employees_pdo();
+        $est = $epdo->prepare("SELECT module_key, level FROM employee_access WHERE employee_id=:id AND scope='wms'");
+        $est->execute([':id' => (int)($u['id'] ?? 0)]);
+        $empRows = $est->fetchAll(PDO::FETCH_ASSOC);
+        if ($empRows) {
+            $levels = array_fill_keys($keys, 'none');
+            foreach ($empRows as $row) {
+                $key = (string)($row['module_key'] ?? '');
+                if (in_array($key, $keys, true)) {
+                    $lv = (string)($row['level'] ?? 'none');
+                    $levels[$key] = in_array($lv, ['full', 'view', 'none'], true) ? $lv : 'none';
+                }
+            }
+            return $levels;
+        }
+    } catch (Throwable) {
+    }
     $rows = [];
     try {
         $pdo = wms_employees_pdo();
@@ -395,6 +573,9 @@ function wms_auth_public_user(?array $u = null): ?array
         'role' => (string)($u['role'] ?? ''),
         'position' => (string)($u['position'] ?? ''),
         'department' => (string)($u['department'] ?? ''),
+        'counterparty_id' => isset($u['counterparty_id']) ? (int)$u['counterparty_id'] : null,
+        'data_owner' => (string)($u['data_owner'] ?? ''),
+        'dashboard_reports' => (string)($u['dashboard_reports'] ?? ''),
         'virtual' => !empty($u['virtual']),
     ];
 }

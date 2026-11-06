@@ -37,7 +37,7 @@ button.small{font-size:16px;padding:12px;min-height:48px}
 .list div{padding:5px 4px;border-bottom:1px solid #F5F5F5;font-size:14px;word-break:break-all}
 .hidden{display:none}
 </style>
-</head>
+<script src="no-autokb.js"></script></head>
 <body>
 <header>
 <div class="t"><a href="app.html">‹ Меню</a><b>ТСД — Сортировка</b><span id="who" style="font-size:12px;color:#7CFC9A"></span></div>
@@ -59,6 +59,7 @@ let ITEM=null;     // текущая позиция товара
 let PALLET=null;   // текущая паллета (SSCC)
 let MARKS=[];      // отсканированные марки
 let SERIALS=[];    // отсканированные серийники
+let SER_AGG={};    // с/н -> агрегационный QR-код (QR с несколькими с/н через «;»)
 let PENDING_QTY=0; // введённое количество
 let ASM=null;      // состояние сборки отгрузки (буфер отбора)
 function toast(t,ms){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',ms||2600)}
@@ -99,7 +100,7 @@ function bindQtySwitch(){
 }
 // ============ ЭКРАН 1: сканируем код отгрузки ============
 function scrShipment(){
- DOC=null;ITEM=null;PALLET=null;MARKS=[];SERIALS=[];PENDING_QTY=0;head();
+ DOC=null;ITEM=null;PALLET=null;MARKS=[];SERIALS=[];SER_AGG={};PENDING_QTY=0;head();
  $('m').innerHTML=`<div class="card"><div class="step">ЭТАП 1 · ОТГРУЗКА</div><h2>Сканируй код отгрузки</h2>
  <input id="doccode" placeholder="Код отгрузки (напр. S-205107)" autocomplete="off" inputmode="none">
  <button id="docgo">Открыть</button>
@@ -202,7 +203,7 @@ async function findItem(){
  const r=await api('?action=product&id='+(DOC?DOC.id:0)+'&code='+encodeURIComponent(v));
  const j=await r.json().catch(()=>({}));
  if(!r.ok){toast(j.error||'Товар не принадлежит отгрузке');e.value='';e.focus();return}
- ITEM=j.item;if(j.head)DOC=j.head;MARKS=[];SERIALS=[];PENDING_QTY=0;head();
+ ITEM=j.item;if(j.head)DOC=j.head;MARKS=[];SERIALS=[];SER_AGG={};PENDING_QTY=0;head();
  toast('Товар: '+ITEM.name);
  go('pallet',()=>scrPallet());
 }
@@ -380,17 +381,29 @@ function scrSerials(){
 }
 function serialsList(){
  if(!SERIALS.length)return '<div class="mut">Серийники не отсканированы</div>';
- return SERIALS.map(s=>`<div>✓ ${esc(s)}</div>`).join('');
+ return SERIALS.map(s=>`<div>✓ ${esc(s)}${SER_AGG[s]?' <span class="mut">⟵ QR '+esc(SER_AGG[s])+'</span>':''}</div>`).join('');
 }
 async function scanSerial(){
- const e=$('sn');const v=(e.value||'').trim();
- if(!v){toast('Отсканируй серийный номер');return}
+ const e=$('sn');const raw=(e.value||'').trim();
+ if(!raw){toast('Отсканируй серийный номер');return}
  const total=serialTotal();
  if(SERIALS.length>=total){toast('Все серийные номера уже отсканированы');e.value='';e.focus();return}
- const r=await api('?action=serial&id='+(DOC?DOC.id:0)+'&code='+encodeURIComponent(v)+'&sku='+encodeURIComponent(ITEM.sku));
- const j=await r.json().catch(()=>({}));
- if(!r.ok){toast(j.error||'Серийник уже отсканирован',4500);e.value='';e.focus();return}
- SERIALS.push(v);
+ const parts=raw.split(';').map(s=>s.trim()).filter(Boolean);
+ const isQR=parts.length>1;
+ let added=0,lastErr='';
+ for(const v of parts){
+  if(SERIALS.length>=total){lastErr='Все серийные номера уже отсканированы';break}
+  if(SERIALS.indexOf(v)>=0){lastErr='Серийник уже отсканирован: '+v;continue}
+  const r=await api('?action=serial&id='+(DOC?DOC.id:0)+'&code='+encodeURIComponent(v)+'&sku='+encodeURIComponent(ITEM.sku));
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){lastErr=j.error||'Серийник уже отсканирован';continue}
+  SERIALS.push(v);
+  if(isQR){SER_AGG[v]=raw}
+  added++;
+ }
+ e.value='';e.focus();
+ if(lastErr&&!added){toast(lastErr,4500);return}
+ if(isQR){toast('QR: добавлено '+added+' с/н из '+parts.length,3500)}
  if(SERIALS.length>=total){toast('Все серийные номера отсканированы ✓');finishSerials();return}
  goReplace('serials',()=>scrSerials());
 }
@@ -412,20 +425,24 @@ function scrDone(){
  $('go').onclick=confirmSort;
 }
 async function confirmSort(){
+ const qtyMove=PENDING_QTY||ITEM.need_qty;
+ const nSer=SERIALS.length;
  const {s,j}=await post('confirm',{
   shipment_id:DOC.id,item_id:ITEM.id,sku:ITEM.sku,
-  qty:PENDING_QTY||ITEM.need_qty,pallet_id:PALLET?PALLET.sscc:'',
-  serials:SERIALS,markings:MARKS.map(m=>m.code),user_id:uid(),user_fio:ME?ME.fio:''});
+  qty:qtyMove,pallet_id:PALLET?PALLET.sscc:'',
+  serials:SERIALS,serial_aggs:SER_AGG,markings:MARKS.map(m=>m.code),user_id:uid(),user_fio:ME?ME.fio:''});
  if(!s||j.error){toast(j.error||'Ошибка подтверждения',4500);
-  if(j&&j.need_serials){SERIALS=[];goReplace('serials',()=>scrSerials())}
+  if(j&&j.need_serials){SERIALS=[];SER_AGG={};goReplace('serials',()=>scrSerials())}
   return}
- toast(`${ITEM.name} для клиента ${DOC.consignee||''} отсканировано ${fmt(PENDING_QTY||ITEM.need_qty)} шт на паллет ✓`);
+ if(nSer>0){toast('Отсканировано '+nSer+' с/н, переведено '+fmt(qtyMove)+' шт в зону отгрузки',5000)}
+ else{toast(`${ITEM.name} для клиента ${DOC.consignee||''} отсканировано ${fmt(qtyMove)} шт на паллет ✓`)}
  if(j.progress){DOC=j.progress;head()}
-MARKS=[];SERIALS=[];PENDING_QTY=0;ITEM=null;PALLET=null;
+MARKS=[];SERIALS=[];SER_AGG={};PENDING_QTY=0;ITEM=null;PALLET=null;
   await loadAsm();
   goReplace('doc',()=>scrDoc());
 }
 go('ship',()=>scrShipment());
 </script>
+<script src="auth-gate.js"></script>
 </body>
 </html>

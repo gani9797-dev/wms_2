@@ -113,6 +113,7 @@
             },
             "max_per_print": 500,
             "printers": "Windows printers via ?action=printers; RAW ZPL via 15-etiketki\/print-zpl.ps1 and ?action=print_raw",
+            "printer_dialog": "add printer and selected-printer properties via ?action=printer_dialog (Windows server UI)",
             "preview": "first label in print dialog",
             "create": "new template via ?action=template_create and UI button",
             "tested": [
@@ -123,6 +124,7 @@
                 "create new label template",
                 "printer list",
                 "invalid printer rejected",
+                "printer dialog validation (add\/properties)",
                 "preview/JS runtime",
                 "limit 500",
                 "log",

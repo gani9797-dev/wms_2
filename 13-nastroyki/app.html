@@ -75,7 +75,7 @@ tr:hover td{background:#fafaff}
 <div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div>
 <div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">🤝 9 Контрагенты и грузополучатели</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div>
 <div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👥 10 Сотрудники</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div>
-<a class="mi" href="../11-otchety/app.html">📊 11 Отчеты</a>
+<a class="mi" href="../11-nablyudeniya/app.html">📊 11 Наблюдения</a>
 <a class="mi" href="../12-uvedomleniya/app.html">🔔 12 Уведомления</a>
 <div class="grp open" data-grp="13"><div class="par"><a class="mi on" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div>
 <a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a></nav></aside>
@@ -107,7 +107,7 @@ tr:hover td{background:#fafaff}
 <!-- СКЛАД И ХРАНЕНИЕ -->
 <section id="v-storage" class="view">
 <div class="bar"><button class="btn" data-go="hub">← Все настройки</button></div>
-<div class="tabs" id="stTabs"><span class="on" data-st="zones">Зоны склада</span><span data-st="cells">Тип ячеек</span><span data-st="pallets">Тип паллет</span><span data-st="lpn">Категория LPN</span><span data-st="rules">Правила</span></div>
+<div class="tabs" id="stTabs"><span class="on" data-st="zones">Зоны склада</span><span data-st="cells">Тип ячеек</span><span data-st="pallets">Тип паллет</span><span data-st="lpn">Категория LPN</span><span data-st="rules">Правила</span><span data-st="robot">🤖 Робот размещения</span></div>
 <div class="card"><div class="bar" style="margin-top:0"><button class="btn pri" id="stAdd">+ Создать</button></div>
 <table><thead id="stHead"><tr><th>Код</th><th>Наименование</th><th>Назначение</th><th>Влияние</th><th>Клиент</th><th>Ячейки</th><th>Статус</th><th></th></tr></thead><tbody id="stBody"></tbody></table>
 <div id="rulesBox" style="display:none;margin-top:10px;color:#666;font-size:13px">Правила: <span class="chip">Размещение</span><span class="chip">Перемещение</span><span class="chip">Пополнение</span><span class="chip">Сбор</span><span class="chip">Инвентаризация</span></div></div>
@@ -217,6 +217,66 @@ tr:hover td{background:#fafaff}
 </div>
 </section>
 
+<!-- ИНТЕГРАЦИЯ И ЛОГИРОВАНИЕ -->
+<section id="v-integration" class="view">
+<div class="bar"><button class="btn" data-go="hub">← Все настройки</button><button class="btn" id="int_refresh">⟳ Обновить</button></div>
+<div id="int_alerts"></div>
+<div class="tabs" id="intTabs"><span class="on" data-it="settings">Настройки</span><span data-it="log">Журнал API</span><span data-it="webhooks">Вебхуки (outbox)</span></div>
+
+<div id="int-settings">
+<div class="two">
+<div class="card">
+<h2 style="margin:0 0 8px">Подключение</h2>
+<div class="fld"><label>Интеграция включена</label><select id="ia_enabled"><option value="1">Да</option><option value="0">Нет</option></select></div>
+<div class="fld"><label>client_id</label><input id="ia_client_id"></div>
+<div class="fld"><label>client_secret <span id="ia_cs_masked" class="hint"></span></label><input id="ia_client_secret" placeholder="оставьте пустым, чтобы не менять"><div class="hint">Секрет хранится в БД и не попадает в журналы. Для смены — кнопка ниже.</div></div>
+<div class="fld"><label>JWT-секрет подписи токенов <span id="ia_js_masked" class="hint"></span></label><input id="ia_jwt_secret" placeholder="оставьте пустым, чтобы не менять"></div>
+<div class="fld"><label>Callback URL для вебхуков (ERP)</label><input id="ia_callback_url" placeholder="https://erp.example.com/wms/webhook"></div>
+<div class="fld"><label>Секрет подписи вебхуков (HMAC-SHA256) <span id="ia_ws_masked" class="hint"></span></label><input id="ia_webhook_secret" placeholder="оставьте пустым, чтобы не менять"></div>
+<div class="grid2">
+<div class="fld"><label>Rate limit, запросов/сек на токен</label><input id="ia_rate_limit" type="number" min="1" max="10000"></div>
+<div class="fld"><label>TTL токена, сек (60–3600)</label><input id="ia_token_ttl" type="number" min="60" max="3600"></div>
+</div>
+<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+<button class="btn pri" id="ia_save">Сохранить</button>
+<button class="btn" id="ia_regen_cs">Сменить client_secret</button>
+<button class="btn" id="ia_regen_js">Сменить JWT-секрет</button>
+<button class="btn" id="ia_regen_ws">Сменить секрет вебхуков</button>
+</div>
+</div>
+<div class="card">
+<h2 style="margin:0 0 8px">Эндпоинты API v1</h2>
+<table><thead><tr><th>Метод</th><th>Путь</th><th>Назначение</th></tr></thead><tbody id="int_endpoints"></tbody></table>
+<h2 style="margin:16px 0 8px">Самопроверка</h2>
+<div class="fld"><label>client_secret</label><input id="int_test_secret" placeholder="введите client_secret"></div>
+<button class="btn pri" id="int_test">Проверить токен и здоровье интеграции</button>
+<pre id="int_test_out" class="hint" style="white-space:pre-wrap;margin-top:10px"></pre>
+<div class="hint" style="margin-top:10px">Сценарии: заказ (POST /orders, идемпотентно по external_id), статусы (вебхуки order.status с HMAC), остатки (GET /stock), номенклатура (POST /nomenclature). Повторы вебхуков: 1 / 5 / 30 минут, затем DEAD.</div>
+</div>
+</div>
+</div>
+
+<div id="int-log" style="display:none">
+<div class="card">
+<div class="bar" style="margin-top:0">
+<select id="il_dir"><option value="">Все направления</option><option value="IN">IN (запросы)</option><option value="OUT">OUT (вебхуки)</option></select>
+<select id="il_status"><option value="">Все статусы</option><option value="2xx">2xx</option><option value="4xx">4xx</option><option value="5xx">5xx</option></select>
+<input id="il_q" type="text" placeholder="🔍 request-id, путь, клиент" style="flex:1">
+<button class="btn pri" id="il_refresh">Обновить</button>
+</div>
+<table><thead><tr><th>Время</th><th>Request-Id</th><th>Напр.</th><th>Метод</th><th>Путь</th><th>Код</th><th>мс</th><th>Ошибка</th></tr></thead><tbody id="il_body"></tbody></table>
+<div class="pager"><span id="il_info"></span><span class="pg" id="il_pg"></span></div>
+</div>
+</div>
+
+<div id="int-webhooks" style="display:none">
+<div class="card">
+<div class="bar" style="margin-top:0"><button class="btn pri" id="iw_run">Отправить созревшие сейчас</button><span id="iw_info" class="hint"></span></div>
+<table><thead><tr><th>Время</th><th>Событие</th><th>External ID</th><th>Статус</th><th>Попыток</th><th>HTTP</th><th>Ошибка</th><th></th></tr></thead><tbody id="iw_body"></tbody></table>
+</div>
+</div>
+</section>
+
 <!-- ПРОЧИЙ РАЗДЕЛ -->
 <section id="v-other" class="view">
 <div class="bar"><button class="btn" data-go="hub">← Все настройки</button></div>
@@ -299,10 +359,10 @@ var SECTIONS=[
 {n:'Документы и нумерация',d:'other:doc',e:'🔢',s:'Шаблоны номеров'},
 {n:'Уведомления',d:'other:ntf',e:'🔔',s:'Перейти в модуль',link:'../12-uvedomleniya/app.html'},
 {n:'ТСД и сканирование',d:'other:tsd',e:'📱',s:'Терминалы сбора данных',link:'../tsd/app.html'},
-{n:'Интеграция',d:'other:int',e:'🔌',s:'API, обмены'},
+{n:'Интеграция и логирование',d:'integration',e:'🔌',s:'API v1, вебхуки, журнал запросов'},
 {n:'Пользователи и права',d:'other:usr',e:'🔐',s:'Роли и доступ'},
 {n:'Автоматизация',d:'other:auto',e:'⚡',s:'Накладные, счета',link:'../13.1-avtoformirovanie-nakladnyh/app.html'},
-{n:'Отчеты',d:'other:rep',e:'📊',s:'Перейти в модуль',link:'../11-otchety/app.html'},
+{n:'Отчеты',d:'other:rep',e:'📊',s:'Перейти в модуль',link:'../11-nablyudeniya/app.html'},
 {n:'Журнал изменений',d:'other:log',e:'🕘',s:'История настроек'},
 {n:'Системные параметры',d:'other:sys',e:'🛠️',s:'Константы системы'},{n:'Персонал',d:'personnel',e:'👥',s:'Роли сотрудников и права доступа'},{n:'Роботы размещения',d:'robots',e:'🤖',s:'Секционная блокировка типа паллеты, лимиты секции'}];
 var OTH_TXT={refs:'Раздел-заглушка: общие справочники ведутся в своих модулях.',nom:'Карточки товаров, штрихкоды, упаковка — в модуле 8.',post:'Правила приёмки и размещение — в модуле 2.',reestr:'Слоты прибытия ТС настраиваются здесь в разделе «Ворота», оперативный реестр — в модуле 1.',zak:'Логика заказов — в модуле 3.1.',otg:'Логика отгрузок — в модуле 3.',zad:'Типы заданий и автопостановка — в модуле 7.',inv:'Параметры инвентаризации — в модуле 6.',per:'Графики, отделы, должности — в модуле 10.',kpi:'Формулы и ставки — в 13.4.',bil:'Тарифы и счета — в 9.1 / 13.2.',doc:'Шаблоны нумерации документов.',ntf:'Каналы и шаблоны — в модуле 12.',tsd:'Шаблоны ШК и префиксы — в модуле ТСД.',int:'Ключи API и вебхуки.',usr:'Пользователи, роли, права.',auto:'Автоправила накладных/счетов — 13.1, 13.2.',rep:'Источники отчётов — в модуле 11.',log:'Полная история — вкладка «История изменений» в «Организации и складах».',sys:'Часовой пояс по умолчанию, единицы измерения, округления.'};
@@ -317,6 +377,7 @@ else if(d==='clients'){document.getElementById('v-clients').classList.add('on');
 else if(d==='gates'){document.getElementById('v-gates').classList.add('on');t.textContent='Ворота и бронирование';renderGates()}
 else if(d==='personnel'){document.getElementById('v-personnel').classList.add('on');t.textContent='Персонал';persLoad()}
 else if(d==='robots'){document.getElementById('v-robots').classList.add('on');t.textContent='Роботы размещения';renderRobots()}
+else if(d==='integration'){document.getElementById('v-integration').classList.add('on');t.textContent='Интеграция и логирование';renderIntegration()}
 else if(d.indexOf('other:')===0){document.getElementById('v-other').classList.add('on');var k=d.split(':')[1];var s=SECTIONS.filter(function(x){return x.d===d})[0];document.getElementById('othTitle').textContent=s?s.n:k;document.getElementById('othText').textContent=OTH_TXT[k]||'';var a=document.getElementById('othLink');if(s&&s.link){a.style.display='';a.href=s.link}else{a.style.display='none'}t.textContent=s?s.n:'Настройки'}}
 document.querySelectorAll('[data-go]').forEach(function(b){b.onclick=function(){go(b.getAttribute('data-go'))}});
 document.getElementById('hq').oninput=function(e){renderHub(e.target.value)};
@@ -454,9 +515,51 @@ document.getElementById('zoneCancel').onclick=function(){document.getElementById
 document.getElementById('zoneSave').onclick=zoneSave;
 document.querySelectorAll('#stTabs span').forEach(function(s){s.onclick=function(){document.querySelectorAll('#stTabs span').forEach(function(x){x.classList.remove('on')});s.classList.add('on');stKey=s.getAttribute('data-st');renderSt()}});
 function renderSt(){var b=document.getElementById('stBody');var h=document.getElementById('stHead');b.innerHTML='';
+if(stKey==='robot'){if(h)h.innerHTML='';var addBtn=document.getElementById('stAdd');if(addBtn)addBtn.style.display='none';var rb=document.getElementById('rulesBox');if(rb)rb.style.display='none';loadPlaceRobot();return;}
+var addBtn0=document.getElementById('stAdd');if(addBtn0)addBtn0.style.display='';
 if(stKey==='zones'){if(h)h.innerHTML='<tr><th>Код</th><th>Наименование</th><th>Назначение</th><th>Влияние</th><th>Клиент</th><th>Ячейки</th><th>Статус</th><th></th></tr>';zoneRows.forEach(function(z){b.appendChild(zoneTr(z))});if(!zoneRows.length)b.innerHTML='<tr><td colspan="8" style="color:#999">Зон пока нет</td></tr>'}
 else{if(h)h.innerHTML='<tr><th>Код</th><th>Наименование</th><th>Доп.</th><th>Статус</th><th></th></tr>';(st[stKey]||[]).forEach(function(r,i){var tr=document.createElement('tr');tr.innerHTML='<td><b>'+r.code+'</b></td><td>'+r.name+'</td><td>'+(r.extra||'')+'</td><td>'+(r.on?'<span class="st-ok">Активный</span>':'<span class="st-off">Не активный</span>')+'</td>';var td=document.createElement('td');var del=document.createElement('span');del.className='x';del.textContent='✕';del.title='Удалить';del.onclick=function(){st[stKey].splice(i,1);ss('wms13_st',st);renderSt()};td.appendChild(del);tr.appendChild(td);b.appendChild(tr)})}
 document.getElementById('rulesBox').style.display=stKey==='rules'?'block':'none'}
+
+/* ---------- Робот размещения (настройки) ---------- */
+function loadPlaceRobot(){
+ var b=document.getElementById('stBody');if(!b)return;
+ b.innerHTML='<tr><td colspan="8" style="color:var(--mut)">Загрузка…</td></tr>';
+ fetch('demo_sqlite.php?action=place_robot_get',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
+  var s=(j&&j.settings)||{};
+  function num(k,label,min,max){return '<label style="display:block;font-size:12px;color:#4A4A4A;font-weight:700;margin:10px 0 4px">'+label+'</label>'
+   +'<input type="number" id="pr_'+k+'" min="'+min+'" max="'+max+'" value="'+(s[k]!==undefined?s[k]:'')+'" style="width:140px;padding:8px;border:1px solid #EAEAEA;border-radius:8px">'}
+  function chk(k,label){return '<label style="display:flex;align-items:center;gap:8px;margin:10px 0;font-size:13px"><input type="checkbox" id="pr_'+k+'" '+(+s[k]?'checked':'')+'> '+label+'</label>'}
+  var html='<tr><td colspan="8"><div style="padding:16px;max-width:860px">'
+   +'<h3 style="margin:0 0 6px">Робот автоматического размещения</h3>'
+   +'<div class="mut" style="color:#8A92A6;font-size:12px">Правила действуют на подбор ячейки на ТСД при размещении. Если в секции (ряд + секция) хоть у одной ячейки включено «разные типы паллет» — робот в этой секции не размещает. Если выключено у всех — секция работает под один тип тары и настраивается под первую поставленную паллету.</div>'
+   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-top:10px">'
+   +'<div>'+chk('section_pallet_lock','Секционная блокировка типа паллеты')+'</div>'
+   +'<div>'+num('euro_cap_per_section','Лимит евро-паллет в секции',1,50)+'</div>'
+   +'<div>'+num('fin_cap_per_section','Лимит фин-паллет в секции',1,50)+'</div>'
+   +'<div>'+chk('fin_block_3rd_cell','Блокировать ячейку яруса под фин (балка 3,6 м)')+'</div>'
+   +'<div>'+num('beam36_fin_block_place','Номер блокируемой ячейки (балка 3,6 м)',1,20)+'</div>'
+   +'<div>'+num('beam36_euro_places','Ячеек под евро на балке 3,6 м',1,20)+'</div>'
+   +'<div>'+num('beam36_fin_places','Ячеек под фин на балке 3,6 м',1,20)+'</div>'
+   +'<div>'+num('beam32_euro_places','Ячеек под евро на балке 3,2 м',1,20)+'</div>'
+   +'<div>'+num('beam32_fin_places','Ячеек под фин на балке 3,2 м',1,20)+'</div>'
+   +'</div>'
+   +'<div style="margin-top:14px"><button class="btn pri" id="prSave">Сохранить настройки</button> <span id="prMsg" style="color:#1B7F32;font-size:12px"></span></div>'
+   +'</div></td></tr>';
+  b.innerHTML=html;
+  document.getElementById('prSave').onclick=function(){
+   var body={};
+   ['section_pallet_lock','fin_block_3rd_cell'].forEach(function(k){var e=document.getElementById('pr_'+k);body[k]=e&&e.checked?1:0});
+   ['euro_cap_per_section','fin_cap_per_section','beam36_fin_block_place','beam36_euro_places','beam36_fin_places','beam32_euro_places','beam32_fin_places'].forEach(function(k){var e=document.getElementById('pr_'+k);if(e)body[k]=+e.value||0});
+   fetch('demo_sqlite.php?action=place_robot_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){return r.json()}).then(function(j){
+     if(j&&j.error){document.getElementById('prMsg').textContent='Ошибка: '+j.error;return}
+     document.getElementById('prMsg').textContent='Сохранено';
+     setTimeout(function(){document.getElementById('prMsg').textContent=''},2500);
+    }).catch(function(){document.getElementById('prMsg').textContent='Ошибка сети'});
+  };
+ }).catch(function(){b.innerHTML='<tr><td colspan="8" style="color:#C53030">Не удалось загрузить настройки робота</td></tr>'});
+}
 document.getElementById('stAdd').onclick=function(){if(stKey==='zones'){zoneOpen(0);return}var c=prompt('Код:');if(!c)return;var n=prompt('Наименование:');if(!n)return;st[stKey].push({code:c,name:n,extra:'',on:1});ss('wms13_st',st);renderSt()};
 
 /* ---------- Ворота ---------- */
@@ -648,6 +751,137 @@ robots={section_lock:$('rb_section_lock').checked?1:0,euro_cap:+$('rb_euro_cap')
 ss('wms13_robots',robots);toast('Настройки робота сохранены')};
 document.getElementById('rb_reset').onclick=function(){
 robots=JSON.parse(JSON.stringify(ROB_DEF));ss('wms13_robots',robots);renderRobots();toast('Сброс к значениям по умолчанию')};
+
+/* ---------- Интеграция и логирование ---------- */
+var INT_PAGE=1, INT_PAGES=1;
+function eh(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function intStatusCls(c){c=+c||0;return c>=500?'st-off':(c>=400?'st-off':(c>=200?'st-ok':'dot'))}
+function intAlertsHtml(h){
+ if(!h)return '';
+ var out='';
+ (h.alerts||[]).forEach(function(a){out+='<div class="card" style="border-color:'+(a.level==='error'?'#FEB2B2':'#F6E05E')+';background:'+(a.level==='error'?'#FFF5F5':'#FFFFF0')+'"><b>'+(a.level==='error'?'⛔':'⚠️')+' '+eh(a.code)+'</b> — '+eh(a.message)+'</div>'});
+ if(!out){
+  var pend=+h.webhooks_pending||0, dead=+h.webhooks_dead||0, bad=+(h.bad_share||0);
+  out='<div class="card" style="background:#F0FFF4;border-color:#C6F6D5"><b>✅ Интеграция в норме.</b> Запросов за час: '+(+h.requests_1h||0)+', 5xx: '+Math.round(bad*100)+'%. Очередь вебхуков: '+pend+', недоставлено: '+dead+'.</div>';
+ }
+ return out;
+}
+function intTab(k){
+ document.querySelectorAll('#intTabs span').forEach(function(s){s.classList.toggle('on',s.getAttribute('data-it')===k)});
+ ['settings','log','webhooks'].forEach(function(x){document.getElementById('int-'+x).style.display=(x===k?'':'none')});
+ if(k==='log')intLoadLog(1);
+ if(k==='webhooks')intLoadWebhooks();
+}
+document.querySelectorAll('#intTabs span').forEach(function(s){s.onclick=function(){intTab(s.getAttribute('data-it'))}});
+function renderIntegration(){intTab('settings');intLoadSettings()}
+function intLoadSettings(){
+ fetch(ZONE_API+'?action=api_settings_get',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
+  var s=j.settings||{};
+  document.getElementById('ia_enabled').value=String(+s.enabled||0);
+  document.getElementById('ia_client_id').value=s.client_id||'';
+  document.getElementById('ia_client_secret').value='';
+  document.getElementById('ia_jwt_secret').value='';
+  document.getElementById('ia_webhook_secret').value='';
+  document.getElementById('ia_callback_url').value=s.callback_url||'';
+  document.getElementById('ia_rate_limit').value=s.rate_limit||100;
+  document.getElementById('ia_token_ttl').value=s.token_ttl||3600;
+  document.getElementById('ia_cs_masked').textContent=s.client_secret_masked?('('+s.client_secret_masked+')'):'';
+  document.getElementById('ia_js_masked').textContent=s.jwt_secret_masked?('('+s.jwt_secret_masked+')'):'';
+  document.getElementById('ia_ws_masked').textContent=s.webhook_secret_masked?('('+s.webhook_secret_masked+')'):'';
+  document.getElementById('int_alerts').innerHTML=intAlertsHtml(j.health);
+  var b=document.getElementById('int_endpoints');b.innerHTML='';
+  (j.endpoints||[]).forEach(function(e){var tr=document.createElement('tr');tr.innerHTML='<td><b>'+eh(e.method)+'</b></td><td style="font-family:monospace">'+eh(e.path)+'</td><td>'+eh(e.desc)+'</td>';b.appendChild(tr)});
+ }).catch(function(){toast('Не удалось загрузить настройки интеграции')});
+}
+document.getElementById('int_refresh').onclick=function(){intLoadSettings();toast('Обновлено')};
+document.getElementById('ia_save').onclick=function(){
+ var body={enabled:+document.getElementById('ia_enabled').value?1:0,
+  client_id:document.getElementById('ia_client_id').value.trim(),
+  callback_url:document.getElementById('ia_callback_url').value.trim(),
+  rate_limit:+document.getElementById('ia_rate_limit').value||100,
+  token_ttl:+document.getElementById('ia_token_ttl').value||3600};
+ ['client_secret','jwt_secret','webhook_secret'].forEach(function(k){var id={client_secret:'ia_client_secret',jwt_secret:'ia_jwt_secret',webhook_secret:'ia_webhook_secret'}[k];var v=document.getElementById(id).value.trim();if(v)body[k]=v});
+ fetch(ZONE_API+'?action=api_settings_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+  .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
+  .then(function(x){if(x.ok){toast('Настройки интеграции сохранены');intLoadSettings()}else toast('Ошибка: '+(x.j.error||''))})
+  .catch(function(){toast('Ошибка сохранения')});
+};
+function intRegen(which,label){
+ if(!confirm('Сменить '+label+'? Старые токены/подписи станут недействительны.'))return;
+ fetch(ZONE_API+'?action=api_regen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({which:which})})
+  .then(function(r){return r.json()}).then(function(j){
+   if(j.ok){document.getElementById('int_test_out').textContent='Новый '+label+': '+j.value+'\n(сохраните — повторно показан не будет)';toast('Секрет обновлён');intLoadSettings()}
+   else toast('Ошибка: '+(j.error||''))
+  }).catch(function(){toast('Ошибка смены секрета')});
+}
+document.getElementById('ia_regen_cs').onclick=function(){intRegen('client_secret','client_secret')};
+document.getElementById('ia_regen_js').onclick=function(){intRegen('jwt_secret','JWT-секрет')};
+document.getElementById('ia_regen_ws').onclick=function(){intRegen('webhook_secret','секрет вебхуков')};
+document.getElementById('int_test').onclick=function(){
+ var sec=document.getElementById('int_test_secret').value.trim(), out=document.getElementById('int_test_out');
+ out.textContent='Проверка...';
+ fetch(ZONE_API+'?action=api_selftest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_secret:sec})})
+  .then(function(r){return r.json().then(function(j){return {code:r.status,j:j}})})
+  .then(function(x){out.textContent=JSON.stringify(x.j,null,2);toast(x.j.ok?'Токен выдан и проверен':'Проверка не прошла')})
+  .catch(function(){out.textContent='Ошибка проверки'});
+};
+function intLoadLog(page){
+ INT_PAGE=Math.max(1,page||1);
+ var qs='action=api_log&page='+INT_PAGE+'&page_size=25'
+  +'&direction='+encodeURIComponent(document.getElementById('il_dir').value)
+  +'&status='+encodeURIComponent(document.getElementById('il_status').value)
+  +'&q='+encodeURIComponent(document.getElementById('il_q').value||'');
+ fetch(ZONE_API+'?'+qs,{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
+  INT_PAGES=j.pages||1;
+  var b=document.getElementById('il_body');b.innerHTML='';
+  (j.rows||[]).forEach(function(r){
+   var tr=document.createElement('tr');
+   var cls=(+r.status_code>=400?'st-off':(+r.status_code>=200?'st-ok':''));
+   tr.innerHTML='<td style="white-space:nowrap">'+eh(r.created_at)+'</td>'
+    +'<td style="font-family:monospace;font-size:12px">'+eh(r.request_id)+'</td>'
+    +'<td>'+eh(r.direction)+'</td><td>'+eh(r.method)+'</td>'
+    +'<td style="font-family:monospace;font-size:12px;max-width:340px;overflow:hidden;text-overflow:ellipsis">'+eh(r.path)+'</td>'
+    +'<td><span class="'+cls+'">'+eh(r.status_code)+'</span></td>'
+    +'<td>'+eh(r.duration_ms)+'</td><td style="color:#C53030;font-size:12px">'+eh(r.error||'')+'</td>';
+   b.appendChild(tr);
+  });
+  if(!(j.rows||[]).length)b.innerHTML='<tr><td colspan="8" style="color:#999">Записей нет</td></tr>';
+  document.getElementById('il_info').textContent='Всего: '+(j.total||0)+', страница '+INT_PAGE+' из '+INT_PAGES;
+  var pg=document.getElementById('il_pg');pg.innerHTML='';
+  [['«',1],['‹',Math.max(1,INT_PAGE-1)]].forEach(function(p){var btn=document.createElement('button');btn.textContent=p[0];btn.onclick=function(){intLoadLog(p[1])};pg.appendChild(btn)});
+  var cur=document.createElement('button');cur.textContent=INT_PAGE;cur.className='on';pg.appendChild(cur);
+  [['›',Math.min(INT_PAGES,INT_PAGE+1)],['»',INT_PAGES]].forEach(function(p){var btn=document.createElement('button');btn.textContent=p[0];btn.onclick=function(){intLoadLog(p[1])};pg.appendChild(btn)});
+ }).catch(function(){});
+}
+document.getElementById('il_refresh').onclick=function(){intLoadLog(1)};
+document.getElementById('il_dir').onchange=function(){intLoadLog(1)};
+document.getElementById('il_status').onchange=function(){intLoadLog(1)};
+document.getElementById('il_q').oninput=function(){clearTimeout(window.__ilT);window.__ilT=setTimeout(function(){intLoadLog(1)},400)};
+function intLoadWebhooks(){
+ fetch(ZONE_API+'?action=api_webhooks',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
+  document.getElementById('int_alerts').innerHTML=intAlertsHtml(j.health);
+  var b=document.getElementById('iw_body');b.innerHTML='';
+  (j.rows||[]).forEach(function(r){
+   var tr=document.createElement('tr');
+   var cls=r.status==='SENT'?'st-ok':(r.status==='DEAD'?'st-off':'');
+   tr.innerHTML='<td style="white-space:nowrap">'+eh(r.created_at)+'</td><td>'+eh(r.event)+'</td><td>'+eh(r.external_id)+'</td>'
+    +'<td><span class="'+cls+'">'+eh(r.status)+'</span></td><td>'+eh(r.attempts)+'</td><td>'+eh(r.http_code||'')+'</td>'
+    +'<td style="color:#C53030;font-size:12px">'+eh(r.last_error||'')+'</td>';
+   var td=document.createElement('td');
+   if(r.status!=='SENT'){var btn=document.createElement('button');btn.className='btn';btn.textContent='Повторить';btn.onclick=function(){iwRetry(r.id)};td.appendChild(btn)}
+   tr.appendChild(td);b.appendChild(tr);
+  });
+  if(!(j.rows||[]).length)b.innerHTML='<tr><td colspan="8" style="color:#999">Очередь пуста</td></tr>';
+  document.getElementById('iw_info').textContent='Ожидают: '+(j.health?j.health.webhooks_pending:0)+', недоставлено (DEAD): '+(j.health?j.health.webhooks_dead:0);
+ }).catch(function(){});
+}
+function iwRetry(id){fetch(ZONE_API+'?action=api_webhook_retry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}).then(function(r){return r.json()}).then(function(j){toast(j.ok?'Повтор выполнен':'Ошибка повтора');intLoadWebhooks()}).catch(function(){toast('Ошибка')})}
+document.getElementById('iw_run').onclick=function(){
+ var btn=this;btn.disabled=true;
+ fetch(ZONE_API+'?action=api_webhook_run',{method:'POST'}).then(function(r){return r.json()}).then(function(j){
+  toast('Отправлено: '+(j.sent||0)+', повторов: '+(j.failed||0)+', DEAD: '+(j.dead||0));intLoadWebhooks();btn.disabled=false;
+ }).catch(function(){toast('Ошибка отправки');btn.disabled=false});
+};
 
 /* ctx */
 function showCtx(x,y,items){var c=document.getElementById('ctx');c.innerHTML='';items.forEach(function(it){var d=document.createElement('div');d.textContent=it[0];d.onclick=function(){c.style.display='none';it[1]()};c.appendChild(d)});c.style.left=x+'px';c.style.top=y+'px';c.style.display='block'}

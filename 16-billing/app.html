@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>16 Биллинги — TiMLog</title>
+<style>
+:root{--vio:#6432FF;--ink:#1C2331;--mut:#8A92A6;--line:#EAEAEA;--bg:#F4F5F7}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);display:flex}
+aside{width:260px;background:#1C2331;color:#fff;min-height:100vh;padding:18px 14px;position:sticky;top:0;max-height:100vh;overflow:auto}
+aside .logo{font-size:22px;font-weight:700;margin:6px 0 22px}
+aside a{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}
+aside a.on{background:var(--vio);color:#fff}
+main{flex:1;padding:18px 22px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+h1{margin:4px 0;font-size:24px}
+.hint{color:var(--mut);font-size:12px}
+.bar{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap;align-items:center}
+input,select,textarea{padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:13px;background:#fff}
+.btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 14px;cursor:pointer;font-size:13px}
+.btn.pri{background:var(--vio);color:#fff;border-color:var(--vio);font-weight:700}
+.btn.sm{padding:5px 10px;font-size:12px}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:14px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;padding:10px;background:#FAFAFC;border-bottom:1px solid var(--line)}
+.tabs button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 13px;cursor:pointer;font-size:13px}
+.tabs button.on{background:var(--vio);color:#fff;border-color:var(--vio);font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px;color:#2C313C;border-bottom:1px solid #F0F0F0;background:#FAFAFC;white-space:nowrap}
+td{padding:9px;border-bottom:1px solid #F0F0F0;vertical-align:top}
+tr:hover td{background:#FAFAFF}
+.st{display:inline-block;padding:3px 10px;border-radius:11px;font-size:11px;font-weight:700;white-space:nowrap}
+.st.ok{background:#E8F5E9;color:#1B7F32;border:1px solid #A5D6A7}
+.st.warn{background:#FFF8E6;color:#7A4B00;border:1px solid #F0C36D}
+.st.bad{background:#FFF3F3;color:#B71C1C;border:1px solid #EF9A9A}
+.st.mut{background:#F4F5F7;color:#8A92A6;border:1px solid #E0E0E0}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:60}
+.modal.open{display:flex}
+.mbox{background:#fff;border-radius:12px;padding:20px;width:760px;max-width:96vw;max-height:92vh;overflow:auto}
+.mbox h3{margin:0 0 12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 14px}
+.fld label{display:block;font-size:11px;color:#4A4A4A;font-weight:700;margin:8px 0 4px}
+.fld input,.fld select{width:100%}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1C2331;color:#fff;padding:10px 18px;border-radius:10px;display:none;z-index:99;max-width:80vw}
+.trace{background:#FAFAFC;border:1px solid #F0F0F0;border-radius:8px;padding:8px;font:11px/1.4 Consolas,monospace;white-space:pre-wrap}
+.pos{color:#1B7F32;font-weight:700}.neg{color:#B71C1C;font-weight:700}
+.mini{font-size:11px;color:var(--mut)}
+</style>
+<style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
+<body>
+<aside><div class="logo" style="display:none">TiMLog</div><nav class="nav"><a class="mi" href="../00-dashboard/app.html">🏠 0 Дашборд</a><div class="grp" data-grp="1"><div class="par"><a class="mi" href="../01-reestr-pribytiya-ts/app.html">🚛 1 Реестр прибытия ТС</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../01.1-spravochnik-ts/app.html">1.1 Справочник ТС</a><a class="mi sub-a" href="../01.2-karta-vorot/app.html">1.2 Карта ворот</a></div></div><div class="grp" data-grp="2"><div class="par"><a class="mi" href="../02-postupleniya/app.html">📥 2 Поступления</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../02.1-priem-postupleniy/app.html">2.1 Прием поступлений</a></div></div><div class="grp" data-grp="3"><div class="par"><a class="mi" href="../03-otgruzki/app.html">📤 3 Отгрузки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../03.1-zakazy/app.html">3.1 Заказы</a><a class="mi sub-a" href="../03.2-upakovka-zakazov/app.html">3.2 Упаковка заказов</a><a class="mi sub-a" href="../03.3-proverka-zakazov/app.html">3.3 Проверка заказов</a></div></div><a class="mi" href="../04-vnutriskladskie-operatsii/app.html">📦 4 Внутрискладские операции</a><div class="grp" data-grp="5"><div class="par"><a class="mi" href="../05-yacheyki-hraneniya/app.html">🗄️ 5 Ячейки хранения</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../05.1-karta-sklada-3d/app.html">5.1 Карта склада 3D</a></div></div><a class="mi" href="../06-inventarizatsiya/app.html">📋 6 Инвентаризация</a><a class="mi" href="../07-zadaniya/app.html">📝 7 Задания</a><div class="grp" data-grp="8"><div class="par"><a class="mi" href="../08-nomenklatura/app.html">📁 8 Номенклатура</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../08.1-tovarny-zapas/app.html">8.1 Товарный запас</a></div></div><div class="grp" data-grp="9"><div class="par"><a class="mi" href="../09-kontragenty-i-gruzopoluchateli/app.html">👥 9 Контрагенты и грузополучатели</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../09.1-billing/app.html">9.1 Биллинг</a></div></div><div class="grp" data-grp="10"><div class="par"><a class="mi" href="../10-sotrudniki/app.html">👤 10 Сотрудники</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../10.1-nachisleniya-kpi/app.html">10.1 Начисления KPI</a><a class="mi sub-a" href="../10.2-prosmotr-sdelki/app.html">10.2 Просмотр сделки</a></div></div><a class="mi" href="../11-nablyudeniya/app.html">📊 11 Наблюдения</a><a class="mi" href="../12-uvedomleniya/app.html">🔈 12 Уведомления</a><div class="grp" data-grp="13"><div class="par"><a class="mi" href="../13-nastroyki/app.html">⚙️ 13 Настройки</a><span class="caret" title="Раскрыть">▸</span></div><div class="sub"><a class="mi sub-a" href="../13.1-avtoformirovanie-nakladnyh/app.html">13.1 Автоформирование накладных</a><a class="mi sub-a" href="../13.2-avtoformirovanie-schetov/app.html">13.2 Автоформирование счетов</a><a class="mi sub-a" href="../13.3-pechat-lineyki/app.html">13.3 Печать линейки</a><a class="mi sub-a" href="../13.4-nastroyka-kpi/app.html">13.4 Настройка KPI</a></div></div><hr style="border:0;border-top:1px solid #333;margin:10px 0"><a class="mi" href="../14-zhurnal/app.html">📒 14 Журнал</a><a class="mi" href="../15-etiketki/app.html">🏷️ 15 Этикетки</a><a class="mi on" href="../16-billing/app.html">💳 16 Биллинги</a><a class="mi" href="../tsd/app.html">📱 ТСД</a></nav></aside>
+<main>
+<div class="top"><div><div class="hint">Модуль 16</div><h1>Биллинги (3PL)</h1></div><div class="hint" id="who"></div></div>
+<div class="tabs" id="tabs">
+<button data-t="services" class="on">Услуги</button>
+<button data-t="tariffs">Тарифы</button>
+<button data-t="events">События</button>
+<button data-t="run">Прогон</button>
+<button data-t="charges">Начисления</button>
+<button data-t="storage">Хранение</button>
+<button data-t="periods">Периоды</button>
+</div>
+<div id="pane"></div>
+</main>
+
+<div class="modal" id="svcModal"><div class="mbox" style="width:640px">
+<h3 id="svcTitle">Услуга</h3>
+<div class="grid2">
+<div class="fld"><label>Код *</label><input id="s_code" placeholder="IN_PALLET"></div>
+<div class="fld"><label>Наименование *</label><input id="s_name"></div>
+<div class="fld"><label>Группа</label><select id="s_group"></select></div>
+<div class="fld"><label>Тип расчёта</label><select id="s_type"></select></div>
+<div class="fld"><label>Единица</label><select id="s_uom"></select></div>
+<div class="fld"><label>Тип события (драйвер)</label><input id="s_event" placeholder="IN_PALLET"></div>
+<div class="fld"><label>Цена по умолчанию</label><input id="s_price" type="number" step="0.01" value="0"></div>
+<div class="fld"><label>НДС, %</label><input id="s_vat" type="number" step="0.01" value="20"></div>
+</div>
+<label class="mini" style="display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" id="s_active" checked> Услуга активна</label>
+<div class="fld"><label>Комментарий</label><input id="s_comment"></div>
+<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button class="btn" onclick="$('svcModal').classList.remove('open')">Отмена</button><button class="btn pri" id="svcSave">Сохранить</button></div>
+</div></div>
+
+<div class="modal" id="tierModal"><div class="mbox" style="width:680px">
+<h3 id="tierTitle">Ступени</h3>
+<div class="hint">Диапазоны включительно (0–100), без пересечений. VOLUME — вся масса по цене достигнутой ступени; PROGRESSIVE — каждая единица по своей ступени.</div>
+<table><thead><tr><th>От</th><th>До (пусто = ∞)</th><th>Цена</th><th>Режим</th><th></th></tr></thead><tbody id="tierRows"></tbody></table>
+<div style="display:flex;gap:10px;margin-top:10px"><button class="btn sm" id="tierAdd">+ Ступень</button><span style="flex:1"></span><button class="btn" onclick="$('tierModal').classList.remove('open')">Закрыть</button></div>
+</div></div>
+
+<div id="toast"></div>
+<script>
+const API='demo_sqlite.php';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=v=>{const n=Number(v||0);return n.toLocaleString('ru-RU',{maximumFractionDigits:2})};
+function toast(t,ms){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',ms||3000)}
+async function api(p,body){const o={credentials:'same-origin',cache:'no-store'};if(body!==undefined){o.method='POST';o.headers={'Content-Type':'application/json'};o.body=JSON.stringify(body)}
+ const r=await fetch(API+p,o);const t=await r.text();let j={};try{j=t?JSON.parse(t):{}}catch(_){}
+ if(!r.ok||j.error){throw new Error(j.error||('HTTP '+r.status+(t?': '+t.slice(0,200):'')))}return j}
+let REFS=null,TAB='services',TPRINT=null;
+async function refs(){if(REFS)return REFS;REFS=await api('?action=refs');return REFS}
+
+function paintTabs(){document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===TAB))}
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{TAB=b.dataset.t;paintTabs();render()});
+function prevPeriod(){const d=new Date();const f=new Date(d.getFullYear(),d.getMonth()-1,1);const t=new Date(d.getFullYear(),d.getMonth(),0);
+ const iso=x=>x.toISOString().slice(0,10);return [iso(f),iso(t)]}
+function periodInputsHtml(from,to){return `<div class="bar"><span class="hint">Период:</span><input type="date" id="pf" value="${from}"><input type="date" id="pt" value="${to}"></div>`}
+
+async function render(){
+ try{
+  if(TAB==='services')return renderServices();
+  if(TAB==='tariffs')return renderTariffs();
+  if(TAB==='events')return renderEvents();
+  if(TAB==='run')return renderRun();
+  if(TAB==='charges')return renderCharges();
+  if(TAB==='storage')return renderStorage();
+  if(TAB==='periods')return renderPeriods();
+ }catch(e){$('pane').innerHTML='<div class="card" style="padding:16px;color:#B71C1C">Ошибка: '+esc(e.message)+'</div>'}
+}
+
+/* ---------------- Услуги ---------------- */
+async function renderServices(){
+ const r=await refs();const rows=r.services||[];
+ $('pane').innerHTML=`<div class="bar"><button class="btn pri" id="svcNew">+ Новая услуга</button><span class="hint">Услуг: ${rows.length}</span></div>
+ <div class="card"><table><thead><tr><th>Код</th><th>Наименование</th><th>Группа</th><th>Тип расчёта</th><th>Ед.</th><th>Событие</th><th>Цена</th><th>НДС</th><th>Активна</th><th></th></tr></thead><tbody>
+ ${rows.map(s=>`<tr><td><b>${esc(s.code)}</b></td><td>${esc(s.name)}</td><td>${esc(s.group_name||'—')}</td><td>${esc(s.calc_name||s.calc_code||'—')}</td><td>${esc(s.uom_code||'—')}</td><td>${esc(s.event_type_code||'—')}</td><td>${fmt(s.default_price)}</td><td>${fmt(s.vat_rate)}</td><td>${s.is_active==1?'<span class="st ok">да</span>':'<span class="st mut">нет</span>'}</td><td><button class="btn sm" data-edit="${s.id}">Изменить</button></td></tr>`).join('')}
+ </tbody></table></div>`;
+ $('svcNew').onclick=()=>openSvc(null);
+ document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const s=rows.find(x=>+x.id===+b.dataset.edit);openSvc(s)});
+}
+async function openSvc(s){
+ const r=await refs();
+ $('svcTitle').textContent=s?('Услуга '+s.code):'Новая услуга';
+ $('s_code').value=s?s.code:'';$('s_name').value=s?s.name:'';
+ $('s_group').innerHTML=(r.groups||[]).map(g=>`<option value="${g.id}"${s&&+s.group_id===+g.id?' selected':''}>${esc(g.name)}</option>`).join('');
+ $('s_type').innerHTML=(r.calc_types||[]).map(t=>`<option value="${t.id}"${s&&+s.calc_type_id===+t.id?' selected':''}>${esc(t.name)} (${esc(t.code)})</option>`).join('');
+ $('s_uom').innerHTML=(r.uoms||[]).map(u=>`<option value="${u.id}"${s&&+s.uom_id===+u.id?' selected':''}>${esc(u.name)} (${esc(u.code)})</option>`).join('');
+ $('s_event').value=s?(s.event_type_code||''):'';
+ $('s_price').value=s?(s.default_price||0):0;$('s_vat').value=s?(s.vat_rate||20):20;
+ $('s_active').checked=s?+s.is_active===1:true;$('s_comment').value=s?(s.comment||''):'';
+ $('svcModal').classList.add('open');
+ $('svcSave').onclick=async()=>{
+  try{
+   await api('?action=service_save',{id:s?s.id:0,code:$('s_code').value.trim(),name:$('s_name').value.trim(),
+    group_id:+$('s_group').value,calc_type_id:+$('s_type').value,uom_id:+$('s_uom').value,
+    event_type_code:$('s_event').value.trim(),default_price:+$('s_price').value,vat_rate:+$('s_vat').value,
+    is_active:$('s_active').checked,comment:$('s_comment').value.trim()});
+   $('svcModal').classList.remove('open');REFS=null;toast('Услуга сохранена');render()
+  }catch(e){toast('Ошибка: '+e.message,5000)}
+ };
+}
+
+/* ---------------- Тарифы ---------------- */
+let TCLIENT=0,TTARIFF=null;
+async function renderTariffs(){
+ const r=await refs();
+ // По умолчанию — клиент, у которого уже есть тариф (иначе первый из списка).
+ if(!TCLIENT){
+  const all=await api('?action=tariffs');
+  const first=(all.rows||[])[0];
+  TCLIENT=first?+first.client_id:+(r.clients[0]||{}).id||0;
+ }
+ const list=await api('?action=tariffs&client_id='+TCLIENT);
+ const rows=list.rows||[];
+ let html=`<div class="bar"><span class="hint">Клиент:</span><select id="tc">${(r.clients||[]).map(c=>`<option value="${c.id}"${+c.id===TCLIENT?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
+ <button class="btn pri" id="tnew">+ Новое тарифное соглашение</button></div>`;
+ html+=`<div class="card"><table><thead><tr><th>Номер</th><th>Период</th><th>Статус</th><th>Услуг</th><th>Базис хранения</th><th>Бесплатных суток</th><th>Мин. счёт</th><th></th></tr></thead><tbody>`;
+ html+=rows.length?rows.map(t=>`<tr><td><b>${esc(t.number)}</b> <span class="mini">v${esc(t.version||1)}</span></td><td>${esc((t.date_from||'').slice(0,10))} — ${esc((t.date_to||'бессрочно').slice(0,10))}</td>
+ <td>${statusBadge(t.status)}</td><td>${t.lines_on}/${t.lines}</td><td>${esc(t.storage_day_basis)}</td><td>${esc(t.free_storage_days)}</td><td>${fmt(t.min_charge_amount)}</td>
+ <td><button class="btn sm" data-t="${t.id}">Открыть</button></td></tr>`).join(''):'<tr><td colspan="8" class="hint">Нет тарифных соглашений</td></tr>';
+ html+='</tbody></table></div><div id="tform"></div>';
+ $('pane').innerHTML=html;
+ $('tc').onchange=()=>{TCLIENT=+$('tc').value;TTARIFF=null;renderTariffs()};
+ $('tnew').onclick=()=>openTariffForm(null);
+ document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>openTariffForm(+b.dataset.t));
+ if(TTARIFF)renderTariffForm();
+}
+function statusBadge(s){const m={draft:['mut','Черновик'],approved:['ok','Утверждено'],archive:['warn','Архив']};const x=m[s]||['mut',s];return `<span class="st ${x[0]}">${esc(x[1])}</span>`}
+async function openTariffForm(id){
+ try{
+  const r=await refs();
+  let t={id:0,client_id:TCLIENT,number:'ТС-'+(new Date()).getFullYear(),date_from:new Date().toISOString().slice(0,10),date_to:'',status:'draft',storage_day_basis:'END_OF_DAY',free_storage_days:0,min_charge_amount:0,notes:'',lines:[]};
+  if(id){const d=await api('?action=tariff&id='+id);t=d.tariff}
+  const linesBySvc={};(t.lines||[]).forEach(l=>{linesBySvc[+l.service_id]=l});
+  const svc=(r.services||[]).map(s=>{
+   const l=linesBySvc[+s.id]||{is_enabled:0,price:s.default_price||0,min_charge:'',max_charge:'',discount_percent:0,free_qty:0,min_qty_threshold:'',tiers:[]};
+   return {s,l};
+  });
+  TTARIFF={t,svc};
+  renderTariffForm();
+ }catch(e){toast('Ошибка: '+e.message,5000)}
+}
+function renderTariffForm(){
+ const {t,svc}=TTARIFF;
+ $('tform').innerHTML=`<div class="card" style="padding:16px"><h2 style="margin:0 0 10px;font-size:18px">${t.id?'Тарифное соглашение '+esc(t.number):'Новое тарифное соглашение'}</h2>
+ <div class="grid3">
+ <div class="fld"><label>Номер *</label><input id="t_number" value="${esc(t.number||'')}"></div>
+ <div class="fld"><label>Клиент</label><select id="t_client">${(REFS.clients||[]).map(c=>`<option value="${c.id}"${+c.id===+t.client_id?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+ <div class="fld"><label>Статус</label><select id="t_status">${['draft','approved','archive'].map(s=>`<option value="${s}"${t.status===s?' selected':''}>${s==='draft'?'Черновик':s==='approved'?'Утверждено':'Архив'}</option>`).join('')}</select></div>
+ <div class="fld"><label>Действует с *</label><input type="date" id="t_from" value="${esc((t.date_from||'').slice(0,10))}"></div>
+ <div class="fld"><label>Действует по</label><input type="date" id="t_to" value="${esc((t.date_to||'').slice(0,10))}"></div>
+ <div class="fld"><label>Базис суточного хранения</label><select id="t_basis">${[['END_OF_DAY','Конец суток (start+in−out)'],['BEGIN_OF_DAY','Начало суток'],['AVERAGE','Средний остаток']].map(x=>`<option value="${x[0]}"${t.storage_day_basis===x[0]?' selected':''}>${x[1]}</option>`).join('')}</select></div>
+ <div class="fld"><label>Бесплатных суток хранения</label><input type="number" id="t_free" min="0" value="${esc(t.free_storage_days||0)}"></div>
+ <div class="fld"><label>Минимальная сумма счёта</label><input type="number" id="t_min" step="0.01" value="${esc(t.min_charge_amount||0)}"></div>
+ </div>
+ <div class="hint" style="margin:10px 0">Отметьте оказываемые услуги и укажите цены. Пустая цена = услуга включена бесплатно.</div>
+ <div class="card"><table><thead><tr><th></th><th>Услуга</th><th>Цена</th><th>Мин.</th><th>Макс.</th><th>Скидка %</th><th>Бесплатно, ед.</th><th>Порог, ед.</th><th></th></tr></thead><tbody>
+ ${svc.map(({s,l},i)=>`<tr><td><input type="checkbox" data-on="${i}" ${+l.is_enabled===1?'checked':''} style="width:auto"></td>
+ <td><b>${esc(s.code)}</b><br><span class="mini">${esc(s.name)}</span></td>
+ <td><input type="number" step="0.01" data-price="${i}" value="${esc(l.price??'')}" style="width:100px"></td>
+ <td><input type="number" step="0.01" data-min="${i}" value="${esc(l.min_charge??'')}" style="width:90px"></td>
+ <td><input type="number" step="0.01" data-max="${i}" value="${esc(l.max_charge??'')}" style="width:90px"></td>
+ <td><input type="number" step="0.01" data-disc="${i}" value="${esc(l.discount_percent??0)}" style="width:80px"></td>
+ <td><input type="number" step="0.01" data-free="${i}" value="${esc(l.free_qty??0)}" style="width:90px"></td>
+ <td><input type="number" step="0.01" data-th="${i}" value="${esc(l.min_qty_threshold??'')}" style="width:90px"></td>
+ <td><button class="btn sm" data-tiers="${i}">Ступени${(l.tiers||[]).length?' ('+l.tiers.length+')':''}</button></td></tr>`).join('')}
+ </tbody></table></div>
+ <div style="display:flex;gap:10px;margin-top:12px"><button class="btn pri" id="tsave">Сохранить соглашение</button><button class="btn" id="tclose">Закрыть</button></div>
+ </div>`;
+ document.querySelectorAll('[data-tiers]').forEach(b=>b.onclick=()=>openTiers(+b.dataset.tiers));
+ $('tclose').onclick=()=>{TTARIFF=null;$('tform').innerHTML=''};
+ $('tsave').onclick=async()=>{
+  const lines=[];
+  for(let i=0;i<svc.length;i++){
+   const on=document.querySelector(`[data-on="${i}"]`);
+   const price=document.querySelector(`[data-price="${i}"]`);
+   const min=document.querySelector(`[data-min="${i}"]`);
+   const max=document.querySelector(`[data-max="${i}"]`);
+   const disc=document.querySelector(`[data-disc="${i}"]`);
+   const free=document.querySelector(`[data-free="${i}"]`);
+   const th=document.querySelector(`[data-th="${i}"]`);
+   lines.push({service_id:svc[i].s.id,is_enabled:on&&on.checked?1:0,price:price?+price.value:0,
+    min_charge:min?min.value:'',max_charge:max?max.value:'',discount_percent:disc?+disc.value:0,
+    free_qty:free?+free.value:0,min_qty_threshold:th?th.value:'',tiers:svc[i].l.tiers||[]});
+  }
+  try{
+   const res=await api('?action=tariff_save',{id:t.id,client_id:+$('t_client').value,number:$('t_number').value.trim(),
+    date_from:$('t_from').value,date_to:$('t_to').value,status:$('t_status').value,storage_day_basis:$('t_basis').value,
+    free_storage_days:+$('t_free').value,min_charge_amount:+$('t_min').value,lines});
+   toast('Тариф сохранён');TTARIFF=null;renderTariffs()
+  }catch(e){toast('Ошибка: '+e.message,6000)}
+ };
+}
+function openTiers(i){
+ const item=TTARIFF.svc[i];const tiers=item.l.tiers||[];
+ const rowsHtml=()=>tiers.map((tr,k)=>`<tr><td><input type="number" data-tf="${k}" value="${esc(tr.from??tr.threshold_from??0)}" style="width:90px"></td>
+ <td><input type="number" data-tt="${k}" value="${esc(tr.to??tr.threshold_to??'')}" style="width:90px"></td>
+ <td><input type="number" step="0.01" data-tp="${k}" value="${esc(tr.price??0)}" style="width:100px"></td>
+ <td><select data-tm="${k}"><option value="VOLUME"${(tr.mode||'VOLUME')==='VOLUME'?' selected':''}>VOLUME</option><option value="PROGRESSIVE"${tr.mode==='PROGRESSIVE'?' selected':''}>PROGRESSIVE</option></select></td>
+ <td><button class="btn sm" data-tdel="${k}">✕</button></td></tr>`).join('');
+ $('tierRows').innerHTML=rowsHtml();
+ $('tierTitle').textContent='Ступени · '+item.s.code;
+ $('tierModal').classList.add('open');
+ $('tierAdd').onclick=()=>{tiers.push({from:0,to:'',price:0,mode:'VOLUME',basis:'PER_DAY'});$('tierRows').innerHTML=rowsHtml();bindTierRows()};
+ function bindTierRows(){
+  document.querySelectorAll('[data-tdel]').forEach(b=>b.onclick=()=>{tiers.splice(+b.dataset.tdel,1);$('tierRows').innerHTML=rowsHtml();bindTierRows()});
+ }
+ bindTierRows();
+ $('tierModal').querySelector('button.btn[onclick]').onclick=()=>{
+  for(let k=0;k<tiers.length;k++){
+   tiers[k].from=+document.querySelector(`[data-tf="${k}"]`).value;
+   const to=document.querySelector(`[data-tt="${k}"]`).value;
+   tiers[k].to=to===''?null:+to;
+   tiers[k].price=+document.querySelector(`[data-tp="${k}"]`).value;
+   tiers[k].mode=document.querySelector(`[data-tm="${k}"]`).value;
+   tiers[k].basis='PER_DAY';
+  }
+  item.l.tiers=tiers;
+  $('tierModal').classList.remove('open');
+  renderTariffForm()
+ };
+}
+
+/* ---------------- События ---------------- */
+async function renderEvents(){
+ const r=await refs();
+ if(!$('ef')){const [f,t]=prevPeriod();}
+ const f=($('ef')||{}).value||prevPeriod()[0];const t=($('et')||{}).value||prevPeriod()[1];
+ const cid=+($('ec')||{}).value||0;
+ const d=await api('?action=events&client_id='+cid+'&from='+f+'&to='+t);
+ const rows=d.rows||[];
+ $('pane').innerHTML=`<div class="bar"><span class="hint">Клиент:</span><select id="ec"><option value="0">Все</option>${(r.clients||[]).map(c=>`<option value="${c.id}"${+c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
+ <input type="date" id="ef" value="${f}"><input type="date" id="et" value="${t}"><button class="btn" id="eload">Показать</button>
+ <button class="btn pri" id="enew">+ Событие</button><span class="hint">Событий: ${rows.length}</span></div>
+ <div class="card"><table><thead><tr><th>Дата</th><th>Клиент</th><th>Тип</th><th>Услуга</th><th>Кол-во</th><th>Ед.</th><th>Документ</th><th>Статус</th><th></th></tr></thead><tbody>
+ ${rows.map(x=>`<tr><td>${esc((x.event_date||'').slice(0,10))}</td><td>${esc(x.client_name||'')}</td><td><b>${esc(x.event_type_code)}</b></td><td>${esc(x.service_name||'—')}</td><td>${fmt(x.quantity)}</td><td>${esc(x.uom_code||'')}</td><td>${esc(x.doc_no||'—')}</td><td>${eventBadge(x.status)}</td><td><button class="btn sm" data-del="${x.id}">Удалить</button></td></tr>`).join('')||'<tr><td colspan="9" class="hint">Нет событий за период</td></tr>'}
+ </tbody></table></div>`;
+ $('eload').onclick=()=>renderEvents();
+ $('ec').onchange=()=>renderEvents();
+ $('enew').onclick=()=>addEvent();
+ document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{try{await api('?action=event_delete',{id:+b.dataset.del});toast('Удалено');renderEvents()}catch(e){toast('Ошибка: '+e.message)}});
+}
+function eventBadge(s){const m={NEW:['mut','новое'],CHARGED:['ok','начислено'],NO_TARIFF:['bad','нет тарифа'],SERVICE_DISABLED:['warn','услуга отключена'],ANOMALY:['bad','аномалия']};const x=m[s]||['mut',s||'—'];return `<span class="st ${x[0]}">${esc(x[1])}</span>`}
+async function addEvent(){
+ const r=await refs();
+ const types=(r.services||[]).filter(s=>s.event_type_code).map(s=>s.event_type_code);
+ const uniq=[...new Set(types)];
+ const [f]=prevPeriod();
+ $('pane').insertAdjacentHTML('afterbegin',`<div class="modal open" id="evModal"><div class="mbox" style="width:560px">
+ <h3>Новое событие</h3>
+ <div class="grid2"><div class="fld"><label>Клиент</label><select id="ev_c">${(r.clients||[]).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+ <div class="fld"><label>Тип события</label><select id="ev_t">${uniq.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
+ <div class="fld"><label>Дата</label><input type="date" id="ev_d" value="${f}"></div>
+ <div class="fld"><label>Количество</label><input type="number" step="0.01" id="ev_q" value="1"></div>
+ <div class="fld"><label>Документ</label><input id="ev_doc" placeholder="A-0001"></div></div>
+ <div class="fld"><label>Обоснование (для ручного ввода)</label><input id="ev_reason" placeholder="Причина ручного ввода"></div>
+ <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button class="btn" id="evx">Отмена</button><button class="btn pri" id="evok">Добавить</button></div>
+ </div></div>`);
+ $('evx').onclick=()=>$('evModal').remove();
+ $('evok').onclick=async()=>{
+  try{
+   await api('?action=event_add',{client_id:+$('ev_c').value,event_type_code:$('ev_t').value,event_date:$('ev_d').value,
+    quantity:+$('ev_q').value,doc_no:$('ev_doc').value.trim(),reason:$('ev_reason').value.trim()});
+   $('evModal').remove();toast('Событие добавлено');renderEvents()
+  }catch(e){toast('Ошибка: '+e.message,5000)}
+ };
+}
+
+/* ---------------- Прогон ---------------- */
+async function renderRun(){
+ const r=await refs();const [f,t]=prevPeriod();
+ $('pane').innerHTML=`<div class="card" style="padding:16px">
+ <h2 style="margin:0 0 6px;font-size:18px">Биллинговый прогон</h2>
+ <div class="hint">Пробный прогон ничего не записывает; полный — формирует начисления (старые активные по этому периоду помечаются «замещённые»).</div>
+ <div class="bar"><span class="hint">Период:</span><input type="date" id="rf" value="${f}"><input type="date" id="rt" value="${t}"></div>
+ <div class="bar"><span class="hint">Клиенты:</span><select id="rc" multiple size="4" style="min-width:280px"><option value="0">Все клиенты</option>${(r.clients||[]).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+ <button class="btn" id="rdry">Пробный прогон</button><button class="btn pri" id="rfull">Запустить прогон</button></div>
+ <div id="rres"></div></div>`;
+ const clients=()=>[...$('rc').selectedOptions].map(o=>+o.value).filter(v=>v>0);
+ const go=async(mode)=>{$('rres').innerHTML='<div class="hint">Расчёт…</div>';
+  try{
+   const d=await api('?action=run',{from:$('rf').value,to:$('rt').value,clients:clients(),mode});
+   const ok=d.charged+d.storage_days;
+   $('rres').innerHTML=`<div class="card" style="padding:14px"><b>${mode==='DRY_RUN'?'Пробный прогон':'Прогон'} завершён</b>
+   <div class="grid3" style="margin-top:8px">
+   <div>Событий: <b>${d.events}</b><br><span class="mini">начислено: ${d.charged} · без тарифа: ${d.no_tariff} · услуга отключена: ${d.service_disabled}</span></div>
+   <div>Суток хранения: <b>${d.storage_days}</b></div>
+   <div>Сумма без НДС: <b>${fmt(d.amount_net)}</b><br><span class="mini">из них доначислений: ${fmt(d.min_extra||0)}</span></div></div>
+   ${(d.problems||[]).length?('<h3 style="margin:12px 0 6px;font-size:14px">Проблемы ('+d.problems.length+')</h3><table><thead><tr><th>Дата</th><th>Клиент</th><th>Тип</th><th>Услуга</th><th>Причина</th></tr></thead><tbody>'+
+    d.problems.map(p=>`<tr><td>${esc(p.date||'')}</td><td>${esc(p.client_id||'')}</td><td>${esc(p.type||'')}</td><td>${esc(p.service||'')}</td><td>${esc(p.reason||'')}</td></tr>`).join('')+'</tbody></table>'):'<div class="hint" style="margin-top:8px;color:#1B7F32">Проблем нет</div>'}
+   </div>`;
+   toast((mode==='DRY_RUN'?'Пробный прогон: ':'Прогон: ')+fmt(d.amount_net)+' без НДС');
+  }catch(e){$('rres').innerHTML='<div class="card" style="padding:14px;color:#B71C1C">Ошибка: '+esc(e.message)+'</div>'}
+ };
+ $('rdry').onclick=()=>go('DRY_RUN');
+ $('rfull').onclick=()=>go('FULL');
+}
+
+/* ---------------- Начисления ---------------- */
+async function renderCharges(){
+ const r=await refs();const [f,t]=prevPeriod();
+ const cid=+($('chc')||{}).value||0;const st=($('chs')||{}).value||'';
+ const d=await api('?action=charges&client_id='+cid+'&from='+f+'&to='+t+'&status='+encodeURIComponent(st));
+ const rows=d.rows||[];
+ $('pane').innerHTML=`<div class="bar"><span class="hint">Клиент:</span><select id="chc"><option value="0">Все</option>${(r.clients||[]).map(c=>`<option value="${c.id}"${+c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
+ <select id="chs"><option value="">Все статусы</option><option value="ACTIVE"${st==='ACTIVE'?' selected':''}>Активные</option><option value="SUPERSEDED"${st==='SUPERSEDED'?' selected':''}>Замещённые</option></select>
+ <button class="btn" id="chload">Показать</button><span class="hint">Сумма активных: <b>${fmt(d.total_net)}</b> · строк: ${rows.length}</span></div>
+ <div class="card"><table><thead><tr><th>Дата</th><th>Клиент</th><th>Услуга</th><th>Кол-во</th><th>Цена</th><th>Сумма</th><th>НДС</th><th>Статус</th><th></th></tr></thead><tbody>
+ ${rows.map(x=>`<tr data-id="${x.id}"><td>${esc((x.charge_date||'').slice(0,10))}</td><td>${esc(x.client_name||'')}</td>
+ <td><b>${esc(x.service_code||'')}</b><br><span class="mini">${esc(x.service_name||'')}</span></td>
+ <td>${fmt(x.quantity)}</td><td>${fmt(x.price)}</td><td class="${(+x.amount_net||0)<0?'neg':'pos'}">${fmt(x.amount_net)}</td><td>${fmt(x.vat_amount)}</td>
+ <td>${x.status==='ACTIVE'?'<span class="st ok">активно</span>':x.status==='SUPERSEDED'?'<span class="st mut">замещено</span>':'<span class="st warn">'+esc(x.status)+'</span>'}</td>
+ <td><button class="btn sm" data-tr="${x.id}">Расшифровка</button> <button class="btn sm" data-adj="${x.id}">Корректировка</button></td></tr>
+ <tr id="tr${x.id}" style="display:none"><td colspan="9"><div class="trace">${esc(pretty(x.calc_trace))}</div></td></tr>`).join('')||'<tr><td colspan="9" class="hint">Начислений нет — запустите прогон</td></tr>'}
+ </tbody></table></div>`;
+ $('chload').onclick=()=>renderCharges();$('chc').onchange=()=>renderCharges();$('chs').onchange=()=>renderCharges();
+ document.querySelectorAll('[data-tr]').forEach(b=>b.onclick=()=>{const el=$('tr'+b.dataset.tr);el.style.display=el.style.display==='none'?'table-row':'none'});
+ document.querySelectorAll('[data-adj]').forEach(b=>b.onclick=async()=>{
+  const amount=prompt('Сумма корректировки (минус — сторно):','0');
+  if(amount===null)return;
+  const reason=prompt('Причина корректировки (обязательно):','Перерасчёт');
+  if(!reason)return;
+  try{await api('?action=adjust',{charge_id:+b.dataset.adj,amount:+amount,reason});toast('Корректировка создана');renderCharges()}catch(e){toast('Ошибка: '+e.message,5000)}
+ });
+}
+function pretty(s){try{const j=typeof s==='string'?JSON.parse(s):s;return JSON.stringify(j,null,2)}catch(e){return String(s||'')}}
+
+/* ---------------- Хранение ---------------- */
+async function renderStorage(){
+ const r=await refs();const [f,t]=prevPeriod();
+ const cid=+($('shc')||{}).value||0;
+ const d=await api('?action=storage&client_id='+cid+'&from='+f+'&to='+t);
+ const rows=d.rows||[];
+ $('pane').innerHTML=`<div class="bar"><span class="hint">Клиент:</span><select id="shc"><option value="0">Все</option>${(r.clients||[]).map(c=>`<option value="${c.id}"${+c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
+ <button class="btn" id="shload">Показать</button><span class="hint">Итого хранение: <b>${fmt(d.total_net)}</b> · строк: ${rows.length}</span></div>
+ <div class="hint" style="margin-bottom:8px">Qty_billable = остаток на начало суток + приход − расход (режим END_OF_DAY), с бесплатными сутками и ступенями.</div>
+ <div class="card"><table><thead><tr><th>Дата</th><th>Клиент</th><th>Ед.</th><th>Начало</th><th>Приход</th><th>Расход</th><th>К оплате</th><th>День</th><th>Бесплатно</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>
+ ${rows.map(x=>`<tr><td>${esc((x.day||'').slice(0,10))}</td><td>${esc(x.client_name||'')}</td><td>${esc(x.uom_code||'')}</td>
+ <td>${fmt(x.qty_start)}</td><td>${fmt(x.qty_in)}</td><td>${fmt(x.qty_out)}</td><td><b>${fmt(x.qty_billable)}</b></td><td>${esc(x.day_no)}</td>
+ <td>${+x.is_free_day?'<span class="st warn">да</span>':'—'}</td><td>${fmt(x.price)}</td><td class="${(+x.amount_net||0)<0?'neg':'pos'}">${fmt(x.amount_net)}</td></tr>`).join('')||'<tr><td colspan="11" class="hint">Нет строк — запустите прогон</td></tr>'}
+ </tbody></table></div>`;
+ $('shload').onclick=()=>renderStorage();$('shc').onchange=()=>renderStorage();
+}
+
+/* ---------------- Периоды ---------------- */
+async function renderPeriods(){
+ const [f,t]=prevPeriod();
+ const d=await api('?action=periods');
+ const rows=d.rows||[];
+ $('pane').innerHTML=`<div class="bar"><span class="hint">Закрыть период:</span><input type="date" id="pcf" value="${f}"><input type="date" id="pct" value="${t}">
+ <button class="btn pri" id="pcclose">Закрыть период</button><span class="hint">Закрытие блокирует начисления от пересчёта; при наличии событий без тарифа — отказ.</span></div>
+ <div class="card"><table><thead><tr><th>Период</th><th>Клиент</th><th>Статус</th><th>Закрыт</th><th></th></tr></thead><tbody>
+ ${rows.map(p=>`<tr><td>${esc((p.period_from||'').slice(0,10))} — ${esc((p.period_to||'').slice(0,10))}</td><td>${p.client_id?'#'+p.client_id:'Все'}</td>
+ <td>${p.status==='CLOSED'?'<span class="st ok">закрыт</span>':p.status==='REOPENED'?'<span class="st warn">переоткрыт</span>':'<span class="st mut">открыт</span>'}</td>
+ <td>${esc((p.closed_at||'').slice(0,16))}</td>
+ <td>${p.status==='CLOSED'?'<button class="btn sm" data-open="'+esc(p.period_from)+'|'+esc(p.period_to)+'">Переоткрыть</button>':''}</td></tr>`).join('')||'<tr><td colspan="5" class="hint">Периодов нет</td></tr>'}
+ </tbody></table></div>`;
+ $('pcclose').onclick=async()=>{try{await api('?action=period_close',{from:$('pcf').value,to:$('pct').value});toast('Период закрыт');renderPeriods()}catch(e){toast('Ошибка: '+e.message,7000)}};
+ document.querySelectorAll('[data-open]').forEach(b=>b.onclick=async()=>{
+  const [ff,tt]=b.dataset.open.split('|');const reason=prompt('Причина повторного открытия (обязательно):','');if(!reason)return;
+  try{await api('?action=period_open',{from:ff,to:tt,reason});toast('Период переоткрыт');renderPeriods()}catch(e){toast('Ошибка: '+e.message,6000)}
+ });
+}
+
+document.addEventListener('click',e=>{const c=e.target.closest('.caret');if(!c)return;const g=c.closest('.grp');if(g)g.classList.toggle('open')});
+(function paintWho(){let n=0;const t=()=>{const u=window.WMS_USER;if(u&&u.fio){$('who').textContent=u.fio;return}if(++n<15)setTimeout(t,300)};t()})();
+paintTabs();render();
+</script>
+</body>
+</html>

@@ -1632,6 +1632,21 @@ if ($action === 'place_confirm' && $method === 'POST') {
                 }
                 $cs->execute($cp);
                 if ($crow = $cs->fetch()) {
+                    // Тип тары размещаемой паллеты (для автонастройки секции).
+                    $ptypeCell = 'euro';
+                    $ssccCell = trim((string)($items[0]['pallet'] ?? ''));
+                    if ($ssccCell !== '') {
+                        try {
+                            $ndbPt = wms_nomenclature_pdo();
+                            $qp = $ndbPt->prepare("SELECT pallet_type FROM product_stock WHERE pallet=:p AND COALESCE(pallet_type,'')<>'' LIMIT 1");
+                            $qp->execute([':p' => $ssccCell]);
+                            $vPt = trim((string)($qp->fetchColumn() ?: ''));
+                            if ($vPt !== '') {
+                                $ptypeCell = CellPlacement::normalizePalletType($vPt);
+                            }
+                        } catch (Throwable) {
+                        }
+                    }
                     // Повторная проверка ограничений ячейки: между сканированием
                     // и подтверждением её состояние могло измениться (заняли
                     // другие, изменили лимиты). Раньше проверок здесь не было —
@@ -1654,11 +1669,15 @@ if ($action === 'place_confirm' && $method === 'POST') {
                         tj(['error' => 'Превышен макс. вес ячейки ' . $expected . ': паллета '
                             . $palletKg . ' кг > лимита ' . (float)$maxW . ' кг'], 409);
                     }
+                    // Тип тары фиксируем на ячейке: секция автоматически
+                    // настраивается под первый размещённый тип паллеты.
+                    $cellPalletType = $ptypeCell;
                     $sdb->prepare(
                         "UPDATE storage_cells SET qty = COALESCE(qty,0) + :q,
                                 reserved_qty = CASE WHEN COALESCE(reserved_qty,0) > 0 THEN reserved_qty - 1 ELSE 0 END,
+                                pallet_type = COALESCE(NULLIF(pallet_type,''), :pt),
                                 status = 'busy' WHERE id = :id"
-                    )->execute([':q' => $sum, ':id' => $crow['id']]);
+                    )->execute([':q' => $sum, ':pt' => $cellPalletType, ':id' => $crow['id']]);
                     try {
                         $sdb->prepare(
                             "INSERT INTO cell_history (cell_id, user_id, user_fio, action, field, field_label, old_value, new_value)

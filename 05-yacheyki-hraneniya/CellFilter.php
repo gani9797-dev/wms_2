@@ -11,6 +11,8 @@ final class CellFilter
     public ?string $search = null;      // Поиск по адресу, категории
     public ?int $warehouseId = null;    // Склад ("Все склады" = null)
     public ?string $zone = null;        // storage/shipment/receiving
+    /** @var string[] выбранные зоны (мультивыбор) */
+    public array $zones = [];
     public ?string $cellType = null;    // pallet/box
     /** @var string[]|null */
     public ?array $statuses = null;     // Статус ("Выбрано 2")
@@ -41,7 +43,16 @@ final class CellFilter
         $get = fn(string $k) => isset($q[$k]) && $q[$k] !== '' ? $q[$k] : null;
         $f->search      = $get('search') ? trim((string)$get('search')) : null;
         $f->warehouseId = $get('warehouse_id') ? (int)$get('warehouse_id') : null;
-        $f->zone        = $get('zone');
+        // Зона: одна или несколько (zone=a,b / zone[]=a&zone[]=b).
+        $zoneRaw = $q['zone'] ?? ($q['zones'] ?? null);
+        $zones = [];
+        if (is_array($zoneRaw)) {
+            $zones = $zoneRaw;
+        } elseif (is_string($zoneRaw) && trim($zoneRaw) !== '') {
+            $zones = preg_split('/[,\s;]+/', $zoneRaw, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        }
+        $f->zones = array_values(array_unique(array_filter(array_map('trim', $zones), fn($v) => $v !== '')));
+        $f->zone = $f->zones[0] ?? null;
         $f->cellType    = $get('cell_type');
         $f->statuses    = isset($q['status']) ? array_values((array)$q['status']) : null;
         $f->category    = $get('category');

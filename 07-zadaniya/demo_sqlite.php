@@ -82,7 +82,7 @@ endif;
 
 $repo = new TaskRepository($pdo);
 $service = new TaskService($pdo);
-$userId = 1;
+$userId = function_exists('wms_auth_actor_id') ? wms_auth_actor_id() : 1;
 $action = $_GET['action'] ?? 'list';
 header('Content-Type: application/json; charset=utf-8');
 
@@ -133,8 +133,14 @@ try {
     } elseif ($action === 'delete_many' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $b = json_decode(file_get_contents('php://input'), true) ?? [];
         $ids = $b['ids'] ?? $b;
-        $n = $service->deleteMany((array)$ids, $userId);
-        echo json_encode(['ok' => true, 'deleted' => $n], JSON_UNESCAPED_UNICODE);
+        $res = $service->deleteMany((array)$ids, $userId);
+        echo json_encode([
+            'ok' => true,
+            'deleted' => (int)($res['deleted'] ?? 0),
+            'skipped' => (int)($res['skipped'] ?? 0),
+            'skipped_ids' => $res['skipped_ids'] ?? [],
+            'not_found' => $res['not_found'] ?? [],
+        ], JSON_UNESCAPED_UNICODE);
     } elseif ($action === 'pick' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $b = json_decode(file_get_contents('php://input'), true) ?? [];
         // ТСД-скан: {item_id, qty} либо {task_id, sku/code, qty}
