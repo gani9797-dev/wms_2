@@ -3,7 +3,7 @@
 Дата проверки: 2026-10-28; обновление документации: 2026-11-06 (интеграция API v1 — 2026-11-05).
 Схемы: [`wms-overview.svg`](./wms-overview.svg) — обзор; [`wms-architecture.drawio`](./wms-architecture.drawio) — 7 страниц: обзор, приход, заказ/отгрузка, склад, БД прихода, БД отгрузки, этикетки.
 Отчёт smoke-теста: [`qa-report.json`](./qa-report.json).
-Интеграция с ERP и внешними системами: [`ИНТЕГРАЦИЯ-API-ERP.md`](./ИНТЕГРАЦИЯ-API-ERP.md), контракт — [`api/v1/openapi.yaml`](../api/v1/openapi.yaml), тесты — [`api/v1/tests/report.md`](../api/v1/tests/report.md).
+Интеграция с ERP и внешними системами: [`ИНТЕГРАЦИЯ-API-ERP.md`](./ИНТЕГРАЦИЯ-API-ERP.md) (схема — [`ИНТЕГРАЦИЯ-API-ERP.drawio`](./ИНТЕГРАЦИЯ-API-ERP.drawio), для печати — [`ИНТЕГРАЦИЯ-API-ERP.docx`](./ИНТЕГРАЦИЯ-API-ERP.docx)), контракт — [`api/v1/openapi.yaml`](../api/v1/openapi.yaml), тесты — [`api/v1/tests/report.md`](../api/v1/tests/report.md).
 
 ## 1. Как работает система
 

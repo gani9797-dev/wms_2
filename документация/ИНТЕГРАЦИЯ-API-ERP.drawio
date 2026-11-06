@@ -1,0 +1,421 @@
+<mxfile host="app.diagrams.net" agent="WMS TiMLog" version="24.7.17" type="device">
+  <diagram id="exchange" name="1. Обмен данными">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1660" pageHeight="1320" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="t1" value="WMS TiMLog ↔ ERP: обмен через API v1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#4C2A9E;" vertex="1" parent="1">
+          <mxGeometry x="40" y="16" width="900" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="t2" value="Стрелки — отдельные сообщения, нумерация совпадает с порядком вызовов. Синий — запрос ERP → WMS, зелёный — ответ WMS → ERP, оранжевый пунктир — вебхук и повтор." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="40" y="52" width="1100" height="24" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="erp" value="ERP / 1С / TMS&#10;внешняя система" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#1A73E8;fontSize=14;fontStyle=1;fontColor=#174EA6;" vertex="1" parent="1">
+          <mxGeometry x="120" y="110" width="260" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="wms" value="WMS TiMLog&#10;/api/v1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE7FF;strokeColor=#6432FF;fontSize=14;fontStyle=1;fontColor=#4C2A9E;" vertex="1" parent="1">
+          <mxGeometry x="850" y="110" width="320" height="64" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="life-erp" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#9AA0A6;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="250" y="180" as="sourcePoint"/>
+            <mxPoint x="250" y="1200" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="life-wms" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#9AA0A6;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1010" y="180" as="sourcePoint"/>
+            <mxPoint x="1010" y="1200" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="m1" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="250" y="250" as="sourcePoint"/>
+            <mxPoint x="1010" y="250" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m1l" value="1. POST /oauth/token — client_credentials (client_id, client_secret)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="260" y="222" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m2" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1010" y="326" as="sourcePoint"/>
+            <mxPoint x="250" y="326" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m2l" value="2. 200 access_token (JWT), token_type=Bearer, expires_in ≤ 3600" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="260" y="298" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m3" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="250" y="410" as="sourcePoint"/>
+            <mxPoint x="1010" y="410" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m3l" value="3. POST /orders — external_id, consignee, items[{sku, qty}]" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="260" y="382" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m4" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1010" y="486" as="sourcePoint"/>
+            <mxPoint x="250" y="486" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m4l" value="4. 201 создан / 200 идемпотентный повтор (created=false)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="260" y="458" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m5" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="250" y="570" as="sourcePoint"/>
+            <mxPoint x="1010" y="570" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m5l" value="5. POST /nomenclature — sku, name, barcodes[]" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="260" y="542" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m6" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1010" y="646" as="sourcePoint"/>
+            <mxPoint x="250" y="646" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m6l" value="6. 201 создан / 200 обновлён" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="260" y="618" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m7" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="250" y="730" as="sourcePoint"/>
+            <mxPoint x="1010" y="730" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m7l" value="7. GET /stock?page=1&amp;page_size=100 — каждые 5 минут" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="260" y="702" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m8" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1010" y="806" as="sourcePoint"/>
+            <mxPoint x="250" y="806" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m8l" value="8. 200 items[] + pages (пагинация, не более 100 на страницу)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="260" y="778" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m9" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.8;strokeColor=#E65100;dashed=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1010" y="890" as="sourcePoint"/>
+            <mxPoint x="250" y="890" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m9l" value="9. вебхук order.status → POST callback (X-Wms-Signature: HMAC-SHA256)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#8A3B00;" vertex="1" parent="1">
+          <mxGeometry x="260" y="862" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m10" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="250" y="966" as="sourcePoint"/>
+            <mxPoint x="1010" y="966" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m10l" value="10. 2xx OK — событие помечено SENT" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="260" y="938" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m11" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.8;strokeColor=#E65100;dashed=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1010" y="1050" as="sourcePoint"/>
+            <mxPoint x="250" y="1050" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m11l" value="11. нет 2xx → повтор через 1 / 5 / 30 минут" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#8A3B00;" vertex="1" parent="1">
+          <mxGeometry x="260" y="1022" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="m12" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="250" y="1130" as="sourcePoint"/>
+            <mxPoint x="1010" y="1130" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m12l" value="12. GET /health — requests_1h, bad_share, webhooks_pending/dead, alerts[]" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="260" y="1102" width="740" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="n1" value="external_id — ключ идемпотентности: повтор не создаёт дубль и возвращает результат первой обработки." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=12;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="386" width="500" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="n2" value="SKU должен существовать в номенклатуре WMS: иначе 400 + details[]. Сначала POST /nomenclature." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=12;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="546" width="500" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="n3" value="Триггер вебхука: смена статуса заказа или отгрузки в WMS (ShipmentService, ТСД-отгрузка)." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=12;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="866" width="500" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="n4" value="Outbox: PENDING → RETRY → SENT / DEAD. После 3 повторов — DEAD; ручной повтор: 13 → Интеграция и логирование." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=12;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="1020" width="500" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="n5" value="Алерты: доля 5xx &gt; 5% за час (при ≥ 20 запросах), очередь DEAD &gt; 0, рост очереди &gt; 20." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=12;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="1122" width="500" height="58" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg1" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="120" y="1250" as="sourcePoint"/>
+            <mxPoint x="220" y="1250" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg2" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="340" y="1250" as="sourcePoint"/>
+            <mxPoint x="440" y="1250" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg3" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.8;strokeColor=#E65100;dashed=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="560" y="1250" as="sourcePoint"/>
+            <mxPoint x="660" y="1250" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legt" value="запрос ERP → WMS" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="228" y="1238" width="110" height="24" as="geometry"/>
+        </mxCell>
+        <mxCell id="legt2" value="ответ WMS → ERP" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="448" y="1238" width="110" height="24" as="geometry"/>
+        </mxCell>
+        <mxCell id="legt3" value="вебхук / повтор" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="668" y="1238" width="130" height="24" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="setup" name="2. Настройка WMS и ERP">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1660" pageHeight="980" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="h" value="Настройка интеграции: две стороны" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#4C2A9E;" vertex="1" parent="1">
+          <mxGeometry x="40" y="14" width="900" height="36" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="hw" value="Со стороны WMS — модуль 13 «Интеграция и логирование»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE7FF;strokeColor=#6432FF;fontSize=14;fontStyle=1;fontColor=#4C2A9E;" vertex="1" parent="1">
+          <mxGeometry x="60" y="64" width="720" height="54" as="geometry"/>
+        </mxCell>
+        <mxCell id="he" value="Со стороны ERP / внешней системы" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#1A73E8;fontSize=14;fontStyle=1;fontColor=#174EA6;" vertex="1" parent="1">
+          <mxGeometry x="860" y="64" width="720" height="54" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="w1" value="1. Открыть 13 → «Интеграция и логирование» → «Настройки»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B39DDB;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="150" width="720" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="w2" value="2. Включить интеграцию. Задать client_id и client_secret (сохранить в secrets manager)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B39DDB;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="262" width="720" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="w3" value="3. Указать Callback URL (HTTPS-адрес ERP) и секрет подписи вебхуков" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B39DDB;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="374" width="720" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="w4" value="4. Rate limit (по умолчанию 100/сек) и TTL токена (≤ 3600 с) → «Сохранить»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B39DDB;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="486" width="720" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="w5" value="5. «Самопроверка»: выдать токен и проверить health" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B39DDB;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="598" width="720" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="w6" value="6. Контроль: «Журнал API» и «Вебхуки (outbox)», алерты" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B39DDB;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="710" width="720" height="88" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e1" value="1. Сохранить client_id / client_secret / webhook_secret в secrets manager" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90CAF9;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="860" y="150" width="720" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" value="2. POST /oauth/token; кешировать токен до истечения, обновлять заранее" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90CAF9;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="860" y="262" width="720" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="3. POST /orders (external_id) и POST /nomenclature (sku, barcodes)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90CAF9;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="860" y="374" width="720" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" value="4. HTTPS-приёмник вебхуков: проверка HMAC, идемпотентность, ответ 2xx" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90CAF9;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="860" y="486" width="720" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5" value="5. GET /stock каждые 5 минут (page / page_size, пагинация)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90CAF9;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="860" y="598" width="720" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="e6" value="6. GET /health; обработка 429/5xx с ретраями по Retry-After" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90CAF9;fontSize=12;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="860" y="710" width="720" height="88" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="wa1" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.4;strokeColor=#6432FF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="420" y="238" as="sourcePoint"/>
+            <mxPoint x="420" y="262" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wa2" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.4;strokeColor=#6432FF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="420" y="350" as="sourcePoint"/>
+            <mxPoint x="420" y="374" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wa3" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.4;strokeColor=#6432FF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="420" y="462" as="sourcePoint"/>
+            <mxPoint x="420" y="486" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wa4" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.4;strokeColor=#6432FF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="420" y="574" as="sourcePoint"/>
+            <mxPoint x="420" y="598" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wa5" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.4;strokeColor=#6432FF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="420" y="686" as="sourcePoint"/>
+            <mxPoint x="420" y="710" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="ea1" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.4;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1220" y="238" as="sourcePoint"/>
+            <mxPoint x="1220" y="262" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ea2" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.4;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1220" y="350" as="sourcePoint"/>
+            <mxPoint x="1220" y="374" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ea3" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.4;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1220" y="462" as="sourcePoint"/>
+            <mxPoint x="1220" y="486" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ea4" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.4;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1220" y="574" as="sourcePoint"/>
+            <mxPoint x="1220" y="598" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ea5" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.4;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1220" y="686" as="sourcePoint"/>
+            <mxPoint x="1220" y="710" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="note" value="Значения передаются вручную: client_id / client_secret / webhook_secret → ERP; callback URL и тот же webhook_secret → WMS. Обе стороны используют один секрет подписи HMAC-SHA256." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=middle;fontSize=12;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="60" y="838" width="1520" height="64" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="topology" name="3. Топология и потоки">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1660" pageHeight="820" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="t" value="Топология: запросы, данные и вебхуки" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#4C2A9E;" vertex="1" parent="1">
+          <mxGeometry x="40" y="14" width="900" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="st" value="HTTPS (TLS 1.2+), JSON UTF-8, Bearer JWT, X-Request-Id, rate limit" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="40" y="50" width="900" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b1" value="ERP / 1С / TMS&#10;источник заказов и номенклатуры" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#1A73E8;fontSize=13;fontStyle=1;fontColor=#174EA6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="160" width="260" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="b2" value="HTTPS / TLS 1.2+&#10;реверс-прокси" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F3F4;strokeColor=#9AA0A6;fontSize=13;fontStyle=1;fontColor=#3C4043;" vertex="1" parent="1">
+          <mxGeometry x="440" y="160" width="260" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="b3" value="WMS /api/v1&#10;router + IntegrationApi" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE7FF;strokeColor=#6432FF;fontSize=13;fontStyle=1;fontColor=#4C2A9E;" vertex="1" parent="1">
+          <mxGeometry x="820" y="160" width="300" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="b4" value="PostgreSQL&#10;client_orders, products, product_stock,&#10;wms_api_settings, wms_api_log" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;strokeColor=#2E7D32;fontSize=12;fontStyle=1;fontColor=#1B5E20;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="160" width="360" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="b5" value="Outbox вебхуков&#10;wms_webhook_outbox&#10;PENDING / RETRY / SENT / DEAD" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;fontSize=12;fontStyle=1;fontColor=#8A3B00;" vertex="1" parent="1">
+          <mxGeometry x="820" y="460" width="300" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="a1" value="HTTPS" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=10;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="320" y="202" width="120" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="a1e" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="320" y="230" as="sourcePoint"/>
+            <mxPoint x="440" y="230" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a2" value="JSON" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=10;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="700" y="202" width="120" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="a2e" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#1A73E8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="700" y="230" as="sourcePoint"/>
+            <mxPoint x="820" y="230" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a3" value="SQL" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=10;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="202" width="120" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="a3e" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1120" y="230" as="sourcePoint"/>
+            <mxPoint x="1240" y="230" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="a4e" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#E65100;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="300" as="sourcePoint"/>
+            <mxPoint x="970" y="460" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a4l" value="событие статуса" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=10;fontColor=#8A3B00;" vertex="1" parent="1">
+          <mxGeometry x="980" y="365" width="120" height="18" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="a5e" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.8;strokeColor=#E65100;dashed=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="820" y="520" as="sourcePoint"/>
+            <mxPoint x="200" y="520" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a5l" value="вебхук order.status: POST callback URL, HMAC-SHA256, повторы 1 / 5 / 30 мин" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontColor=#8A3B00;" vertex="1" parent="1">
+          <mxGeometry x="210" y="492" width="600" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="a6e" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#E65100;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="200" y="520" as="sourcePoint"/>
+            <mxPoint x="200" y="300" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="n1" value="Обработка: token, orders, nomenclature, stock, health. Rate limit 100/сек на токен, журнал 30 дней с X-Request-Id." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=11;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="440" y="340" width="340" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="n2" value="Внешняя система принимает вебхук по HTTPS, проверяет подпись и отвечает 2xx; иначе WMS повторит." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=11;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="340" width="360" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="n3" value="Алерты: доля 5xx &gt; 5% за час, очередь DEAD &gt; 0. Ручной повтор — в модуле 13." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=11;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="820" y="620" width="300" height="70" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

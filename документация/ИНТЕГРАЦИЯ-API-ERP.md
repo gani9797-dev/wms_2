@@ -6,6 +6,8 @@
 
 - Спецификация: [`api/v1/openapi.yaml`](../api/v1/openapi.yaml) (OpenAPI 3.1).
 - Тесты: [`api/v1/tests/smoke.py`](../api/v1/tests/smoke.py), отчёт — [`api/v1/tests/report.md`](../api/v1/tests/report.md).
+- Схема обмена (draw.io, 3 страницы: обмен, настройка, топология): [`ИНТЕГРАЦИЯ-API-ERP.drawio`](./ИНТЕГРАЦИЯ-API-ERP.drawio).
+- Версия для печати и согласования: [`ИНТЕГРАЦИЯ-API-ERP.docx`](./ИНТЕГРАЦИЯ-API-ERP.docx).
 - Настройки и журналы: **Модуль 13 «Настройки» → «Интеграция и логирование»**.
 
 ## 1. Что синхронизируется
