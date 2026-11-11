@@ -4,33 +4,33 @@ declare(strict_types=1);
 require_once __DIR__ . '/ShipmentStatus.php';
 require_once __DIR__ . '/../shared/DocNo.php';
 
-// Бизнес-логика документа: нумерация, пересчет сумм, ПКМ-действия.
-// Вынесена из контроллера, чтобы расти: сюда подключаются очереди,
-// резервирование остатков, печать УПД/ТТН, отправка Email/EDI.
+// Р‘РёР·РЅРµСЃ-Р»РѕРіРёРєР° РґРѕРєСѓРјРµРЅС‚Р°: РЅСѓРјРµСЂР°С†РёСЏ, РїРµСЂРµСЃС‡РµС‚ СЃСѓРјРј, РџРљРњ-РґРµР№СЃС‚РІРёСЏ.
+// Р’С‹РЅРµСЃРµРЅР° РёР· РєРѕРЅС‚СЂРѕР»Р»РµСЂР°, С‡С‚РѕР±С‹ СЂР°СЃС‚Рё: СЃСЋРґР° РїРѕРґРєР»СЋС‡Р°СЋС‚СЃСЏ РѕС‡РµСЂРµРґРё,
+// СЂРµР·РµСЂРІРёСЂРѕРІР°РЅРёРµ РѕСЃС‚Р°С‚РєРѕРІ, РїРµС‡Р°С‚СЊ РЈРџР”/РўРўРќ, РѕС‚РїСЂР°РІРєР° Email/EDI.
 
 final class ShipmentService
 {
     public function __construct(private PDO $pdo) {}
 
-    // Следующий номер отгрузки: S-205101, S-205102, ... (см. shared/DocNo.php).
+    // РЎР»РµРґСѓСЋС‰РёР№ РЅРѕРјРµСЂ РѕС‚РіСЂСѓР·РєРё: S-205101, S-205102, ... (СЃРј. shared/DocNo.php).
     public function nextDocNo(): string
     {
         return wms_next_shipment_no($this->pdo);
     }
 
     /**
-     * Создать черновик отгрузки из набора полей.
-     * Общая точка для «+ Создать» и для массового импорта из Excel:
-     * раньше импорт звал store(), который сам печатал JSON, — цикл выдавал
-     * N склеенных JSON-документов, а счётчик created рос даже при ошибке строки.
+     * РЎРѕР·РґР°С‚СЊ С‡РµСЂРЅРѕРІРёРє РѕС‚РіСЂСѓР·РєРё РёР· РЅР°Р±РѕСЂР° РїРѕР»РµР№.
+     * РћР±С‰Р°СЏ С‚РѕС‡РєР° РґР»СЏ В«+ РЎРѕР·РґР°С‚СЊВ» Рё РґР»СЏ РјР°СЃСЃРѕРІРѕРіРѕ РёРјРїРѕСЂС‚Р° РёР· Excel:
+     * СЂР°РЅСЊС€Рµ РёРјРїРѕСЂС‚ Р·РІР°Р» store(), РєРѕС‚РѕСЂС‹Р№ СЃР°Рј РїРµС‡Р°С‚Р°Р» JSON, вЂ” С†РёРєР» РІС‹РґР°РІР°Р»
+     * N СЃРєР»РµРµРЅРЅС‹С… JSON-РґРѕРєСѓРјРµРЅС‚РѕРІ, Р° СЃС‡С‘С‚С‡РёРє created СЂРѕСЃ РґР°Р¶Рµ РїСЂРё РѕС€РёР±РєРµ СЃС‚СЂРѕРєРё.
      * @return array{id:int,doc_no:string}
      */
     public function createShipment(array $body, ?int $userId): array
     {
         if (empty($body['contractor_id']) || empty($body['warehouse_id'])) {
-            throw new RuntimeException('contractor_id и warehouse_id обязательны');
+            throw new RuntimeException('contractor_id Рё warehouse_id РѕР±СЏР·Р°С‚РµР»СЊРЅС‹');
         }
-        // Номер — ДО транзакции: на MySQL LOCK TABLES неявно коммитит транзакцию.
+        // РќРѕРјРµСЂ вЂ” Р”Рћ С‚СЂР°РЅР·Р°РєС†РёРё: РЅР° MySQL LOCK TABLES РЅРµСЏРІРЅРѕ РєРѕРјРјРёС‚РёС‚ С‚СЂР°РЅР·Р°РєС†РёСЋ.
         $no = $this->nextDocNo();
         $now = wms_is_sqlite($this->pdo) ? "datetime('now')" : 'NOW()';
         $this->pdo->beginTransaction();
@@ -63,7 +63,7 @@ final class ShipmentService
         }
     }
 
-    // Пересчет шапки из позиций: сумма, НДС 20%, итого, долг, SKU, штуки. Вызывать в транзакции.
+    // РџРµСЂРµСЃС‡РµС‚ С€Р°РїРєРё РёР· РїРѕР·РёС†РёР№: СЃСѓРјРјР°, РќР”РЎ 20%, РёС‚РѕРіРѕ, РґРѕР»Рі, SKU, С€С‚СѓРєРё. Р’С‹Р·С‹РІР°С‚СЊ РІ С‚СЂР°РЅР·Р°РєС†РёРё.
     public function recalc(int $shipmentId): void
     {
         $st = $this->pdo->prepare(
@@ -81,7 +81,7 @@ final class ShipmentService
         $vatRate = (int)($head['vat_rate'] ?? 20);
         $paid = (float)($head['paid'] ?? 0);
 
-        // В макете сумма уже включает НДС: выделяем НДС = total*rate/(100+rate).
+        // Р’ РјР°РєРµС‚Рµ СЃСѓРјРјР° СѓР¶Рµ РІРєР»СЋС‡Р°РµС‚ РќР”РЎ: РІС‹РґРµР»СЏРµРј РќР”РЎ = total*rate/(100+rate).
         $vatSum = round($total * $vatRate / (100 + $vatRate), 2);
         $debt = round($total - $paid, 2);
 
@@ -94,27 +94,27 @@ final class ShipmentService
             ':d' => $debt, ':id' => $shipmentId]);
     }
 
-    // Флаги документа (галки в карточке): is_crossdock — признак кроссдока.
-    // Флаг ставится на уровне документа отгрузки: ТСД по нему выбирает
-    // ветку алгоритма сортировки (сканирование паллет вместо построчного скана).
+    // Р¤Р»Р°РіРё РґРѕРєСѓРјРµРЅС‚Р° (РіР°Р»РєРё РІ РєР°СЂС‚РѕС‡РєРµ): is_crossdock вЂ” РїСЂРёР·РЅР°Рє РєСЂРѕСЃСЃРґРѕРєР°.
+    // Р¤Р»Р°Рі СЃС‚Р°РІРёС‚СЃСЏ РЅР° СѓСЂРѕРІРЅРµ РґРѕРєСѓРјРµРЅС‚Р° РѕС‚РіСЂСѓР·РєРё: РўРЎР” РїРѕ РЅРµРјСѓ РІС‹Р±РёСЂР°РµС‚
+    // РІРµС‚РєСѓ Р°Р»РіРѕСЂРёС‚РјР° СЃРѕСЂС‚РёСЂРѕРІРєРё (СЃРєР°РЅРёСЂРѕРІР°РЅРёРµ РїР°Р»Р»РµС‚ РІРјРµСЃС‚Рѕ РїРѕСЃС‚СЂРѕС‡РЅРѕРіРѕ СЃРєР°РЅР°).
     public function setFlag(int $id, string $field, int $value, ?int $userId): void
     {
         $allowed = [
-            'is_crossdock' => 'Кросдок',
-            'serial_scan' => 'Сканирование серийных номеров',
-            'marking_scan' => 'Сканирование маркировки ЧЗ',
-            'need_check' => 'Требуется проверка',
-            'need_pack' => 'Требуется упаковка',
-            'is_danger' => 'Опасный груз',
+            'is_crossdock' => 'РљСЂРѕСЃРґРѕРє',
+            'serial_scan' => 'РЎРєР°РЅРёСЂРѕРІР°РЅРёРµ СЃРµСЂРёР№РЅС‹С… РЅРѕРјРµСЂРѕРІ',
+            'marking_scan' => 'РЎРєР°РЅРёСЂРѕРІР°РЅРёРµ РјР°СЂРєРёСЂРѕРІРєРё Р§Р—',
+            'need_check' => 'РўСЂРµР±СѓРµС‚СЃСЏ РїСЂРѕРІРµСЂРєР°',
+            'need_pack' => 'РўСЂРµР±СѓРµС‚СЃСЏ СѓРїР°РєРѕРІРєР°',
+            'is_danger' => 'РћРїР°СЃРЅС‹Р№ РіСЂСѓР·',
         ];
         if (!isset($allowed[$field])) {
-            throw new RuntimeException('Неизвестный флаг: ' . $field);
+            throw new RuntimeException('РќРµРёР·РІРµСЃС‚РЅС‹Р№ С„Р»Р°Рі: ' . $field);
         }
         $st = $this->pdo->prepare("SELECT $field AS v FROM shipments WHERE id=:id");
         $st->execute([':id' => $id]);
         $cur = $st->fetchColumn();
         if ($cur === false) {
-            throw new RuntimeException('Отгрузка не найдена');
+            throw new RuntimeException('РћС‚РіСЂСѓР·РєР° РЅРµ РЅР°Р№РґРµРЅР°');
         }
         $old = (int)$cur;
         $new = $value ? 1 : 0;
@@ -122,10 +122,10 @@ final class ShipmentService
             $this->pdo->prepare("UPDATE shipments SET $field=:v WHERE id=:id")
                 ->execute([':v' => $new, ':id' => $id]);
         } catch (Throwable $e) {
-            throw new RuntimeException('Поле ' . $field . ' отсутствует в БД — примените schema.sql');
+            throw new RuntimeException('РџРѕР»Рµ ' . $field . ' РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РІ Р‘Р” вЂ” РїСЂРёРјРµРЅРёС‚Рµ schema.sql');
         }
         if ($old !== $new) {
-            $this->historyField($id, $userId, 'update', $allowed[$field], $old ? 'да' : 'нет', $new ? 'да' : 'нет');
+            $this->historyField($id, $userId, 'update', $allowed[$field], $old ? 'РґР°' : 'РЅРµС‚', $new ? 'РґР°' : 'РЅРµС‚');
         }
     }
 
@@ -138,7 +138,7 @@ final class ShipmentService
         $st->execute([$id, $userId, $fio, $pos, $action, $old, $new]);
     }
 
-    /** ФИО и должность залогиненного на портал сотрудника. */
+    /** Р¤РРћ Рё РґРѕР»Р¶РЅРѕСЃС‚СЊ Р·Р°Р»РѕРіРёРЅРµРЅРЅРѕРіРѕ РЅР° РїРѕСЂС‚Р°Р» СЃРѕС‚СЂСѓРґРЅРёРєР°. */
     private function actor(): array
     {
         if (function_exists('wms_auth_user')) {
@@ -151,7 +151,7 @@ final class ShipmentService
         return [$fio, ''];
     }
 
-    /** История с полем/значением (для флагов документа). */
+    /** РСЃС‚РѕСЂРёСЏ СЃ РїРѕР»РµРј/Р·РЅР°С‡РµРЅРёРµРј (РґР»СЏ С„Р»Р°РіРѕРІ РґРѕРєСѓРјРµРЅС‚Р°). */
     private function historyField(int $id, ?int $userId, string $action, string $field, ?string $old, ?string $new): void
     {
         [$fio, $pos] = $this->actor();
@@ -161,8 +161,8 @@ final class ShipmentService
         $st->execute([$id, $userId, $fio, $pos, $action, $field, $old, $new]);
     }
 
-    // Задания на отбор, блокирующие удаление/расформирование документа.
-    // @return string[] номера заданий
+    // Р—Р°РґР°РЅРёСЏ РЅР° РѕС‚Р±РѕСЂ, Р±Р»РѕРєРёСЂСѓСЋС‰РёРµ СѓРґР°Р»РµРЅРёРµ/СЂР°СЃС„РѕСЂРјРёСЂРѕРІР°РЅРёРµ РґРѕРєСѓРјРµРЅС‚Р°.
+    // @return string[] РЅРѕРјРµСЂР° Р·Р°РґР°РЅРёР№
     private function pickTasksBlocking(int $shipmentId, string $docNo): array
     {
         require_once __DIR__ . '/../shared/PickIssue.php';
@@ -186,22 +186,22 @@ final class ShipmentService
         return array_keys($blocking);
     }
 
-    // Полное удаление документа отгрузки со связками и строками (наряды не трогает).
+    // РџРѕР»РЅРѕРµ СѓРґР°Р»РµРЅРёРµ РґРѕРєСѓРјРµРЅС‚Р° РѕС‚РіСЂСѓР·РєРё СЃРѕ СЃРІСЏР·РєР°РјРё Рё СЃС‚СЂРѕРєР°РјРё (РЅР°СЂСЏРґС‹ РЅРµ С‚СЂРѕРіР°РµС‚).
     private function deleteShipmentRows(int $id): void
     {
         $this->pdo->beginTransaction();
         try {
             foreach (['shipment_items', 'shipment_orders', 'shipment_history',
                       'shipment_documents', 'shipment_flags', 'tsd_picks',
-                      // Марки ЧЗ и журнал сортировки тоже принадлежат отгрузке:
-                      // без их удаления марки «висят» в реестре и блокируют
-                      // загрузку этой же марки в другую отгрузку, а журнал
-                      // сортировки даёт ложные «уже отсканировано».
+                      // РњР°СЂРєРё Р§Р— Рё Р¶СѓСЂРЅР°Р» СЃРѕСЂС‚РёСЂРѕРІРєРё С‚РѕР¶Рµ РїСЂРёРЅР°РґР»РµР¶Р°С‚ РѕС‚РіСЂСѓР·РєРµ:
+                      // Р±РµР· РёС… СѓРґР°Р»РµРЅРёСЏ РјР°СЂРєРё В«РІРёСЃСЏС‚В» РІ СЂРµРµСЃС‚СЂРµ Рё Р±Р»РѕРєРёСЂСѓСЋС‚
+                      // Р·Р°РіСЂСѓР·РєСѓ СЌС‚РѕР№ Р¶Рµ РјР°СЂРєРё РІ РґСЂСѓРіСѓСЋ РѕС‚РіСЂСѓР·РєСѓ, Р° Р¶СѓСЂРЅР°Р»
+                      // СЃРѕСЂС‚РёСЂРѕРІРєРё РґР°С‘С‚ Р»РѕР¶РЅС‹Рµ В«СѓР¶Рµ РѕС‚СЃРєР°РЅРёСЂРѕРІР°РЅРѕВ».
                       'shipment_marks', 'shipment_sort_log'] as $tbl) {
                 try {
                     $this->pdo->prepare("DELETE FROM $tbl WHERE shipment_id=:id")->execute([':id' => $id]);
                 } catch (Throwable) {
-                    // Нет таблицы/колонки в старой БД — пропускаем.
+                    // РќРµС‚ С‚Р°Р±Р»РёС†С‹/РєРѕР»РѕРЅРєРё РІ СЃС‚Р°СЂРѕР№ Р‘Р” вЂ” РїСЂРѕРїСѓСЃРєР°РµРј.
                 }
             }
             $this->pdo->prepare('DELETE FROM shipments WHERE id=:id')->execute([':id' => $id]);
@@ -214,27 +214,27 @@ final class ShipmentService
         }
     }
 
-    // Вкладка "Наряды", ПКМ: убрать заказы из отгрузки.
-    // Удаляет связку (shipment_orders) и строки состава этого заказа (shipment_items.order_id),
-    // затем пересчитывает шапку. Сам наряд (client_orders) не удаляется.
-    // Отгрузка без нарядов существовать не может: если убран последний наряд,
-    // документ удаляется автоматически (при живых заданиях на отбор — отказ,
-    // сначала ПКМ → «Снять резерв»).
+    // Р’РєР»Р°РґРєР° "РќР°СЂСЏРґС‹", РџРљРњ: СѓР±СЂР°С‚СЊ Р·Р°РєР°Р·С‹ РёР· РѕС‚РіСЂСѓР·РєРё.
+    // РЈРґР°Р»СЏРµС‚ СЃРІСЏР·РєСѓ (shipment_orders) Рё СЃС‚СЂРѕРєРё СЃРѕСЃС‚Р°РІР° СЌС‚РѕРіРѕ Р·Р°РєР°Р·Р° (shipment_items.order_id),
+    // Р·Р°С‚РµРј РїРµСЂРµСЃС‡РёС‚С‹РІР°РµС‚ С€Р°РїРєСѓ. РЎР°Рј РЅР°СЂСЏРґ (client_orders) РЅРµ СѓРґР°Р»СЏРµС‚СЃСЏ.
+    // РћС‚РіСЂСѓР·РєР° Р±РµР· РЅР°СЂСЏРґРѕРІ СЃСѓС‰РµСЃС‚РІРѕРІР°С‚СЊ РЅРµ РјРѕР¶РµС‚: РµСЃР»Рё СѓР±СЂР°РЅ РїРѕСЃР»РµРґРЅРёР№ РЅР°СЂСЏРґ,
+    // РґРѕРєСѓРјРµРЅС‚ СѓРґР°Р»СЏРµС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё (РїСЂРё Р¶РёРІС‹С… Р·Р°РґР°РЅРёСЏС… РЅР° РѕС‚Р±РѕСЂ вЂ” РѕС‚РєР°Р·,
+    // СЃРЅР°С‡Р°Р»Р° РџРљРњ в†’ В«РЎРЅСЏС‚СЊ СЂРµР·РµСЂРІВ»).
     public function unlinkOrders(int $shipmentId, array $orderIds, ?int $userId): array
     {
         $orderIds = array_values(array_unique(array_map('intval', $orderIds)));
         $orderIds = array_values(array_filter($orderIds, fn($v) => $v > 0));
         if (!$orderIds) {
-            throw new RuntimeException('Выбери наряды (галка или ПКМ)');
+            throw new RuntimeException('Р’С‹Р±РµСЂРё РЅР°СЂСЏРґС‹ (РіР°Р»РєР° РёР»Рё РџРљРњ)');
         }
         $st = $this->pdo->prepare('SELECT doc_no FROM shipments WHERE id=:id');
         $st->execute([':id' => $shipmentId]);
         $shipDoc = $st->fetchColumn();
         if (!$shipDoc) {
-            throw new RuntimeException('Документ не найден');
+            throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
         }
         $shipDoc = (string)$shipDoc;
-        // Снимок связей: поймём заранее, опустеет ли отгрузка после операции.
+        // РЎРЅРёРјРѕРє СЃРІСЏР·РµР№: РїРѕР№РјС‘Рј Р·Р°СЂР°РЅРµРµ, РѕРїСѓСЃС‚РµРµС‚ Р»Рё РѕС‚РіСЂСѓР·РєР° РїРѕСЃР»Рµ РѕРїРµСЂР°С†РёРё.
         $linkedBefore = null;
         try {
             $q = $this->pdo->prepare('SELECT order_id FROM shipment_orders WHERE shipment_id=:s');
@@ -246,8 +246,8 @@ final class ShipmentService
             $blocking = $this->pickTasksBlocking($shipmentId, $shipDoc);
             if ($blocking) {
                 throw new RuntimeException(
-                    'Это последний наряд, но по отгрузке есть задания на отбор (' .
-                    implode(', ', $blocking) . ') — сначала ПКМ → «Снять резерв»'
+                    'Р­С‚Рѕ РїРѕСЃР»РµРґРЅРёР№ РЅР°СЂСЏРґ, РЅРѕ РїРѕ РѕС‚РіСЂСѓР·РєРµ РµСЃС‚СЊ Р·Р°РґР°РЅРёСЏ РЅР° РѕС‚Р±РѕСЂ (' .
+                    implode(', ', $blocking) . ') вЂ” СЃРЅР°С‡Р°Р»Р° РџРљРњ в†’ В«РЎРЅСЏС‚СЊ СЂРµР·РµСЂРІВ»'
                 );
             }
         }
@@ -271,10 +271,10 @@ final class ShipmentService
                     $chk->execute([':s' => $shipmentId, ':o' => $oid]);
                     $linked = (bool)$chk->fetchColumn();
                 } catch (Throwable) {
-                    throw new RuntimeException($label . ': нет связи с отгрузкой');
+                    throw new RuntimeException($label . ': РЅРµС‚ СЃРІСЏР·Рё СЃ РѕС‚РіСЂСѓР·РєРѕР№');
                 }
                 if (!$linked) {
-                    throw new RuntimeException($label . ': не связан с отгрузкой');
+                    throw new RuntimeException($label . ': РЅРµ СЃРІСЏР·Р°РЅ СЃ РѕС‚РіСЂСѓР·РєРѕР№');
                 }
                 $this->pdo->beginTransaction();
                 try {
@@ -303,9 +303,9 @@ final class ShipmentService
             }
         }
         if (!$unlinked) {
-            throw new RuntimeException(implode('; ', $errors) ?: 'Нечего убирать');
+            throw new RuntimeException(implode('; ', $errors) ?: 'РќРµС‡РµРіРѕ СѓР±РёСЂР°С‚СЊ');
         }
-        // Отгрузка без нарядов существовать не может — удаляем документ автоматически.
+        // РћС‚РіСЂСѓР·РєР° Р±РµР· РЅР°СЂСЏРґРѕРІ СЃСѓС‰РµСЃС‚РІРѕРІР°С‚СЊ РЅРµ РјРѕР¶РµС‚ вЂ” СѓРґР°Р»СЏРµРј РґРѕРєСѓРјРµРЅС‚ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.
         $shipmentDeleted = false;
         if (is_array($linkedBefore) && !array_diff($linkedBefore, $doneIds)) {
             $this->deleteShipmentRows($shipmentId);
@@ -315,7 +315,7 @@ final class ShipmentService
                 'shipment_deleted' => $shipmentDeleted, 'shipment_doc' => $shipDoc];
     }
 
-    // ПКМ: Копировать — новый черновик с теми же позициями и нарядами.
+    // РџРљРњ: РљРѕРїРёСЂРѕРІР°С‚СЊ вЂ” РЅРѕРІС‹Р№ С‡РµСЂРЅРѕРІРёРє СЃ С‚РµРјРё Р¶Рµ РїРѕР·РёС†РёСЏРјРё Рё РЅР°СЂСЏРґР°РјРё.
     public function copy(int $id, ?int $userId): int
     {
         $this->pdo->beginTransaction();
@@ -324,10 +324,10 @@ final class ShipmentService
             $st->execute([':id' => $id]);
             $src = $st->fetch(PDO::FETCH_ASSOC);
             if (!$src) {
-                throw new RuntimeException('Документ не найден');
+                throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
             }
             $newNo = $this->nextDocNo();
-            // NOW() не понимает SQLite — используем переносимое выражение.
+            // NOW() РЅРµ РїРѕРЅРёРјР°РµС‚ SQLite вЂ” РёСЃРїРѕР»СЊР·СѓРµРј РїРµСЂРµРЅРѕСЃРёРјРѕРµ РІС‹СЂР°Р¶РµРЅРёРµ.
             $now = wms_is_sqlite($this->pdo) ? "datetime('now')" : 'NOW()';
             $ins = $this->pdo->prepare(
                 "INSERT INTO shipments (doc_no,doc_date,order_id,contractor_id,contract_no,warehouse_id,
@@ -348,8 +348,8 @@ final class ShipmentService
                 ':vol' => $src['volume'] ?? 0, ':wgt' => $src['weight'] ?? 0,
             ]);
             $newId = (int)$this->pdo->lastInsertId();
-            // Позиции: копируем ВСЕ поля строки (код, единица, наряд, этикетка,
-            // дата производства) — раньше терялись code/unit/order_id/check_label.
+            // РџРѕР·РёС†РёРё: РєРѕРїРёСЂСѓРµРј Р’РЎР• РїРѕР»СЏ СЃС‚СЂРѕРєРё (РєРѕРґ, РµРґРёРЅРёС†Р°, РЅР°СЂСЏРґ, СЌС‚РёРєРµС‚РєР°,
+            // РґР°С‚Р° РїСЂРѕРёР·РІРѕРґСЃС‚РІР°) вЂ” СЂР°РЅСЊС€Рµ С‚РµСЂСЏР»РёСЃСЊ code/unit/order_id/check_label.
             $itemCols = ['code', 'order_id', 'sku', 'name', 'unit', 'qty', 'price', 'check_label',
                 'warehouse_id', 'comment', 'prod_date', 'supplier_batch'];
             $has = wms_table_columns($this->pdo, 'shipment_items');
@@ -368,8 +368,8 @@ final class ShipmentService
                 "INSERT INTO shipment_items (shipment_id," . implode(',', $cols) . "," . $sumCol . ")
                  SELECT :nid," . implode(',', $sel) . ", qty*price FROM shipment_items WHERE shipment_id=:oid"
             )->execute([':nid' => $newId, ':oid' => $id]);
-            // Наряды (shipment_orders): без них отгрузка «без нарядов»,
-            // а модуль сам считает такой документ некорректным.
+            // РќР°СЂСЏРґС‹ (shipment_orders): Р±РµР· РЅРёС… РѕС‚РіСЂСѓР·РєР° В«Р±РµР· РЅР°СЂСЏРґРѕРІВ»,
+            // Р° РјРѕРґСѓР»СЊ СЃР°Рј СЃС‡РёС‚Р°РµС‚ С‚Р°РєРѕР№ РґРѕРєСѓРјРµРЅС‚ РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Рј.
             try {
                 $this->pdo->prepare(
                     "INSERT INTO shipment_orders (shipment_id,order_id,status,qty_total,collected,checked,packed,shipped,sum_novat,vat,sum_vat)
@@ -388,7 +388,7 @@ final class ShipmentService
         }
     }
 
-    // ПКМ: Провести / смена статуса по автомату ShipmentStatus::canTransitTo.
+    // РџРљРњ: РџСЂРѕРІРµСЃС‚Рё / СЃРјРµРЅР° СЃС‚Р°С‚СѓСЃР° РїРѕ Р°РІС‚РѕРјР°С‚Сѓ ShipmentStatus::canTransitTo.
     public function changeStatus(int $id, ShipmentStatus $to, ?int $userId): void
     {
         $st = $this->pdo->prepare("SELECT status, doc_no FROM shipments WHERE id=:id FOR UPDATE");
@@ -397,17 +397,17 @@ final class ShipmentService
             $st->execute([':id' => $id]);
             $row = $st->fetch(PDO::FETCH_ASSOC);
             if (!$row) {
-                throw new RuntimeException('Документ не найден');
+                throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
             }
             $from = ShipmentStatus::from($row['status']);
             if (!$from->canTransitTo($to)) {
-                throw new RuntimeException("Нельзя перевести {$from->label()} → {$to->label()}");
+                throw new RuntimeException("РќРµР»СЊР·СЏ РїРµСЂРµРІРµСЃС‚Рё {$from->label()} в†’ {$to->label()}");
             }
             $posted = in_array($to, [ShipmentStatus::Assembled, ShipmentStatus::Delivering, ShipmentStatus::Delivered], true) ? 1 : 0;
             $extra = '';
             $params = [':s' => $to->value, ':p' => $posted, ':id' => $id];
             if ($to === ShipmentStatus::Delivered) {
-                $extra = ', fact_shipment_date = COALESCE(fact_shipment_date, CURDATE()), fact_delivery_date = COALESCE(fact_delivery_date, CURDATE())';
+                $extra = ', fact_shipment_date = COALESCE(fact_shipment_date, CURRENT_DATE), fact_delivery_date = COALESCE(fact_delivery_date, CURRENT_DATE)';
             }
             $this->pdo->prepare("UPDATE shipments SET status=:s, is_posted=:p $extra WHERE id=:id")->execute($params);
             $this->history($id, $userId, 'status', $from->value, $to->value);
@@ -416,11 +416,11 @@ final class ShipmentService
             $this->pdo->rollBack();
             throw $e;
         }
-        // Журнал склада (модуль 14): отгрузка — паллеты ушли со склада.
+        // Р–СѓСЂРЅР°Р» СЃРєР»Р°РґР° (РјРѕРґСѓР»СЊ 14): РѕС‚РіСЂСѓР·РєР° вЂ” РїР°Р»Р»РµС‚С‹ СѓС€Р»Рё СЃРѕ СЃРєР»Р°РґР°.
         if ($to === ShipmentStatus::Delivering) {
             $this->journalShipment($id, (string)($row['doc_no'] ?? ''), $userId);
         }
-        // Интеграция: вебхук смены статуса заказа во внешнюю систему (outbox).
+        // РРЅС‚РµРіСЂР°С†РёСЏ: РІРµР±С…СѓРє СЃРјРµРЅС‹ СЃС‚Р°С‚СѓСЃР° Р·Р°РєР°Р·Р° РІРѕ РІРЅРµС€РЅСЋСЋ СЃРёСЃС‚РµРјСѓ (outbox).
         try {
             require_once __DIR__ . '/../shared/IntegrationApi.php';
             wms_webhook_shipment_status($this->pdo, $id, $to->value, ['user_id' => $userId]);
@@ -429,8 +429,8 @@ final class ShipmentService
     }
 
     /**
-     * Журнал склада (модуль 14): отгрузка — состав паллет, ушедших со склада.
-     * Источник факта — сортировка ТСД (tsd_picks): паллета = SSCC.
+     * Р–СѓСЂРЅР°Р» СЃРєР»Р°РґР° (РјРѕРґСѓР»СЊ 14): РѕС‚РіСЂСѓР·РєР° вЂ” СЃРѕСЃС‚Р°РІ РїР°Р»Р»РµС‚, СѓС€РµРґС€РёС… СЃРѕ СЃРєР»Р°РґР°.
+     * РСЃС‚РѕС‡РЅРёРє С„Р°РєС‚Р° вЂ” СЃРѕСЂС‚РёСЂРѕРІРєР° РўРЎР” (tsd_picks): РїР°Р»Р»РµС‚Р° = SSCC.
      */
     private function journalShipment(int $id, string $docNo, ?int $userId): void
     {
@@ -456,50 +456,50 @@ final class ShipmentService
             foreach ($rows as $r) {
                 $sku = (string)($r['sku'] ?? '');
                 WmsJournal::log(wms_journal_pdo(), [
-                    'op_type' => 'отгрузка',
-                    'doc_type' => 'Отгрузка',
+                    'op_type' => 'РѕС‚РіСЂСѓР·РєР°',
+                    'doc_type' => 'РћС‚РіСЂСѓР·РєР°',
                     'doc_no' => $docNo,
                     'sku' => $sku,
                     'product_name' => $names[$sku] ?? '',
                     'qty' => (float)($r['q'] ?? 0),
                     'pallet' => (string)($r['sscc'] ?? ''),
                     'sscc' => (string)($r['sscc'] ?? ''),
-                    'zone' => 'Отгрузка',
+                    'zone' => 'РћС‚РіСЂСѓР·РєР°',
                     'user_id' => $userId,
-                    'comment' => 'Отгрузка со склада',
+                    'comment' => 'РћС‚РіСЂСѓР·РєР° СЃРѕ СЃРєР»Р°РґР°',
                 ]);
             }
         } catch (Throwable) {
         }
     }
 
-    // ПКМ: Удалить (только черновик/отменена) / Архивировать (только доставлена/отменена).
+    // РџРљРњ: РЈРґР°Р»РёС‚СЊ (С‚РѕР»СЊРєРѕ С‡РµСЂРЅРѕРІРёРє/РѕС‚РјРµРЅРµРЅР°) / РђСЂС…РёРІРёСЂРѕРІР°С‚СЊ (С‚РѕР»СЊРєРѕ РґРѕСЃС‚Р°РІР»РµРЅР°/РѕС‚РјРµРЅРµРЅР°).
     public function delete(int $id, ?int $userId): void
     {
         $st = $this->pdo->prepare("SELECT doc_no, status FROM shipments WHERE id=:id");
         $st->execute([':id' => $id]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
-            throw new RuntimeException('Документ не найден');
+            throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
         }
         if (!in_array($row['status'], ['draft', 'cancelled'], true)) {
-            throw new RuntimeException('Удалять можно только черновик или отмененную');
+            throw new RuntimeException('РЈРґР°Р»СЏС‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ С‡РµСЂРЅРѕРІРёРє РёР»Рё РѕС‚РјРµРЅРµРЅРЅСѓСЋ');
         }
         $docNo = (string)($row['doc_no'] ?? '');
-        // Связь с заданиями на отбор: удалять отгрузку с живыми заданиями нельзя —
-        // иначе в ТСД остаются задания по несуществующей отгрузке.
+        // РЎРІСЏР·СЊ СЃ Р·Р°РґР°РЅРёСЏРјРё РЅР° РѕС‚Р±РѕСЂ: СѓРґР°Р»СЏС‚СЊ РѕС‚РіСЂСѓР·РєСѓ СЃ Р¶РёРІС‹РјРё Р·Р°РґР°РЅРёСЏРјРё РЅРµР»СЊР·СЏ вЂ”
+        // РёРЅР°С‡Рµ РІ РўРЎР” РѕСЃС‚Р°СЋС‚СЃСЏ Р·Р°РґР°РЅРёСЏ РїРѕ РЅРµСЃСѓС‰РµСЃС‚РІСѓСЋС‰РµР№ РѕС‚РіСЂСѓР·РєРµ.
         $blocking = $this->pickTasksBlocking($id, $docNo);
         if ($blocking) {
             throw new RuntimeException(
-                'По отгрузке есть задания на отбор (' . implode(', ', $blocking) .
-                ') — сначала ПКМ → «Снять резерв»'
+                'РџРѕ РѕС‚РіСЂСѓР·РєРµ РµСЃС‚СЊ Р·Р°РґР°РЅРёСЏ РЅР° РѕС‚Р±РѕСЂ (' . implode(', ', $blocking) .
+                ') вЂ” СЃРЅР°С‡Р°Р»Р° РџРљРњ в†’ В«РЎРЅСЏС‚СЊ СЂРµР·РµСЂРІВ»'
             );
         }
         $this->dropPickLists($id, $docNo);
         $this->deleteShipmentRows($id);
     }
 
-    // Списки отбора (PK-…) отгрузки — сносятся вместе с отгрузкой.
+    // РЎРїРёСЃРєРё РѕС‚Р±РѕСЂР° (PK-вЂ¦) РѕС‚РіСЂСѓР·РєРё вЂ” СЃРЅРѕСЃСЏС‚СЃСЏ РІРјРµСЃС‚Рµ СЃ РѕС‚РіСЂСѓР·РєРѕР№.
     private function dropPickLists(int $shipmentId, string $docNo): void
     {
         require_once __DIR__ . '/../shared/PickLists.php';
@@ -532,23 +532,23 @@ final class ShipmentService
         }
     }
 
-    // ПКМ: Расформировать отгрузку — код отгрузки удаляется, наряды остаются.
-    // Удаляет документ, связки, строки состава и историю; сами заказы не трогает.
-    // Если по отгрузке выпущены задания на отбор — сначала требуем "Снять резерв".
+    // РџРљРњ: Р Р°СЃС„РѕСЂРјРёСЂРѕРІР°С‚СЊ РѕС‚РіСЂСѓР·РєСѓ вЂ” РєРѕРґ РѕС‚РіСЂСѓР·РєРё СѓРґР°Р»СЏРµС‚СЃСЏ, РЅР°СЂСЏРґС‹ РѕСЃС‚Р°СЋС‚СЃСЏ.
+    // РЈРґР°Р»СЏРµС‚ РґРѕРєСѓРјРµРЅС‚, СЃРІСЏР·РєРё, СЃС‚СЂРѕРєРё СЃРѕСЃС‚Р°РІР° Рё РёСЃС‚РѕСЂРёСЋ; СЃР°РјРё Р·Р°РєР°Р·С‹ РЅРµ С‚СЂРѕРіР°РµС‚.
+    // Р•СЃР»Рё РїРѕ РѕС‚РіСЂСѓР·РєРµ РІС‹РїСѓС‰РµРЅС‹ Р·Р°РґР°РЅРёСЏ РЅР° РѕС‚Р±РѕСЂ вЂ” СЃРЅР°С‡Р°Р»Р° С‚СЂРµР±СѓРµРј "РЎРЅСЏС‚СЊ СЂРµР·РµСЂРІ".
     public function disband(int $id, ?int $userId): array
     {
         $st = $this->pdo->prepare('SELECT doc_no FROM shipments WHERE id=:id');
         $st->execute([':id' => $id]);
         $head = $st->fetch(PDO::FETCH_ASSOC);
         if (!$head) {
-            throw new RuntimeException('Документ не найден');
+            throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
         }
         $docNo = (string)$head['doc_no'];
         $blocking = $this->pickTasksBlocking($id, $docNo);
         if ($blocking) {
             throw new RuntimeException(
-                'По отгрузке есть задания на отбор (' . implode(', ', $blocking) .
-                ') — сначала ПКМ → «Снять резерв»'
+                'РџРѕ РѕС‚РіСЂСѓР·РєРµ РµСЃС‚СЊ Р·Р°РґР°РЅРёСЏ РЅР° РѕС‚Р±РѕСЂ (' . implode(', ', $blocking) .
+                ') вЂ” СЃРЅР°С‡Р°Р»Р° РџРљРњ в†’ В«РЎРЅСЏС‚СЊ СЂРµР·РµСЂРІВ»'
             );
         }
         $this->dropPickLists($id, $docNo);
@@ -561,29 +561,29 @@ final class ShipmentService
         $this->changeStatus($id, ShipmentStatus::Archived, $userId);
     }
 
-    // ПКМ: Приоритет > Повысить / Понизить
+    // РџРљРњ: РџСЂРёРѕСЂРёС‚РµС‚ > РџРѕРІС‹СЃРёС‚СЊ / РџРѕРЅРёР·РёС‚СЊ
     public function priority(int $id, string $priority, ?int $userId): void
     {
         if (!in_array($priority, ['low', 'normal', 'high'], true)) {
-            throw new RuntimeException('Неверный приоритет');
+            throw new RuntimeException('РќРµРІРµСЂРЅС‹Р№ РїСЂРёРѕСЂРёС‚РµС‚');
         }
         try {
             $this->pdo->prepare("UPDATE shipments SET priority=:p WHERE id=:id")
                 ->execute([':p' => $priority, ':id' => $id]);
             $this->history($id, $userId, 'update', null, null);
         } catch (Throwable $e) {
-            throw new RuntimeException('Поле priority отсутствует в БД — примените schema.sql');
+            throw new RuntimeException('РџРѕР»Рµ priority РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РІ Р‘Р” вЂ” РїСЂРёРјРµРЅРёС‚Рµ schema.sql');
         }
     }
 
-    // ПКМ: Выпуск заданий на отбор (волной / построчно).
-    // Волна: один SKU = одно объединённое задание; ворота у отгрузок должны совпадать.
-    // Построчно: каждая строка shipment_items = отдельное задание.
+    // РџРљРњ: Р’С‹РїСѓСЃРє Р·Р°РґР°РЅРёР№ РЅР° РѕС‚Р±РѕСЂ (РІРѕР»РЅРѕР№ / РїРѕСЃС‚СЂРѕС‡РЅРѕ).
+    // Р’РѕР»РЅР°: РѕРґРёРЅ SKU = РѕРґРЅРѕ РѕР±СЉРµРґРёРЅС‘РЅРЅРѕРµ Р·Р°РґР°РЅРёРµ; РІРѕСЂРѕС‚Р° Сѓ РѕС‚РіСЂСѓР·РѕРє РґРѕР»Р¶РЅС‹ СЃРѕРІРїР°РґР°С‚СЊ.
+    // РџРѕСЃС‚СЂРѕС‡РЅРѕ: РєР°Р¶РґР°СЏ СЃС‚СЂРѕРєР° shipment_items = РѕС‚РґРµР»СЊРЅРѕРµ Р·Р°РґР°РЅРёРµ.
     public function issuePickTasks(array $shipmentIds, string $mode, ?int $userId): array
     {
         require_once __DIR__ . '/../shared/PickIssue.php';
-        // Прод MySQL: задания и отгрузки в одной БД `wms` — пишем в тот же PDO.
-        // Демо SQLite: tasks живут отдельно — подхватываем оба файла заданий.
+        // РџСЂРѕРґ MySQL: Р·Р°РґР°РЅРёСЏ Рё РѕС‚РіСЂСѓР·РєРё РІ РѕРґРЅРѕР№ Р‘Р” `wms` вЂ” РїРёС€РµРј РІ С‚РѕС‚ Р¶Рµ PDO.
+        // Р”РµРјРѕ SQLite: tasks Р¶РёРІСѓС‚ РѕС‚РґРµР»СЊРЅРѕ вЂ” РїРѕРґС…РІР°С‚С‹РІР°РµРј РѕР±Р° С„Р°Р№Р»Р° Р·Р°РґР°РЅРёР№.
         $taskPdos = [$this->pdo];
         try {
             if ($this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
@@ -598,7 +598,7 @@ final class ShipmentService
         return wms_issue_pick_tasks($this->pdo, $taskPdos, $shipmentIds, $mode, $userId);
     }
 
-    // ПКМ: Снять резерв — удаляет ВСЕ задания на отбор, созданные по документам.
+    // РџРљРњ: РЎРЅСЏС‚СЊ СЂРµР·РµСЂРІ вЂ” СѓРґР°Р»СЏРµС‚ Р’РЎР• Р·Р°РґР°РЅРёСЏ РЅР° РѕС‚Р±РѕСЂ, СЃРѕР·РґР°РЅРЅС‹Рµ РїРѕ РґРѕРєСѓРјРµРЅС‚Р°Рј.
     public function releasePickTasks(array $shipmentIds, ?int $userId): array
     {
         require_once __DIR__ . '/../shared/PickIssue.php';
@@ -616,7 +616,7 @@ final class ShipmentService
         return wms_release_pick_tasks($this->pdo, $taskPdos, $shipmentIds, $userId);
     }
 
-    // Вкладка "Задания" карточки: задания на отбор, созданные по отгрузке.
+    // Р’РєР»Р°РґРєР° "Р—Р°РґР°РЅРёСЏ" РєР°СЂС‚РѕС‡РєРё: Р·Р°РґР°РЅРёСЏ РЅР° РѕС‚Р±РѕСЂ, СЃРѕР·РґР°РЅРЅС‹Рµ РїРѕ РѕС‚РіСЂСѓР·РєРµ.
     public function pickTasksForShipment(int $shipmentId): array
     {
         require_once __DIR__ . '/../shared/PickIssue.php';
@@ -624,7 +624,7 @@ final class ShipmentService
         $st->execute([':id' => $shipmentId]);
         $head = $st->fetch(PDO::FETCH_ASSOC);
         if (!$head) {
-            throw new RuntimeException('Документ не найден');
+            throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
         }
         $taskPdos = [$this->pdo];
         try {
@@ -632,7 +632,7 @@ final class ShipmentService
                 require_once __DIR__ . '/../shared/db.php';
                 $extra = wms_tasks_pdos();
                 if ($extra) {
-                    // Детализацию берём из primary, чтобы не дублировать.
+                    // Р”РµС‚Р°Р»РёР·Р°С†РёСЋ Р±РµСЂС‘Рј РёР· primary, С‡С‚РѕР±С‹ РЅРµ РґСѓР±Р»РёСЂРѕРІР°С‚СЊ.
                     return wms_pick_tasks_detail($extra[0], [$shipmentId], [(string)$head['doc_no']]);
                 }
             }
@@ -641,32 +641,32 @@ final class ShipmentService
         return wms_pick_tasks_detail($taskPdos[0], [$shipmentId], [(string)$head['doc_no']]);
     }
 
-    // ПКМ: Запустить сборку / Подготовить автоматически (Волна)
+    // РџРљРњ: Р—Р°РїСѓСЃС‚РёС‚СЊ СЃР±РѕСЂРєСѓ / РџРѕРґРіРѕС‚РѕРІРёС‚СЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё (Р’РѕР»РЅР°)
     public function startPicking(int $id, ?int $userId, string $mode = 'wave'): void
     {
         $st = $this->pdo->prepare("SELECT status FROM shipments WHERE id=:id");
         $st->execute([':id' => $id]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
-            throw new RuntimeException('Документ не найден');
+            throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
         }
         try {
             $this->pdo->prepare(
                 "UPDATE shipments SET launched_pick=:m, assembly_start=COALESCE(assembly_start, CURRENT_TIMESTAMP) WHERE id=:id"
-            )->execute([':m' => $mode === 'auto' ? 'Авто' : 'Волна', ':id' => $id]);
+            )->execute([':m' => $mode === 'auto' ? 'РђРІС‚Рѕ' : 'Р’РѕР»РЅР°', ':id' => $id]);
         } catch (Throwable $e) {
-            // старые БД без колонок — только история
+            // СЃС‚Р°СЂС‹Рµ Р‘Р” Р±РµР· РєРѕР»РѕРЅРѕРє вЂ” С‚РѕР»СЊРєРѕ РёСЃС‚РѕСЂРёСЏ
         }
         $this->history($id, $userId, 'picking', $row['status'], $row['status']);
     }
 
     /**
-     * Мастер "Формирование отгрузки", шаг 2: создать документ из N заказов.
+     * РњР°СЃС‚РµСЂ "Р¤РѕСЂРјРёСЂРѕРІР°РЅРёРµ РѕС‚РіСЂСѓР·РєРё", С€Р°Рі 2: СЃРѕР·РґР°С‚СЊ РґРѕРєСѓРјРµРЅС‚ РёР· N Р·Р°РєР°Р·РѕРІ.
      * $params: contractor_id, warehouse_id, plan_shipment_date, plan_time,
      *          vehicle, gate, loading_type, delivery_type, priority, consignee...
-     * Возвращает id новой отгрузки. Состав и итоги считаются из заказов.
+     * Р’РѕР·РІСЂР°С‰Р°РµС‚ id РЅРѕРІРѕР№ РѕС‚РіСЂСѓР·РєРё. РЎРѕСЃС‚Р°РІ Рё РёС‚РѕРіРё СЃС‡РёС‚Р°СЋС‚СЃСЏ РёР· Р·Р°РєР°Р·РѕРІ.
      */
-    // Переносимый номер для SQLite-демо (без LOCK TABLES) — та же серия S-205101...
+    // РџРµСЂРµРЅРѕСЃРёРјС‹Р№ РЅРѕРјРµСЂ РґР»СЏ SQLite-РґРµРјРѕ (Р±РµР· LOCK TABLES) вЂ” С‚Р° Р¶Рµ СЃРµСЂРёСЏ S-205101...
     private function nextDocNoPortable(): string
     {
         return wms_next_shipment_no($this->pdo);
@@ -676,12 +676,12 @@ final class ShipmentService
     {
         $orderIds = array_values(array_unique(array_map('intval', $orderIds)));
         if (!$orderIds) {
-            throw new RuntimeException('Выберите заказы (шаг 1 мастера)');
+            throw new RuntimeException('Р’С‹Р±РµСЂРёС‚Рµ Р·Р°РєР°Р·С‹ (С€Р°Рі 1 РјР°СЃС‚РµСЂР°)');
         }
         if (empty($params['warehouse_id'])) {
-            throw new RuntimeException('Укажите склад (шаг 2 мастера)');
+            throw new RuntimeException('РЈРєР°Р¶РёС‚Рµ СЃРєР»Р°Рґ (С€Р°Рі 2 РјР°СЃС‚РµСЂР°)');
         }
-        // Один наряд — только в одну отгрузку: уже связанные заказы отклоняем.
+        // РћРґРёРЅ РЅР°СЂСЏРґ вЂ” С‚РѕР»СЊРєРѕ РІ РѕРґРЅСѓ РѕС‚РіСЂСѓР·РєСѓ: СѓР¶Рµ СЃРІСЏР·Р°РЅРЅС‹Рµ Р·Р°РєР°Р·С‹ РѕС‚РєР»РѕРЅСЏРµРј.
         try {
             $in = implode(',', $orderIds);
             $busy = $this->pdo->query(
@@ -694,14 +694,14 @@ final class ShipmentService
             if ($busy) {
                 $names = [];
                 foreach ($busy as $b) {
-                    $names[] = $b['order_no'] . ' (уже в ' . $b['ship_no'] . ')';
+                    $names[] = $b['order_no'] . ' (СѓР¶Рµ РІ ' . $b['ship_no'] . ')';
                 }
-                throw new RuntimeException('Наряды уже добавлены в другие отгрузки: ' . implode(', ', $names));
+                throw new RuntimeException('РќР°СЂСЏРґС‹ СѓР¶Рµ РґРѕР±Р°РІР»РµРЅС‹ РІ РґСЂСѓРіРёРµ РѕС‚РіСЂСѓР·РєРё: ' . implode(', ', $names));
             }
         } catch (RuntimeException $e) {
             throw $e;
         } catch (Throwable) {
-            // Нет таблицы связей — проверка невозможна, идём дальше.
+            // РќРµС‚ С‚Р°Р±Р»РёС†С‹ СЃРІСЏР·РµР№ вЂ” РїСЂРѕРІРµСЂРєР° РЅРµРІРѕР·РјРѕР¶РЅР°, РёРґС‘Рј РґР°Р»СЊС€Рµ.
         }
         $isSqlite = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
         $nowFn = $isSqlite ? "datetime('now')" : 'NOW()';
@@ -714,7 +714,7 @@ final class ShipmentService
             $st = $this->pdo->prepare(
                 "INSERT INTO shipments ($cols) VALUES (:no,$nowFn,:ctr,:wh,'assembling',:psd,:veh,:gate,:lt,:dt,:pri,:csg,:resp,:cmt,:cb)"
             );
-            // Контрагент — по первому заказу, если не задан явно
+            // РљРѕРЅС‚СЂР°РіРµРЅС‚ вЂ” РїРѕ РїРµСЂРІРѕРјСѓ Р·Р°РєР°Р·Сѓ, РµСЃР»Рё РЅРµ Р·Р°РґР°РЅ СЏРІРЅРѕ
             $ctr = (int)($params['contractor_id'] ?? 0);
             if (!$ctr) {
                 try {
@@ -728,12 +728,12 @@ final class ShipmentService
                 ':no' => $no, ':ctr' => $ctr ?: 1, ':wh' => (int)$params['warehouse_id'],
                 ':psd' => $params['plan_shipment_date'] ?? null,
                 ':veh' => $params['vehicle'] ?? null, ':gate' => $params['gate'] ?? null,
-                ':lt' => $params['loading_type'] ?? null, ':dt' => $params['delivery_type'] ?? 'Доставка',
+                ':lt' => $params['loading_type'] ?? null, ':dt' => $params['delivery_type'] ?? 'Р”РѕСЃС‚Р°РІРєР°',
                 ':pri' => $params['priority'] ?? 'normal', ':csg' => $params['consignee'] ?? null,
                 ':resp' => $userId, ':cmt' => $params['comment'] ?? null, ':cb' => $userId,
             ]);
             $newId = (int)$this->pdo->lastInsertId();
-            // Связка заказов (shipment_orders) — best effort, если таблицы нет — пропускаем
+            // РЎРІСЏР·РєР° Р·Р°РєР°Р·РѕРІ (shipment_orders) вЂ” best effort, РµСЃР»Рё С‚Р°Р±Р»РёС†С‹ РЅРµС‚ вЂ” РїСЂРѕРїСѓСЃРєР°РµРј
             try {
                 $ins = $this->pdo->prepare(
                     "INSERT INTO shipment_orders (shipment_id, order_id) VALUES (:s,:o)"
@@ -743,10 +743,10 @@ final class ShipmentService
                 }
             } catch (Throwable $e) {
             }
-            // Состав из заказов: строки нарядов (client_order_items) -> позиции отгрузки.
-            // Наличие колонки shipment_items.prod_date проверяем ОДИН раз до цикла:
-            // при частичном сбое прежний fallback (вставка без prod_date) продублировал
-            // уже вставленные строки наряда.
+            // РЎРѕСЃС‚Р°РІ РёР· Р·Р°РєР°Р·РѕРІ: СЃС‚СЂРѕРєРё РЅР°СЂСЏРґРѕРІ (client_order_items) -> РїРѕР·РёС†РёРё РѕС‚РіСЂСѓР·РєРё.
+            // РќР°Р»РёС‡РёРµ РєРѕР»РѕРЅРєРё shipment_items.prod_date РїСЂРѕРІРµСЂСЏРµРј РћР”РРќ СЂР°Р· РґРѕ С†РёРєР»Р°:
+            // РїСЂРё С‡Р°СЃС‚РёС‡РЅРѕРј СЃР±РѕРµ РїСЂРµР¶РЅРёР№ fallback (РІСЃС‚Р°РІРєР° Р±РµР· prod_date) РїСЂРѕРґСѓР±Р»РёСЂРѕРІР°Р»
+            // СѓР¶Рµ РІСЃС‚Р°РІР»РµРЅРЅС‹Рµ СЃС‚СЂРѕРєРё РЅР°СЂСЏРґР°.
             $hasProdDate = function_exists('wms_has_column')
                 ? wms_has_column($this->pdo, 'shipment_items', 'prod_date') : true;
             $hasBatch = function_exists('wms_has_column')
@@ -773,8 +773,8 @@ final class ShipmentService
         }
     }
 
-    // Данные для печати по макету: Акт, МХ3, Сборочный/Упаковочный лист, ШК, Паллетный, Реестр,
-    // Наряд, УПД, ТН, ТТН.
+    // Р”Р°РЅРЅС‹Рµ РґР»СЏ РїРµС‡Р°С‚Рё РїРѕ РјР°РєРµС‚Сѓ: РђРєС‚, РњРҐ3, РЎР±РѕСЂРѕС‡РЅС‹Р№/РЈРїР°РєРѕРІРѕС‡РЅС‹Р№ Р»РёСЃС‚, РЁРљ, РџР°Р»Р»РµС‚РЅС‹Р№, Р РµРµСЃС‚СЂ,
+    // РќР°СЂСЏРґ, РЈРџР”, РўРќ, РўРўРќ.
     public function printData(int $id, string $kind, string $sscc = ''): array
     {
         if ($kind === 'pick_list' || $kind === 'p-sb') {
@@ -802,7 +802,7 @@ final class ShipmentService
         $st->execute([':id' => $id]);
         $head = $st->fetch(PDO::FETCH_ASSOC);
         if (!$head) {
-            throw new RuntimeException('Документ не найден');
+            throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
         }
         $items = $this->pdo->prepare("SELECT * FROM shipment_items WHERE shipment_id=:id ORDER BY id");
         $items->execute([':id' => $id]);
@@ -810,13 +810,13 @@ final class ShipmentService
     }
 
     /**
-     * Наряд (без цен): все наряды (заказы) отгрузки со штрихкодами документа и каждого наряда.
-     * В шапке: клиент, адрес доставки, ворота отгрузки. Таблица: п/п, артикул, наименование, кол-во.
-     * Друг за другом: сначала отгрузка, потом каждый наряд.
+     * РќР°СЂСЏРґ (Р±РµР· С†РµРЅ): РІСЃРµ РЅР°СЂСЏРґС‹ (Р·Р°РєР°Р·С‹) РѕС‚РіСЂСѓР·РєРё СЃРѕ С€С‚СЂРёС…РєРѕРґР°РјРё РґРѕРєСѓРјРµРЅС‚Р° Рё РєР°Р¶РґРѕРіРѕ РЅР°СЂСЏРґР°.
+     * Р’ С€Р°РїРєРµ: РєР»РёРµРЅС‚, Р°РґСЂРµСЃ РґРѕСЃС‚Р°РІРєРё, РІРѕСЂРѕС‚Р° РѕС‚РіСЂСѓР·РєРё. РўР°Р±Р»РёС†Р°: Рї/Рї, Р°СЂС‚РёРєСѓР», РЅР°РёРјРµРЅРѕРІР°РЅРёРµ, РєРѕР»-РІРѕ.
+     * Р”СЂСѓРі Р·Р° РґСЂСѓРіРѕРј: СЃРЅР°С‡Р°Р»Р° РѕС‚РіСЂСѓР·РєР°, РїРѕС‚РѕРј РєР°Р¶РґС‹Р№ РЅР°СЂСЏРґ.
      */
     /**
-     * Объём и вес единицы товара из номенклатуры: sku => [volume_m3, weight_kg].
-     * Если объём не заполнен — считаем по габаритам, вес — из weight_g.
+     * РћР±СЉС‘Рј Рё РІРµСЃ РµРґРёРЅРёС†С‹ С‚РѕРІР°СЂР° РёР· РЅРѕРјРµРЅРєР»Р°С‚СѓСЂС‹: sku => [volume_m3, weight_kg].
+     * Р•СЃР»Рё РѕР±СЉС‘Рј РЅРµ Р·Р°РїРѕР»РЅРµРЅ вЂ” СЃС‡РёС‚Р°РµРј РїРѕ РіР°Р±Р°СЂРёС‚Р°Рј, РІРµСЃ вЂ” РёР· weight_g.
      */
     private function productMetrics(array $skus): array
     {
@@ -852,7 +852,7 @@ final class ShipmentService
         return $out;
     }
 
-    /** Дополнить строки объёмом/весом по количеству и посчитать итоги. */
+    /** Р”РѕРїРѕР»РЅРёС‚СЊ СЃС‚СЂРѕРєРё РѕР±СЉС‘РјРѕРј/РІРµСЃРѕРј РїРѕ РєРѕР»РёС‡РµСЃС‚РІСѓ Рё РїРѕСЃС‡РёС‚Р°С‚СЊ РёС‚РѕРіРё. */
     private function applyItemMetrics(array $items): array
     {
         $metrics = $this->productMetrics(array_column($items, 'sku'));
@@ -878,10 +878,10 @@ final class ShipmentService
         $st->execute([':id' => $id]);
         $head = $st->fetch(PDO::FETCH_ASSOC);
         if (!$head) {
-            throw new RuntimeException('Документ не найден');
+            throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
         }
 
-        // Все наряды (заказы) в этой отгрузке.
+        // Р’СЃРµ РЅР°СЂСЏРґС‹ (Р·Р°РєР°Р·С‹) РІ СЌС‚РѕР№ РѕС‚РіСЂСѓР·РєРµ.
         $orders = $this->pdo->prepare(
             "SELECT o.id, o.doc_no, o.created_at AS doc_date, o.consignee, o.address, o.phone, o.status,
                     o.total, o.warehouse_id
@@ -893,7 +893,7 @@ final class ShipmentService
         $orders->execute([':id' => $id]);
         $orderList = $orders->fetchAll(PDO::FETCH_ASSOC);
 
-        // Общие итоги отгрузки — всегда по фактическим строкам shipment_items.
+        // РћР±С‰РёРµ РёС‚РѕРіРё РѕС‚РіСЂСѓР·РєРё вЂ” РІСЃРµРіРґР° РїРѕ С„Р°РєС‚РёС‡РµСЃРєРёРј СЃС‚СЂРѕРєР°Рј shipment_items.
         $allItems = $this->pdo->prepare(
             "SELECT sku, name, unit, qty FROM shipment_items WHERE shipment_id=:id ORDER BY id"
         );
@@ -903,8 +903,8 @@ final class ShipmentService
 
         $orderDocs = [];
         foreach ($orderList as $order) {
-            // Состав наряда берём из фактических строк отгрузки (shipment_items):
-            // client_order_items может быть пустым, если отгрузка собрана из другого источника.
+            // РЎРѕСЃС‚Р°РІ РЅР°СЂСЏРґР° Р±РµСЂС‘Рј РёР· С„Р°РєС‚РёС‡РµСЃРєРёС… СЃС‚СЂРѕРє РѕС‚РіСЂСѓР·РєРё (shipment_items):
+            // client_order_items РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСѓСЃС‚С‹Рј, РµСЃР»Рё РѕС‚РіСЂСѓР·РєР° СЃРѕР±СЂР°РЅР° РёР· РґСЂСѓРіРѕРіРѕ РёСЃС‚РѕС‡РЅРёРєР°.
             $items = $this->pdo->prepare(
                 "SELECT sku, name, unit, qty FROM shipment_items
                   WHERE shipment_id = :sid AND order_id = :oid ORDER BY id"
@@ -918,7 +918,7 @@ final class ShipmentService
                 $fallback->execute([':oid' => $order['id']]);
                 $rows = $fallback->fetchAll(PDO::FETCH_ASSOC);
             }
-            // В отгрузке один наряд и строки без order_id — весь состав относится к нему.
+            // Р’ РѕС‚РіСЂСѓР·РєРµ РѕРґРёРЅ РЅР°СЂСЏРґ Рё СЃС‚СЂРѕРєРё Р±РµР· order_id вЂ” РІРµСЃСЊ СЃРѕСЃС‚Р°РІ РѕС‚РЅРѕСЃРёС‚СЃСЏ Рє РЅРµРјСѓ.
             if (!$rows && count($orderList) === 1) {
                 $rows = $allRows;
             }
@@ -934,14 +934,14 @@ final class ShipmentService
         $head['weight_total'] = $allCalc['weight'];
 
         return [
-            'kind' => 'nar', 'title' => 'По отгрузке ' . $head['doc_no'],
+            'kind' => 'nar', 'title' => 'РџРѕ РѕС‚РіСЂСѓР·РєРµ ' . $head['doc_no'],
             'head' => $head, 'orders' => $orderDocs,
         ];
     }
 
     /**
-     * Сводный документ по отгрузке: одинаковые SKU из разных нарядов
-     * объединяются в одну строку, количество/объём/вес суммируются.
+     * РЎРІРѕРґРЅС‹Р№ РґРѕРєСѓРјРµРЅС‚ РїРѕ РѕС‚РіСЂСѓР·РєРµ: РѕРґРёРЅР°РєРѕРІС‹Рµ SKU РёР· СЂР°Р·РЅС‹С… РЅР°СЂСЏРґРѕРІ
+     * РѕР±СЉРµРґРёРЅСЏСЋС‚СЃСЏ РІ РѕРґРЅСѓ СЃС‚СЂРѕРєСѓ, РєРѕР»РёС‡РµСЃС‚РІРѕ/РѕР±СЉС‘Рј/РІРµСЃ СЃСѓРјРјРёСЂСѓСЋС‚СЃСЏ.
      */
     public function summaryDoc(int $id): array
     {
@@ -949,7 +949,7 @@ final class ShipmentService
         $st->execute([':id' => $id]);
         $head = $st->fetch(PDO::FETCH_ASSOC);
         if (!$head) {
-            throw new RuntimeException('Отгрузка не найдена');
+            throw new RuntimeException('РћС‚РіСЂСѓР·РєР° РЅРµ РЅР°Р№РґРµРЅР°');
         }
         $items = $this->pdo->prepare(
             "SELECT code, sku, name, unit, SUM(qty) AS qty
@@ -961,38 +961,38 @@ final class ShipmentService
         $head['qty_total'] = $calc['qty'];
         $head['volume_total'] = $calc['volume'];
         $head['weight_total'] = $calc['weight'];
-        return ['kind' => 'summary', 'title' => 'Сводный',
+        return ['kind' => 'summary', 'title' => 'РЎРІРѕРґРЅС‹Р№',
             'head' => $head, 'items' => $calc['items']];
     }
 
     /**
-     * УПД — Универсальный передаточный документ (форма по приказу ФНС России № ММВ-7-15/82@).
-     * Без цен в строковой части (только кол-во, артикул, наименование), цены — опционально в шапке.
+     * РЈРџР” вЂ” РЈРЅРёРІРµСЂСЃР°Р»СЊРЅС‹Р№ РїРµСЂРµРґР°С‚РѕС‡РЅС‹Р№ РґРѕРєСѓРјРµРЅС‚ (С„РѕСЂРјР° РїРѕ РїСЂРёРєР°Р·Сѓ Р¤РќРЎ Р РѕСЃСЃРёРё в„– РњРњР’-7-15/82@).
+     * Р‘РµР· С†РµРЅ РІ СЃС‚СЂРѕРєРѕРІРѕР№ С‡Р°СЃС‚Рё (С‚РѕР»СЊРєРѕ РєРѕР»-РІРѕ, Р°СЂС‚РёРєСѓР», РЅР°РёРјРµРЅРѕРІР°РЅРёРµ), С†РµРЅС‹ вЂ” РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ РІ С€Р°РїРєРµ.
      */
     public function updDoc(int $id): array
     {
-        return $this->primaryDoc($id, 'upd', 'УПД — Универсальный передаточный документ');
+        return $this->primaryDoc($id, 'upd', 'РЈРџР” вЂ” РЈРЅРёРІРµСЂСЃР°Р»СЊРЅС‹Р№ РїРµСЂРµРґР°С‚РѕС‡РЅС‹Р№ РґРѕРєСѓРјРµРЅС‚');
     }
 
     /**
-     * ТН — Торговая накладная (форма ТОГ-1).
+     * РўРќ вЂ” РўРѕСЂРіРѕРІР°СЏ РЅР°РєР»Р°РґРЅР°СЏ (С„РѕСЂРјР° РўРћР“-1).
      */
     public function tnDoc(int $id): array
     {
-        return $this->primaryDoc($id, 'tn', 'Торговая накладная');
+        return $this->primaryDoc($id, 'tn', 'РўРѕСЂРіРѕРІР°СЏ РЅР°РєР»Р°РґРЅР°СЏ');
     }
 
     /**
-     * ТТН — Транспортная накладная (форма по приказу Минтранса России № 272).
+     * РўРўРќ вЂ” РўСЂР°РЅСЃРїРѕСЂС‚РЅР°СЏ РЅР°РєР»Р°РґРЅР°СЏ (С„РѕСЂРјР° РїРѕ РїСЂРёРєР°Р·Сѓ РњРёРЅС‚СЂР°РЅСЃР° Р РѕСЃСЃРёРё в„– 272).
      */
     public function ttnDoc(int $id): array
     {
-        return $this->primaryDoc($id, 'ttn', 'Транспортная накладная');
+        return $this->primaryDoc($id, 'ttn', 'РўСЂР°РЅСЃРїРѕСЂС‚РЅР°СЏ РЅР°РєР»Р°РґРЅР°СЏ');
     }
 
     /**
-     * Общая подготовка данных для первичных документов (УПД, ТН, ТТН).
-     * Возвращает голову + позиции отгрузки без цен (товарная накладная часть).
+     * РћР±С‰Р°СЏ РїРѕРґРіРѕС‚РѕРІРєР° РґР°РЅРЅС‹С… РґР»СЏ РїРµСЂРІРёС‡РЅС‹С… РґРѕРєСѓРјРµРЅС‚РѕРІ (РЈРџР”, РўРќ, РўРўРќ).
+     * Р’РѕР·РІСЂР°С‰Р°РµС‚ РіРѕР»РѕРІСѓ + РїРѕР·РёС†РёРё РѕС‚РіСЂСѓР·РєРё Р±РµР· С†РµРЅ (С‚РѕРІР°СЂРЅР°СЏ РЅР°РєР»Р°РґРЅР°СЏ С‡Р°СЃС‚СЊ).
      */
     private function primaryDoc(int $id, string $kind, string $title): array
     {
@@ -1006,9 +1006,9 @@ final class ShipmentService
         $st->execute([':id' => $id]);
         $head = $st->fetch(PDO::FETCH_ASSOC);
         if (!$head) {
-            throw new RuntimeException('Документ не найден');
+            throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
         }
-        // Позиции с ценами — для УПД/ТН/ТТН; объём и вес считаем из номенклатуры.
+        // РџРѕР·РёС†РёРё СЃ С†РµРЅР°РјРё вЂ” РґР»СЏ РЈРџР”/РўРќ/РўРўРќ; РѕР±СЉС‘Рј Рё РІРµСЃ СЃС‡РёС‚Р°РµРј РёР· РЅРѕРјРµРЅРєР»Р°С‚СѓСЂС‹.
         $items = $this->pdo->prepare(
             "SELECT code, sku, name, unit, qty, price, sum FROM shipment_items
              WHERE shipment_id=:id ORDER BY id"
@@ -1022,8 +1022,8 @@ final class ShipmentService
     }
 
     /**
-     * Сборочный лист: состав отгрузки (план/факт отбора через ТСД).
-     * В штрихкод зашивается номер отгрузки (на стороне печати).
+     * РЎР±РѕСЂРѕС‡РЅС‹Р№ Р»РёСЃС‚: СЃРѕСЃС‚Р°РІ РѕС‚РіСЂСѓР·РєРё (РїР»Р°РЅ/С„Р°РєС‚ РѕС‚Р±РѕСЂР° С‡РµСЂРµР· РўРЎР”).
+     * Р’ С€С‚СЂРёС…РєРѕРґ Р·Р°С€РёРІР°РµС‚СЃСЏ РЅРѕРјРµСЂ РѕС‚РіСЂСѓР·РєРё (РЅР° СЃС‚РѕСЂРѕРЅРµ РїРµС‡Р°С‚Рё).
      */
     public function pickDoc(int $id): array
     {
@@ -1031,7 +1031,7 @@ final class ShipmentService
         $st->execute([':id' => $id]);
         $head = $st->fetch(PDO::FETCH_ASSOC);
         if (!$head) {
-            throw new RuntimeException('Документ не найден');
+            throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
         }
         try {
             $rows = $this->pdo->prepare(
@@ -1040,10 +1040,10 @@ final class ShipmentService
             );
             $rows->execute([':id' => $id]);
             $items = $rows->fetchAll(PDO::FETCH_ASSOC);
-            // Отбор в tsd_picks ведётся по SKU (без привязки к наряду), поэтому
-            // факт по SKU нужно разложить по его строкам отгрузки. Иначе при
-            // повторе артикула в двух нарядах обе строки показывали бы общий
-            // факт (например 10/5 и 10/5 — по 200%).
+            // РћС‚Р±РѕСЂ РІ tsd_picks РІРµРґС‘С‚СЃСЏ РїРѕ SKU (Р±РµР· РїСЂРёРІСЏР·РєРё Рє РЅР°СЂСЏРґСѓ), РїРѕСЌС‚РѕРјСѓ
+            // С„Р°РєС‚ РїРѕ SKU РЅСѓР¶РЅРѕ СЂР°Р·Р»РѕР¶РёС‚СЊ РїРѕ РµРіРѕ СЃС‚СЂРѕРєР°Рј РѕС‚РіСЂСѓР·РєРё. РРЅР°С‡Рµ РїСЂРё
+            // РїРѕРІС‚РѕСЂРµ Р°СЂС‚РёРєСѓР»Р° РІ РґРІСѓС… РЅР°СЂСЏРґР°С… РѕР±Рµ СЃС‚СЂРѕРєРё РїРѕРєР°Р·С‹РІР°Р»Рё Р±С‹ РѕР±С‰РёР№
+            // С„Р°РєС‚ (РЅР°РїСЂРёРјРµСЂ 10/5 Рё 10/5 вЂ” РїРѕ 200%).
             $picks = $this->pdo->prepare(
                 "SELECT sku, COALESCE(SUM(qty),0) AS q FROM tsd_picks WHERE shipment_id = :id GROUP BY sku"
             );
@@ -1062,16 +1062,16 @@ final class ShipmentService
             $rows->execute([':id' => $id]);
             $items = $rows->fetchAll(PDO::FETCH_ASSOC);
         }
-        return ['kind' => 'pick_list', 'title' => 'Сборочный лист', 'head' => $head, 'items' => $items];
+        return ['kind' => 'pick_list', 'title' => 'РЎР±РѕСЂРѕС‡РЅС‹Р№ Р»РёСЃС‚', 'head' => $head, 'items' => $items];
     }
 
     /**
-     * Раскладывает факт отбора по SKU пропорционально плану его строк.
-     * Остаток от деления отдаём последней строке — сумма факта по строкам
-     * совпадает с фактом отбора с точностью до копейки.
-     * @param array $items строки отгрузки (id, sku, qty)
-     * @param array $facts sku => отобранное количество
-     * @return array id строки => факт
+     * Р Р°СЃРєР»Р°РґС‹РІР°РµС‚ С„Р°РєС‚ РѕС‚Р±РѕСЂР° РїРѕ SKU РїСЂРѕРїРѕСЂС†РёРѕРЅР°Р»СЊРЅРѕ РїР»Р°РЅСѓ РµРіРѕ СЃС‚СЂРѕРє.
+     * РћСЃС‚Р°С‚РѕРє РѕС‚ РґРµР»РµРЅРёСЏ РѕС‚РґР°С‘Рј РїРѕСЃР»РµРґРЅРµР№ СЃС‚СЂРѕРєРµ вЂ” СЃСѓРјРјР° С„Р°РєС‚Р° РїРѕ СЃС‚СЂРѕРєР°Рј
+     * СЃРѕРІРїР°РґР°РµС‚ СЃ С„Р°РєС‚РѕРј РѕС‚Р±РѕСЂР° СЃ С‚РѕС‡РЅРѕСЃС‚СЊСЋ РґРѕ РєРѕРїРµР№РєРё.
+     * @param array $items СЃС‚СЂРѕРєРё РѕС‚РіСЂСѓР·РєРё (id, sku, qty)
+     * @param array $facts sku => РѕС‚РѕР±СЂР°РЅРЅРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ
+     * @return array id СЃС‚СЂРѕРєРё => С„Р°РєС‚
      */
     private static function distributePickFact(array $items, array $facts): array
     {
@@ -1088,7 +1088,7 @@ final class ShipmentService
             }
             $planSum = 0.0;
             foreach ($rows as $r) {
-                // В выборке план называется plan_qty, в общем виде — qty.
+                // Р’ РІС‹Р±РѕСЂРєРµ РїР»Р°РЅ РЅР°Р·С‹РІР°РµС‚СЃСЏ plan_qty, РІ РѕР±С‰РµРј РІРёРґРµ вЂ” qty.
                 $planSum += (float)($r['qty'] ?? $r['plan_qty'] ?? 0);
             }
             $acc = 0.0;
@@ -1108,28 +1108,28 @@ final class ShipmentService
     }
 
     /**
-     * Упаковочный лист: содержимое ОДНОЙ SSCC (факт сортировки через ТСД).
-     * В штрихкод зашивается номер SSCC (на стороне печати).
+     * РЈРїР°РєРѕРІРѕС‡РЅС‹Р№ Р»РёСЃС‚: СЃРѕРґРµСЂР¶РёРјРѕРµ РћР”РќРћР™ SSCC (С„Р°РєС‚ СЃРѕСЂС‚РёСЂРѕРІРєРё С‡РµСЂРµР· РўРЎР”).
+     * Р’ С€С‚СЂРёС…РєРѕРґ Р·Р°С€РёРІР°РµС‚СЃСЏ РЅРѕРјРµСЂ SSCC (РЅР° СЃС‚РѕСЂРѕРЅРµ РїРµС‡Р°С‚Рё).
      */
     public function packDoc(int $id, string $sscc): array
     {
         $sscc = trim($sscc);
         if ($sscc === '') {
-            throw new RuntimeException('Укажите SSCC');
+            throw new RuntimeException('РЈРєР°Р¶РёС‚Рµ SSCC');
         }
         $st = $this->pdo->prepare("SELECT * FROM shipments WHERE id=:id");
         $st->execute([':id' => $id]);
         $head = $st->fetch(PDO::FETCH_ASSOC);
         if (!$head) {
-            throw new RuntimeException('Документ не найден');
+            throw new RuntimeException('Р”РѕРєСѓРјРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ');
         }
         $head['sscc'] = $sscc;
         try {
-            // PG не разрешает коррелированные подзапросы к негруппированным столбцам:
-            // агрегируем факт отдельно и подклеиваем справочник по sku через MIN(id).
+            // PG РЅРµ СЂР°Р·СЂРµС€Р°РµС‚ РєРѕСЂСЂРµР»РёСЂРѕРІР°РЅРЅС‹Рµ РїРѕРґР·Р°РїСЂРѕСЃС‹ Рє РЅРµРіСЂСѓРїРїРёСЂРѕРІР°РЅРЅС‹Рј СЃС‚РѕР»Р±С†Р°Рј:
+            // Р°РіСЂРµРіРёСЂСѓРµРј С„Р°РєС‚ РѕС‚РґРµР»СЊРЅРѕ Рё РїРѕРґРєР»РµРёРІР°РµРј СЃРїСЂР°РІРѕС‡РЅРёРє РїРѕ sku С‡РµСЂРµР· MIN(id).
             $rows = $this->pdo->prepare(
                 "SELECT COALESCE(i.code, '') AS code, t.sku,
-                        COALESCE(i.name, t.sku) AS name, COALESCE(i.unit, 'шт') AS unit, t.qty
+                        COALESCE(i.name, t.sku) AS name, COALESCE(i.unit, 'С€С‚') AS unit, t.qty
                    FROM (SELECT sku, SUM(qty) AS qty, MIN(id) AS fid FROM tsd_picks
                           WHERE shipment_id = :id AND sscc = :sscc GROUP BY sku) t
                    LEFT JOIN (SELECT sku, MIN(id) AS id FROM shipment_items
@@ -1142,10 +1142,10 @@ final class ShipmentService
         } catch (Throwable) {
             $items = [];
         }
-        return ['kind' => 'pack_list', 'title' => 'Упаковочный лист', 'sscc' => $sscc, 'head' => $head, 'items' => $items];
+        return ['kind' => 'pack_list', 'title' => 'РЈРїР°РєРѕРІРѕС‡РЅС‹Р№ Р»РёСЃС‚', 'sscc' => $sscc, 'head' => $head, 'items' => $items];
     }
 
-    /** SSCC сортировки по отгрузке: [{sscc, lines, qty}] — для выбора упаковочного листа. */
+    /** SSCC СЃРѕСЂС‚РёСЂРѕРІРєРё РїРѕ РѕС‚РіСЂСѓР·РєРµ: [{sscc, lines, qty}] вЂ” РґР»СЏ РІС‹Р±РѕСЂР° СѓРїР°РєРѕРІРѕС‡РЅРѕРіРѕ Р»РёСЃС‚Р°. */
     public function ssccList(int $id): array
     {
         try {
@@ -1161,13 +1161,13 @@ final class ShipmentService
         }
     }
 
-    // Экспорт реестра в CSV (для больших объемов — отдавать через очередь чанками).
+    // Р­РєСЃРїРѕСЂС‚ СЂРµРµСЃС‚СЂР° РІ CSV (РґР»СЏ Р±РѕР»СЊС€РёС… РѕР±СЉРµРјРѕРІ вЂ” РѕС‚РґР°РІР°С‚СЊ С‡РµСЂРµР· РѕС‡РµСЂРµРґСЊ С‡Р°РЅРєР°РјРё).
     public function exportCsv(ShipmentFilter $f, object $repo): string
     {
         $page = $repo->paginate($f);
         $out = fopen('php://temp', 'r+');
-        fputs($out, "\xEF\xBB\xBF"); // BOM для Excel
-        fputcsv($out, ['№ документа', 'Дата', 'Заказ', 'Контрагент', 'Склад', 'Статус', 'Сумма', 'Позиций', 'План. отгрузка', 'Создан'], ';');
+        fputs($out, "\xEF\xBB\xBF"); // BOM РґР»СЏ Excel
+        fputcsv($out, ['в„– РґРѕРєСѓРјРµРЅС‚Р°', 'Р”Р°С‚Р°', 'Р—Р°РєР°Р·', 'РљРѕРЅС‚СЂР°РіРµРЅС‚', 'РЎРєР»Р°Рґ', 'РЎС‚Р°С‚СѓСЃ', 'РЎСѓРјРјР°', 'РџРѕР·РёС†РёР№', 'РџР»Р°РЅ. РѕС‚РіСЂСѓР·РєР°', 'РЎРѕР·РґР°РЅ'], ';');
         foreach ($page['rows'] as $r) {
             fputcsv($out, [$r['doc_no'], $r['doc_date'], $r['order_no'], $r['contractor'],
                 $r['warehouse'], ShipmentStatus::from($r['status'])->label(),
@@ -1179,3 +1179,4 @@ final class ShipmentService
         return $csv;
     }
 }
+

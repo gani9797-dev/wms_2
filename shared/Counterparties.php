@@ -131,6 +131,9 @@ final class WmsCounterparties
                 } catch (Throwable) {
                 }
             }
+            if ($ctype === 'client') {
+                self::autoAddClientToZones($id);
+            }
             return $id;
         }
         try {
@@ -139,9 +142,25 @@ final class WmsCounterparties
                  VALUES (:n, :ct, 1, 'FIFO', 0, 0)"
             );
             $st->execute([':n' => $name, ':ct' => $ctype]);
-            return (int)$pdo->lastInsertId();
+            $newId = (int)$pdo->lastInsertId();
+            if ($ctype === 'client' && $newId > 0) {
+                self::autoAddClientToZones($newId);
+            }
+            return $newId;
         } catch (Throwable) {
             return null;
+        }
+    }
+
+    /** Новый клиент из приходного документа → в зоны с флагом «добавлять автоматически». */
+    private static function autoAddClientToZones(int $contractorId): void
+    {
+        try {
+            require_once __DIR__ . '/StorageZones.php';
+            if (function_exists('wms_storage_zone_auto_add_client')) {
+                wms_storage_zone_auto_add_client($contractorId);
+            }
+        } catch (Throwable) {
         }
     }
 

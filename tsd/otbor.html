@@ -377,10 +377,47 @@ function scrHead(){
   ${(h.lists&&h.lists.length)?`<div class="mut">Список заданий: <b>${h.lists.map(l=>esc(l.code)).join(', ')}</b>${h.lists.length===1?(' · '+esc(h.lists[0].name||'')):''}</div>`:''}
   <table class="mini"><tr><th>Ячейка</th><th>Артикул / Наименование</th><th>Кол-во</th></tr>
   ${ITEMS.map((i,n)=>`<tr style="${n===IDX?'background:#EDE7FF':''}"><td>${i.cell}</td><td><b>${i.sku}</b><br><span class="mut">${i.name||''} · ${i.code||''}${i.supplier_batch?(' · партия '+i.supplier_batch):''}</span><br>📦 фото</td><td>${i.fact_qty||0} / ${i.plan_qty} ${i.unit||'шт'}<br><span class="mut">паллет: ${PALLET||'—'}</span></td></tr>`).join('')}</table>
-  <div class="row2"><button class="ghost" id="exit">Выйти из задания</button><button id="go" class="green">Отобрать строку →</button></div></div>`;
+  <div class="row2"><button class="ghost" id="exit">Выйти из задания</button><button id="go" class="green">Отобрать строку →</button></div>
+  <button class="ghost" id="expedition" style="margin-top:8px">Форма экспедиции (паллета и ворота)</button></div>`;
   $('exit').onclick=async()=>{if(DOC._pick){await postPick('release',{task_id:DOC.id,user_id:uid()})}else{await post('release',{shipment_id:DOC.id,user_id:uid()})}toast('Статус: в ожидании (2 мин)');go('mode',scrMode)};
   $('go').onclick=()=>go('cell',scrCell);
+  if($('expedition'))$('expedition').onclick=()=>{if(DOC._pick){toast('Форма экспедиции доступна по отгрузке');return}go('expedition',scrExpedition)};
   window.onbeforeunload=()=>{if(DOC)navigator.sendBeacon&&0};
+}
+// ---------- Форма экспедиции: сборочная паллета, ворота, ячейка сортировки ----------
+async function scrExpedition(){
+  const sid=DOC?DOC.id:0;
+  head('экспедиция · '+(DOC&&DOC.doc_no||''));
+  let info={};
+  try{const r=await api('?action=expedition_info&shipment_id='+sid);info=await r.json();}catch(e){}
+  if(info.error){toast(info.error);return}
+  const gates=info.gates||[];
+  const pallet=info.assembly_pallet||info.pick_pallet||PALLET||myCell()||'';
+  const cellList=Object.values(info.cells||{}).flat().filter(Boolean);
+  $('m').innerHTML=`<div class="card"><div class="step">ФОРМА ЭКСПЕДИЦИИ · ${esc(DOC&&DOC.doc_no||'')}</div>
+  <h2>Сборочная паллета и ворота</h2>
+  <div class="mut">Укажи сборочную паллету. Система покажет ворота из отгрузки; отсканируй ячейку ворот формата Exp1-1 из зоны «сортировка».</div>
+  <div class="kv"><i>Сборочная паллета</i><b>${esc(pallet||'—')}</b></div>
+  <input id="exppallet" placeholder="Сборочная паллета (SSCC)" value="${esc(pallet)}" autocomplete="off">
+  <div class="kv"><i>Ворота отгрузки</i><b>${gates.length?gates.map(esc).join(', '):'не указаны'}</b></div>
+  <input id="expgate" placeholder="Ворота" value="${esc(gates[0]||'')}" autocomplete="off">
+  <input id="expcell" placeholder="Ячейка ворот, например Exp1-1" autocomplete="off">
+  ${cellList.length?`<div class="mut">Доступные ячейки сортировки: ${cellList.map(esc).join(', ')}</div>`:''}
+  ${info.saved?`<div class="card green" style="margin-top:8px"><b>Сохранено ранее</b><div class="mut">${esc(info.saved.name||'')}</div></div>`:''}
+  <button id="go" class="green">Сохранить экспедицию</button>
+  <button class="ghost" id="bk">Назад</button></div>`;
+  $('bk').onclick=()=>back();
+  $('go').onclick=async()=>{
+    const p=($('exppallet').value||'').trim(),g=($('expgate').value||'').trim(),c=($('expcell').value||'').trim();
+    if(!p||!g||!c){toast('Заполни паллету, ворота и ячейку');return}
+    const {j}=await post('expedition_save',{shipment_id:sid,pallet:p,gate:g,gate_cell:c,user_id:uid(),user_fio:ufio()});
+    if(j.error){toast('Ошибка: '+j.error,5000);return}
+    toast(j.hint||'Экспедиция сохранена',5000);
+    $('m').innerHTML=`<div class="card green"><div class="step">ЭКСПЕДИЦИЯ СОХРАНЕНА</div>
+      <h2>Паллета ${esc(j.pallet)} → ворота ${esc(j.gate)}</h2>
+      <div class="kv"><i>Ячейка ворот</i><b>${esc(j.gate_cell)}</b></div>
+      <div class="mut">Неси товар на ворота ${esc(j.gate)}. После переноса отсканируй SSCC в сортировке.</div></div>`;
+  };
 }
 // ---------- Скан ячейки ----------
 function scrCell(){
@@ -550,7 +587,9 @@ async function scrGate(){
       ? `<div id="chips" style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0">${gates.map(x=>`<button type="button" class="small chip${x===cur?'':' ghost'}" data-g="${esc(x)}" style="width:auto;margin:0">${esc(x)}</button>`).join('')}</div>`
       : `<div class="card amber" style="margin:8px 0"><b>В отгрузке ворота не указаны</b><div class="mut">Укажи ворота вручную — система не сможет проверить их по отгрузке.</div></div>
          <input id="gatein" placeholder="Введи номер ворот" inputmode="numeric">`}
-    <div class="mut">Подсказка: ворота отгрузки — источник истины. Ворота, которых нет в отгрузке, система не пропустит («Ворота X не указаны в отгрузке …»).</div>
+    <div class="mut" style="margin-top:12px"><b>Сканируй ячейку ворот сортировки</b></div>
+    <input id="gatecell" placeholder="Ячейка ворот, например Exp1-1" autocomplete="off" inputmode="none">
+    <div class="mut">Товар можно переносить только в ячейку зоны «сортировка» (формат Exp1-1). Из неё же потом выполняется сортировка на воротах.</div>
     <button id="go" class="green">Отправить на ворота</button>
     <button class="ghost" id="bk">Назад</button></div>`;
   document.querySelectorAll('.chip').forEach(el=>el.onclick=()=>{
@@ -564,8 +603,10 @@ async function scrGate(){
     const gi=$('gatein');
     const gate=gi?((gi.value||'').trim()):GATE_PICK;
     if(!gate){toast('Укажи ворота сортировки');return}
-    if(!confirm('Паллета '+ss+' физически перенесена на ворота '+gate+'? OK=Да / Отмена=Нет (системная ошибка)')){
-      const body0={pallet:ss,gate:gate,gate_cell:'ВОРОТА-'+gate,user_id:uid(),user_fio:ufio(),moved_ok:0};
+    const gcell=($('gatecell')?($('gatecell').value||'').trim():'');
+    if(!gcell){toast('Отсканируй ячейку ворот (например Exp1-1)');return}
+    if(!confirm('Паллета '+ss+' физически перенесена на ворота '+gate+' (ячейка '+gcell+')? OK=Да / Отмена=Нет (системная ошибка)')){
+      const body0={pallet:ss,gate:gate,gate_cell:gcell,user_id:uid(),user_fio:ufio(),moved_ok:0};
       if(isPick)body0.task_id=h.id;else body0.shipment_id=h.id;
       const {j:j0}=isPick?await postPick('move_to_sort',body0):await post('move_to_sort',body0);
       const l=(j0&&j0.log)||{};
@@ -576,7 +617,7 @@ async function scrGate(){
       $('go2').onclick=()=>location.href='app.html';
       return;
     }
-    const body={pallet:ss,gate:gate,gate_cell:'ВОРОТА-'+gate,user_id:uid(),user_fio:ufio(),moved_ok:1};
+    const body={pallet:ss,gate:gate,gate_cell:gcell,user_id:uid(),user_fio:ufio(),moved_ok:1};
     if(isPick)body.task_id=h.id;else body.shipment_id=h.id;
     const {s,j}=isPick?await postPick('move_to_sort',body):await post('move_to_sort',body);
     if(j.error){toast('Ошибка: '+j.error,5000);return}
@@ -593,7 +634,7 @@ async function scrGate(){
     if(WAVE&&Array.isArray(WAVE.details)&&WAVE.details.length>1){
       for(let i=1;i<WAVE.details.length;i++){
         const d=WAVE.details[i].head;
-        await post('move_to_sort',{shipment_id:d.id,pallet:ss,gate:gate,gate_cell:'ВОРОТА-'+gate,user_id:uid(),user_fio:ufio(),moved_ok:1});
+        await post('move_to_sort',{shipment_id:d.id,pallet:ss,gate:gate,gate_cell:gcell,user_id:uid(),user_fio:ufio(),moved_ok:1});
       }
     }
     setMyCell('');GATE_PICK='';

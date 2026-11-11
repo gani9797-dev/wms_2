@@ -1,0 +1,137 @@
+<mxfile host="app.diagrams.net" modified="2026-11-12T00:00:00.000Z" agent="opencode" version="24.0.0" type="device">
+  <diagram id="wms-5steps" name="Тест-кейс: 5 шагов">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1050" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="WMS TiMLog — сквозной тест-кейс: приёмка → размещение → заказы/отгрузки → сортировка → отгрузка" style="text;html=1;fontSize=22;fontStyle=1;align=center;verticalAlign=middle;fontColor=#1C2331;" vertex="1" parent="1">
+          <mxGeometry x="250" y="20" width="1400" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- STEP 1 -->
+        <mxCell id="s1" value="ШАГ 1. Приёмка 100 строк" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;fontStyle=1;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="310" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="s1a" value="Документ A-105114 (100 строк, 10 SKU)&#xa;Партии: 100, даты производства: 28&#xa;Приёмка: 50 строк евро + 50 строк фин&#xa;Проверка: supplier_batch / prod_date / pallet_type" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F8E9;strokeColor=#81C784;fontSize=12;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="200" width="310" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="s1b" value="ТСД Приход: accept qty / sscc_accept&#xa;Закрытие прихода → StockSync → product_stock" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A5D6A7;fontSize=12;align=left;spacingLeft=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="360" width="310" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- STEP 2 -->
+        <mxCell id="s2" value="ШАГ 2. Размещение" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;fontStyle=1;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="400" y="100" width="310" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="s2a" value="Зона клиента strim заполнена&#xa;→ fallback в другую клиентскую зону (strim2)&#xa;→ красный текст на ТСД: «Товар будет размещён в зоне …»&#xa;→ уведомление в колокольчик WMS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#64B5F6;fontSize=12;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="400" y="200" width="310" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="s2b" value="Перемещение целой паллеты: любая зона/ячейка&#xa;Единственная проверка — тара: фин нельзя в евро-секцию/ячейку&#xa;Атомарный резерв ячейки (reserved_qty) при перемещении" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#90CAF9;fontSize=12;align=left;spacingLeft=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="360" width="310" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- STEP 3 -->
+        <mxCell id="s3" value="ШАГ 3. Заказы и отгрузки" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;fontStyle=1;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="760" y="100" width="330" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="s3a" value="20 заказов файлами (партии + даты производства)&#xa;5 отгрузок: S-205112…S-205116&#xa;Волна: S-205112 + S-205113 (общие ворота Exp1)&#xa;Построчно: S-205114 / S-205115 / S-205116&#xa;Приоритеты: high / normal / low / critical" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#FFB74D;fontSize=12;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="760" y="200" width="330" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="s3b" value="Блокировки: одно задание/отгрузка на сотрудника&#xa;Форма экспедиции: сборочная паллета + ворота + ячейка Exp1-1&#xa;Только ячейки зоны «сортировка»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#FFCC80;fontSize=12;align=left;spacingLeft=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="760" y="380" width="330" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- STEP 4 -->
+        <mxCell id="s4" value="ШАГ 4. Сортировка" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#6A1B9A;fontStyle=1;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="100" width="330" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="s4a" value="Строго из зоны «сортировка» (Exp1-1)&#xa;Скан отгрузки → скан товара → проверка принадлежности&#xa;Серийные номера: сверка с журналом прихода&#xa;Нет в журнале → «переместить товар в зону разбора»&#xa;Промежуточный статус reserved / done (онлайн-журнал)&#xa;Запрет разных отгрузок на одной паллете" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#BA68C8;fontSize=12;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="200" width="330" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="s4b" value="Без серийников: количество + SSCC&#xa;Запись shipment_sort_log + журнал склада (сортировка)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CE93D8;fontSize=12;align=left;spacingLeft=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="410" width="330" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- STEP 5 -->
+        <mxCell id="s5" value="ШАГ 5. Отгрузка" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#B71C1C;fontStyle=1;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1530" y="100" width="320" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="s5a" value="ТСД: скан кода отгрузки, выбор способа&#xa;ВАЛОМ: списать всю отгрузку, журнал «Отгрузка валом»&#xa;ПАЛЛЕТАМИ: скан каждого SSCC, списание товара на SSCC&#xa;Факт отгрузки: status=shipped, is_posted=1, дата&#xa;Excel → папка «факт отгрузка»&#xa;Колонка «Факт отгрузки» в модуле 03" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#EF9A9A;fontSize=12;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="1530" y="200" width="320" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="s5b" value="Списание в транзакции + FOR UPDATE&#xa;Остатки, ячейки, product_movements, журнал" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#FFCDD2;fontSize=12;align=left;spacingLeft=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1530" y="400" width="320" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ARROWS -->
+        <mxCell id="a12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#2E7D32;endArrow=block;endFill=1;" edge="1" parent="1" source="s1" target="s2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#1565C0;endArrow=block;endFill=1;" edge="1" parent="1" source="s2" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a34" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#E65100;endArrow=block;endFill=1;" edge="1" parent="1" source="s3" target="s4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a45" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#6A1B9A;endArrow=block;endFill=1;" edge="1" parent="1" source="s4" target="s5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- FEEDBACK ARROWS -->
+        <mxCell id="fb1" value="Нет подходящей ячейки / ошибка тары" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#B71C1C;fontColor=#B71C1C;endArrow=block;endFill=1;" edge="1" parent="1" source="s2" target="s2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="380" y="300" />
+              <mxPoint x="380" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fb2" value="Задание уже в работе / ячейка занята → 409" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#B71C1C;fontColor=#B71C1C;endArrow=block;endFill=1;" edge="1" parent="1" source="s3" target="s3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1110" y="320" />
+              <mxPoint x="1110" y="280" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fb3" value="Серийник не найден / смешивание отгрузок → ошибка на ТСД" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#B71C1C;fontColor=#B71C1C;endArrow=block;endFill=1;" edge="1" parent="1" source="s4" target="s4">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1490" y="340" />
+              <mxPoint x="1490" y="300" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- LEGEND -->
+        <mxCell id="legend" value="Легенда" style="text;html=1;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="560" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" value="Основной поток: приёмка → размещение → заказы/отгрузки → сортировка → отгрузка" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#333333;fontSize=12;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="600" width="700" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" value="Проверки и ошибки: красные пунктирные стрелки / текст на ТСД / 409 в API" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B71C1C;fontSize=12;align=left;spacingLeft=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="645" width="700" height="34" as="geometry" />
+        </mxCell>
+
+        <!-- DATA / ARTIFACTS -->
+        <mxCell id="data" value="Тестовые данные, оставленные в системе" style="text;html=1;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="720" width="400" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="dataBox" value="Приход: A-105114 (id 199)&#xa;Заказы: TEST-ORD-01…20 (id 62–81)&#xa;Отгрузки: S-205112…S-205117&#xa;Задания: TASK-202611-02474…02490&#xa;Ячейки: StrIm2-01…04, Exp1-1…6, Exp2/3/4-*, TEST-A-01…06, зона «Сортировка»&#xa;Журналы: wms_journal, shipment_sort_log, wms_serial_status&#xa;Файлы: папка «факт отгрузка» (*.xlsx)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#9E9E9E;fontSize=12;align=left;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="760" width="760" height="140" as="geometry" />
+        </mxCell>
+
+        <!-- RECOMMENDATIONS -->
+        <mxCell id="rec" value="Контрольные точки теста" style="text;html=1;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="850" y="720" width="300" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="recBox" value="1. Партии и даты производства сохраняются в product_stock.&#xa;2. При заполнении strim — fallback и уведомление; перемещение в любую зону; фин/евро.&#xa;3. Волна группирует SKU+партию; построчно — отдельные задания; блокировки сотрудников.&#xa;4. Сортировка только из зоны «сортировка»; с/н сверяются с журналом; смешивание запрещено.&#xa;5. Валом/паллетами: списание, журнал, Excel, факт отгрузки." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFDE7;strokeColor=#FBC02D;fontSize=12;align=left;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="850" y="760" width="900" height="150" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

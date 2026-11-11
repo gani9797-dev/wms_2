@@ -59,6 +59,7 @@ const ME=JSON.parse(localStorage.getItem('tsd_me')||'null');
 if(ME)$('who').textContent=ME.fio;
 const uid=()=>ME?ME.id:null;
 let DOC=null,ITEM=null,PALLET=null,CROSS=false,MARKS=0,CHZ=false,GATE='',PENDING_QTY=0,BATCH='',BATCHES=[];
+let PALLET_TYPE='euro'; // тип тары при приёмке: euro|fin
 let SCREEN=''; // текущий экран — для горячих клавиш формы «Приёмка»
 let PALLET_OPENED=''; // SSCC, для которого уже открыто тарное место
 let QTY_POSTED=false; // количество по текущему шагу уже записано (защита от повторного POST)
@@ -152,11 +153,13 @@ function scrEan(){SCREEN='ean';
  // Возврат на форму сканирования ШК: ранее введённые, но не подтверждённые данные сбрасываем.
  SER=[];SER_AGG={};NOSERIAL=false;PENDING_QTY=0;REJECT_REASON='';PROD_DATE='';ALLOW_EXCESS=false;noSerialBadge(false);$('m').innerHTML=`<div class="card"><div class="step">ЭТАП 3 · СКАН ТОВАРА</div><h2>Штрихкод товара (EAN-13)</h2>
 <input id="ean" placeholder="Скан..." autocomplete="off"><button id="go">Найти</button>
-<button class="ghost" id="all">Принять весь приход</button>
-<button class="ghost" id="fin">Завершить приёмку</button>
-<div class="mut">Паллета: ${PALLET||'—'}${CROSS?' · кросс-док':''}</div>
+ <button class="ghost" id="all">Принять весь приход</button>
+ <button class="ghost" id="fin">Завершить приёмку</button>
+ <div class="mut">Паллета: ${PALLET||'—'}${CROSS?' · кросс-док':''}</div>
+ <div class="kv"><i>Тара приёмки</i><b><select id="ptype" style="min-height:40px"><option value="euro"${PALLET_TYPE==='euro'?' selected':''}>Евро</option><option value="fin"${PALLET_TYPE==='fin'?' selected':''}>Фин</option></select></b></div>
 <div class="mut">«Принять весь приход» — всё количество по документу без номеров паллет. Не сработает для товаров со сканированием с/н или Честного знака.</div></div>`;
 const e=$('ean');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();find()}};$('go').onclick=find;$('fin').onclick=()=>go('finish',scrFinish);
+const pt=$('ptype');if(pt)pt.onchange=()=>{PALLET_TYPE=pt.value||'euro';toast('Тара приёмки: '+(PALLET_TYPE==='fin'?'Фин':'Евро'))};
 $('all').onclick=acceptAllReceipt;
  async function find(){const v=e.value.trim();if(!v){toast('Отсканируй штрихкод');return}
  const r=await api('?action=ean&receipt_id='+DOC.id+'&ean='+encodeURIComponent(v));const j=await r.json();
@@ -172,7 +175,7 @@ $('all').onclick=acceptAllReceipt;
 async function acceptAllReceipt(){
  if(!DOC){toast('Сначала выбери документ');return}
  if(!confirm('Принять весь приход в полном объёме? Товар будет принят без номеров паллет.'))return;
- const {s,j}=await post('accept_all',{receipt_id:DOC.id,user_id:uid(),user_fio:ME?ME.fio:''});
+ const {s,j}=await post('accept_all',{receipt_id:DOC.id,pallet_type:PALLET_TYPE,user_id:uid(),user_fio:ME?ME.fio:''});
  if(j.error){toast('Ошибка: '+j.error);return}
  const acc=j.accepted||[], skip=j.skipped||[];
  if(skip.length){
@@ -482,7 +485,7 @@ $('bk2').onclick=()=>back()}}
 // После записи возвращаемся на форму сканирования штрихкода (этап 3).
 async function acceptQty(q,allowExcess){const ae=allowExcess===true||ALLOW_EXCESS;
 const {s,j}=await post('qty',{receipt_id:DOC.id,sku:ITEM.sku,qty:q,pallet:PALLET,batch:BATCH,user_id:uid(),user_fio:ME?ME.fio:'',
- serials:SER,serial_aggs:SER_AGG,no_serial:NOSERIAL?1:0,reject_reason:REJECT_REASON,prod_date:PROD_DATE,allow_excess:ae?1:0});
+ pallet_type:PALLET_TYPE,serials:SER,serial_aggs:SER_AGG,no_serial:NOSERIAL?1:0,reject_reason:REJECT_REASON,prod_date:PROD_DATE,allow_excess:ae?1:0});
 if(j.error){if(j.need_batch){BATCHES=j.batches||BATCHES;toast('Выбери партию');go('batch',()=>scrBatch(null));return}
 if(j.need_serials){toast(j.error);go('serials',()=>scrSerials());return}
 if(j.need_prod_date){toast(j.error);go('accept',()=>scrAccept(q));return}
@@ -546,7 +549,7 @@ function scrQuality(){SCREEN='quality';$('m').innerHTML=`<div class="card"><div 
 $('g').onclick=async()=>{if(QTY_POSTED){toast('Количество уже принято');return}await acceptQty(PENDING_QTY)};
 $('b').onclick=()=>$('rz').classList.remove('hidden');
 $('bok').onclick=async()=>{const rs=$('rs').value;if(!rs){toast('Выбери причину брака');return}
-const sendDefect=async(allowExcess)=>{const {s,j}=await post('qty',{receipt_id:DOC.id,sku:ITEM.sku,qty:PENDING_QTY,quality:'defect',reason:rs,pallet:PALLET,batch:BATCH,user_id:uid(),user_fio:ME?ME.fio:'',allow_excess:allowExcess?1:0});return {s,j}};
+const sendDefect=async(allowExcess)=>{const {s,j}=await post('qty',{receipt_id:DOC.id,sku:ITEM.sku,qty:PENDING_QTY,quality:'defect',reason:rs,pallet:PALLET,batch:BATCH,pallet_type:PALLET_TYPE,user_id:uid(),user_fio:ME?ME.fio:'',allow_excess:allowExcess?1:0});return {s,j}};
 let r=await sendDefect(ALLOW_EXCESS);
 if(r.j.need_excess){
  const rem=(r.j.remaining!=null?r.j.remaining:0),ent=(r.j.entered!=null?r.j.entered:PENDING_QTY);
@@ -585,7 +588,7 @@ function draw(){$('m').innerHTML=`<div class="card"><div class="step">SSCC ${PAL
 document.querySelectorAll('#rw input').forEach(inp=>inp.onchange=()=>{rows[+inp.dataset.i][inp.dataset.k]=inp.dataset.k==='qty'?+inp.value||0:inp.value});
 $('add').onclick=()=>{rows.push({sku:'',qty:1,batch:BATCH});draw()};$('go').onclick=async()=>{
 const items=rows.filter(r=>r.sku&&r.qty>0).map(r=>({sku:r.sku,qty:r.qty,batch:r.batch||BATCH}));if(!items.length){toast('Заполни состав');return}
-const send=async(allowExcess)=>{const {j}=await post('sscc_accept',{receipt_id:DOC.id,sscc:PALLET,items,user_id:uid(),user_fio:ME?ME.fio:'',allow_excess:allowExcess?1:0});return j};
+const send=async(allowExcess)=>{const {j}=await post('sscc_accept',{receipt_id:DOC.id,sscc:PALLET,items,pallet_type:PALLET_TYPE,user_id:uid(),user_fio:ME?ME.fio:'',allow_excess:allowExcess?1:0});return j};
 let j=await send(false);
 if(j.need_excess){
  const rem=(j.remaining!=null?j.remaining:0),ent=(j.entered!=null?j.entered:0);

@@ -1287,6 +1287,26 @@ function wms_ensure_ext_schema(PDO $pdo): void
     // --- приёмка: приёмка без с/н + причина отбраковки по строке ---
     wms_ensure_column($pdo, 'receipt_operations', 'no_serial', 'TINYINT(1) NOT NULL DEFAULT 0', 'no_serial INTEGER DEFAULT 0', 'SMALLINT NOT NULL DEFAULT 0');
     wms_ensure_column($pdo, 'receipt_operations', 'reject_reason', 'TEXT NULL', 'reject_reason TEXT', 'TEXT NULL');
+    // Тип тары, выбранный при приёмке (euro|fin): дальше читает StockSync.
+    wms_ensure_column($pdo, 'receipt_operations', 'pallet_type', 'VARCHAR(10) NULL', 'pallet_type TEXT', 'VARCHAR(10) NULL');
+    // Онлайн-статусы серийных номеров (сортировка): reserved/done/released.
+    if ($drv === 'pgsql') {
+        wms_ensure_table($pdo, 'wms_serial_status', "CREATE TABLE IF NOT EXISTS wms_serial_status (
+          id BIGSERIAL PRIMARY KEY, serial_no VARCHAR(255) NOT NULL, sku VARCHAR(100) NULL,
+          shipment_id BIGINT NULL, status VARCHAR(20) NOT NULL DEFAULT 'reserved',
+          user_id BIGINT NULL, user_fio VARCHAR(255) NULL,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())");
+        try {
+            $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS ux_wms_serial_status_serial ON wms_serial_status (serial_no)');
+            $pdo->exec('CREATE INDEX IF NOT EXISTS ix_wms_serial_status_ship ON wms_serial_status (shipment_id, status)');
+        } catch (Throwable) {
+        }
+    } else {
+        wms_ensure_table($pdo, 'wms_serial_status', "CREATE TABLE IF NOT EXISTS wms_serial_status (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, serial_no TEXT NOT NULL UNIQUE, sku TEXT,
+          shipment_id INTEGER, status TEXT NOT NULL DEFAULT 'reserved', user_id INTEGER,
+          user_fio TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))");
+    }
     wms_ensure_column($pdo, 'receipt_flags', 'pallet', 'VARCHAR(50) NULL', 'pallet TEXT', 'VARCHAR(50) NULL');
     wms_ensure_column($pdo, 'receipt_flags', 'qty', 'DECIMAL(14,3) NULL', 'qty REAL', 'NUMERIC(14,3) NULL');
     wms_ensure_column($pdo, 'shipment_flags', 'pallet', 'VARCHAR(50) NULL', 'pallet TEXT', 'VARCHAR(50) NULL');

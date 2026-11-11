@@ -7,6 +7,7 @@ require_once __DIR__ . '/../shared/db.php';
 require_once __DIR__ . '/../shared/StorageZones.php';
 require_once __DIR__ . '/../shared/CellZones.php';
 require_once __DIR__ . '/../shared/ImportRobot.php';
+require_once __DIR__ . '/../shared/VghRobot.php';
 require_once __DIR__ . '/../shared/Roles.php';
 require_once __DIR__ . '/../10-sotrudniki/EmployeeAccess.php';
 
@@ -68,13 +69,16 @@ try {
         if ($dup->fetchColumn()) {
             zj(['error' => 'Зона с таким кодом уже существует'], 409);
         }
+        $clientIds = array_values(array_unique(array_filter(array_map('intval', (array)($b['client_ids'] ?? [])), fn($v) => $v > 0)));
+        $autoAdd = zb($b['auto_add_clients'] ?? 0);
         $p = [
             ':code' => $code,
             ':name' => $name,
             ':purpose' => trim((string)($b['purpose'] ?? '')) ?: null,
             ':ap' => zb($b['affects_placement'] ?? 0),
             ':ar' => zb($b['affects_reservation'] ?? 0),
-            ':cid' => (int)($b['contractor_id'] ?? 0) ?: null,
+            ':cid' => $clientIds ? (int)$clientIds[0] : ((int)($b['contractor_id'] ?? 0) ?: null),
+            ':auto' => $autoAdd,
             ':virt' => zb($b['is_virtual'] ?? 0),
             ':act' => zb($b['is_active'] ?? 1),
             ':wh' => (int)($b['warehouse_id'] ?? 0) ?: null,
@@ -86,7 +90,7 @@ try {
             $st = $pdo->prepare(
                 "UPDATE storage_zones SET code=:code, name=:name, purpose=:purpose,
                         affects_placement=:ap, affects_reservation=:ar, contractor_id=:cid,
-                        is_virtual=:virt, is_active=:act, warehouse_id=:wh
+                        auto_add_clients=:auto, is_virtual=:virt, is_active=:act, warehouse_id=:wh
                   WHERE id=:id"
             );
             $p[':id'] = $id;
@@ -115,11 +119,14 @@ try {
         } else {
             $st = $pdo->prepare(
                 "INSERT INTO storage_zones (code,name,purpose,affects_placement,affects_reservation,
-                        contractor_id,is_virtual,is_active,warehouse_id)
-                 VALUES (:code,:name,:purpose,:ap,:ar,:cid,:virt,:act,:wh)"
+                        contractor_id,auto_add_clients,is_virtual,is_active,warehouse_id)
+                 VALUES (:code,:name,:purpose,:ap,:ar,:cid,:auto,:virt,:act,:wh)"
             );
             $st->execute($p);
             $id = (int)$pdo->lastInsertId();
+        }
+        if (array_key_exists('client_ids', $b)) {
+            wms_storage_zone_clients_save($pdo, $id, $clientIds);
         }
         $row = null;
         foreach (wms_storage_zone_rows($pdo, false) as $z) {
@@ -266,7 +273,25 @@ if ($action === 'place_robot_save' && $method === 'POST') {
     require_once __DIR__ . '/../05-yacheyki-hraneniya/CellPlacement.php';
     $sdb = wms_storage_pdo();
     $b = json_decode(file_get_contents('php://input'), true) ?? [];
-    echo json_encode(['ok' => true, 'settings' => CellPlacement::saveRobotSettings($sdb, $b)], JSON_UNESCAPED_UNICODE);
+    $set = CellPlacement::saveRobotSettings($sdb, $b);
+    try {
+        CellPlacement::syncManagedSections($sdb);
+    } catch (Throwable) {
+    }
+    echo json_encode(['ok' => true, 'settings' => $set], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+if ($action === 'place_simulate' && $method === 'POST') {
+    require_once __DIR__ . '/../05-yacheyki-hraneniya/CellPlacement.php';
+    $sdb = wms_storage_pdo();
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    $wh = (int)($b['warehouse_id'] ?? 0);
+    try {
+        $res = CellPlacement::diagnose($sdb, (string)($b['pallet'] ?? ''), (string)($b['cell'] ?? ''), $wh ?: null);
+        echo json_encode($res, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    } catch (Throwable $e) {
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
     exit;
 }
 if ($action === 'robot_get') {
@@ -291,6 +316,39 @@ if ($action === 'robot_get') {
 
     if ($action === 'robot_log') {
         zj(['rows' => wms_robot_log_rows((int)($_GET['limit'] ?? 100))]);
+    }
+
+    // ---------------- Робот обновления ВГХ ----------------
+    if (in_array($action, ['vgh_robot_get', 'vgh_robot_save', 'vgh_robot_run'], true)) {
+        $vdb = wms_nomenclature_pdo();
+        if ($action === 'vgh_robot_get') {
+            // Ленивый запуск по расписанию при открытии вкладки робота.
+            $tick = null;
+            try {
+                $tick = wms_vgh_robot_tick($vdb);
+            } catch (Throwable) {
+            }
+            zj([
+                'settings' => wms_vgh_robot_settings($vdb),
+                'state' => wms_vgh_robot_state($vdb),
+                'sql' => wms_vgh_robot_sql(),
+                'log' => wms_vgh_robot_log($vdb, 30),
+                'last_tick' => $tick,
+            ]);
+        }
+        if ($action === 'vgh_robot_save' && $method === 'POST') {
+            $b = json_decode(file_get_contents('php://input'), true) ?? [];
+            $s = wms_vgh_robot_settings_save($vdb, $b);
+            zj(['ok' => true, 'settings' => $s, 'state' => wms_vgh_robot_state($vdb)]);
+        }
+        if ($action === 'vgh_robot_run' && $method === 'POST') {
+            $res = wms_vgh_robot_run($vdb, true);
+            zj($res + [
+                'settings' => wms_vgh_robot_settings($vdb),
+                'state' => wms_vgh_robot_state($vdb),
+                'log' => wms_vgh_robot_log($vdb, 30),
+            ]);
+        }
     }
 
     // ---------------- Интеграция и логирование (API v1) ----------------

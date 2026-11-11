@@ -16,8 +16,11 @@ declare(strict_types=1);
 // стоящие в резерве активных заданий отбора по этому документу).
 
 require_once __DIR__ . '/../shared/db.php';
+require_once __DIR__ . '/../shared/VghRobot.php';
 
 $pdo = wms_nomenclature_pdo();
+// Снимок ВГХ (робот «Обновление ВГХ»): колонки в product_stock.
+wms_vgh_robot_ensure($pdo);
 $action = $_GET['action'] ?? 'list';
 header('Content-Type: application/json; charset=utf-8');
 
@@ -298,6 +301,32 @@ function stock_enrich_row(array &$r, array $cellsMap, array $palletCells = []): 
     $hasPallet = trim((string)($r['pallet'] ?? '')) !== '';
     $r['weight_kg'] = round($goodsKg + ($hasPallet ? (float)$spec['tare_kg'] : 0.0), 2);
     $r['goods_weight_kg'] = round($goodsKg, 2);
+    // Снимок ВГХ от робота (модуль 13 → «Робот по обновлению ВГХ»):
+    // если снимок есть — показываем сохранённые значения, иначе расчёт на лету.
+    if (!empty($r['vgh_updated_at'])) {
+        $vl = (int)($r['vgh_length_mm'] ?? 0);
+        $vw = (int)($r['vgh_width_mm'] ?? 0);
+        $vh = (int)($r['vgh_height_mm'] ?? 0);
+        if ($vl > 0) {
+            $r['pallet_length_mm'] = $vl;
+            $r['pallet_length_m'] = round($vl / 1000, 3);
+        }
+        if ($vw > 0) {
+            $r['pallet_width_mm'] = $vw;
+            $r['pallet_width_m'] = round($vw / 1000, 3);
+        }
+        if ($vh > 0) {
+            $r['total_height_mm'] = $vh;
+            $r['total_height_m'] = round($vh / 1000, 3);
+        }
+        if ($r['vgh_weight_kg'] !== null && $r['vgh_weight_kg'] !== '') {
+            $r['weight_kg'] = round((float)$r['vgh_weight_kg'], 3);
+        }
+        if ($r['vgh_volume_m3'] !== null && $r['vgh_volume_m3'] !== '') {
+            $r['volume_m3'] = round((float)$r['vgh_volume_m3'], 3);
+        }
+        $r['vgh_snapshot'] = true;
+    }
     // Ячейка: что разрешено / что стоит.
     $ck = ((int)($r['warehouse_id'] ?? 0)) . '|' . trim((string)($r['cell'] ?? ''));
     $cell = $cellsMap[$ck] ?? null;
@@ -571,9 +600,15 @@ if ($action === 'list') {
     }
     if (!empty($_GET['search'])) {
         $q = '%' . trim((string)$_GET['search']) . '%';
-        $w[] = '(p.sku LIKE :q OR p.code LIKE :q OR p.name LIKE :q OR s.cell LIKE :q OR s.pallet LIKE :q OR s.supplier_batch LIKE :qb OR s.receipt_no LIKE :q)';
+        // Поиск по любым данным, которые видны/хранятся в реестре:
+        // склад, ячейка, паллета, качество, партия, даты, тара, артикул, код, наименование,
+        // категория, бренд, владелец, приход, количество.
+        $w[] = '(p.sku LIKE :q OR p.code LIKE :q OR p.name LIKE :q OR p.category LIKE :q OR p.brand LIKE :q'
+            . ' OR p.owner LIKE :q OR s.cell LIKE :q OR s.pallet LIKE :q OR s.supplier_batch LIKE :q'
+            . ' OR s.receipt_no LIKE :q OR s.quality LIKE :q'
+            . ' OR CAST(s.prod_date AS TEXT) LIKE :q OR CAST(s.pallet_date AS TEXT) LIKE :q'
+            . ' OR CAST(s.qty AS TEXT) LIKE :q OR COALESCE(w.name, \'\') LIKE :q)';
         $p[':q'] = $q;
-        $p[':qb'] = $q;
     }
     if (!empty($_GET['warehouse_id'])) {
         $w[] = 's.warehouse_id = :wh';
@@ -752,7 +787,8 @@ if ($action === 'list') {
         $orderBy .= ', s.id';
     }
     $cnt = $pdo->prepare(
-        "SELECT COUNT(*) FROM product_stock s LEFT JOIN products p ON p.id = s.product_id $where"
+        "SELECT COUNT(*) FROM product_stock s LEFT JOIN products p ON p.id = s.product_id
+           LEFT JOIN warehouses w ON w.id = s.warehouse_id $where"
     );
     $cnt->execute($p);
     $total = (int)$cnt->fetchColumn();
@@ -760,6 +796,7 @@ if ($action === 'list') {
     // s.pallet_type может отсутствовать в старых файлах — миграция выше уже отработала.
     $st = $pdo->prepare(
         "SELECT s.id, s.cell, s.pallet, s.supplier_batch, s.pallet_date, s.pallet_type, s.qty, s.receipt_no, s.warehouse_id,
+                s.vgh_length_mm, s.vgh_width_mm, s.vgh_height_mm, s.vgh_weight_kg, s.vgh_volume_m3, s.vgh_updated_at,
                 w.name AS warehouse, p.sku, p.code AS product_code, p.name AS product_name, p.unit, p.owner,
                 p.length_mm, p.width_mm, p.height_mm, p.weight_g, p.volume_m3 AS prod_volume_m3,
                 p.pallet_type AS prod_pallet_type, p.pallet_height_mm AS prod_pallet_height_mm,
@@ -861,38 +898,44 @@ if ($action === 'list') {
             }
         }
         $cur = stock_norm_pallet_type((string)($row['pallet_type'] ?? ''));
-        if ($cur === $want) {
+        $sameType = $cur === $want;
+        $oldBatch0 = trim((string)($row['supplier_batch'] ?? ''));
+        $oldDate0 = substr(trim((string)($row['pallet_date'] ?? '')), 0, 10);
+        $newDate0 = substr($palletDate, 0, 10);
+        // «Не изменено» — только если не изменились ни тара, ни партия, ни дата.
+        if ($sameType && $oldBatch0 === $batch && $oldDate0 === $newDate0) {
             echo json_encode(['ok' => true, 'unchanged' => true, 'pallet_type' => $want], JSON_UNESCAPED_UNICODE);
             exit;
         }
-        // Проверка ячейки: ячейка обязана принимать данный тип тары.
-        // Важно: одно соединение к storage-БД на весь запрос (SQLite: второе
-        // соединение упрётся в lock), курсоры закрываем до записи.
-        $cellAllowed = 'euro,fin';
-        $cellFound = false;
         $spdo = null;
-        try {
-            $spdo = wms_storage_pdo();
+        $cellFound = false;
+        if (!$sameType) {
+            // Проверка ячейки нужна только при смене типа тары.
+            // Одно соединение к storage-БД на весь запрос, курсоры закрываем до записи.
+            $cellAllowed = 'euro,fin';
             try {
-                $spdo->exec('PRAGMA busy_timeout = 5000');
+                $spdo = wms_storage_pdo();
+                try {
+                    $spdo->exec('PRAGMA busy_timeout = 5000');
+                } catch (Throwable) {
+                }
+                $cst = $spdo->prepare('SELECT allowed_pallet_types, pallet_type FROM storage_cells WHERE code = :c AND warehouse_id = :w LIMIT 1');
+                $cst->execute([':c' => trim((string)$row['cell']), ':w' => (int)$row['warehouse_id']]);
+                if ($c = $cst->fetch(PDO::FETCH_ASSOC)) {
+                    $cellFound = true;
+                    $cellAllowed = (string)($c['allowed_pallet_types'] ?? 'euro,fin');
+                }
+                try {
+                    $cst->closeCursor();
+                } catch (Throwable) {
+                }
             } catch (Throwable) {
             }
-            $cst = $spdo->prepare('SELECT allowed_pallet_types, pallet_type FROM storage_cells WHERE code = :c AND warehouse_id = :w LIMIT 1');
-            $cst->execute([':c' => trim((string)$row['cell']), ':w' => (int)$row['warehouse_id']]);
-            if ($c = $cst->fetch(PDO::FETCH_ASSOC)) {
-                $cellFound = true;
-                $cellAllowed = (string)($c['allowed_pallet_types'] ?? 'euro,fin');
+            if (!stock_cell_allows($cellAllowed, $want)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Изменение паллеты невозможно, ячейка не предназначена для данного типа паллеты.'], JSON_UNESCAPED_UNICODE);
+                exit;
             }
-            try {
-                $cst->closeCursor();
-            } catch (Throwable) {
-            }
-        } catch (Throwable) {
-        }
-        if (!stock_cell_allows($cellAllowed, $want)) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Изменение паллеты невозможно, ячейка не предназначена для данного типа паллеты.'], JSON_UNESCAPED_UNICODE);
-            exit;
         }
         $pdo->prepare('UPDATE product_stock SET pallet_type = :pt, supplier_batch = :b, pallet_date = :d WHERE id = :id')
             ->execute([':pt' => $want, ':b' => $batch, ':d' => $palletDate !== '' ? $palletDate : null, ':id' => $stockId]);
@@ -969,6 +1012,160 @@ if ($action === 'list') {
             // stock уже обновлён, ошибку записи в ячейки не пробрасываем.
         }
         echo json_encode(['ok' => true, 'pallet_type' => $want, 'pallet_label' => stock_pallet_label($want), 'cell_found' => $cellFound], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(400);
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    }
+} elseif ($action === 'qty_update' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Изменение количества в товарном запасе — только по праву stock_qty_edit
+    // (по умолчанию Администратор/Разработчик, остальным ролям включается в 13 → Персонал → Права).
+    if (!function_exists('wms_auth_can_permission')) {
+        require_once __DIR__ . '/../shared/Auth.php';
+    }
+    if (!wms_auth_can_permission('stock_qty_edit')) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Нет права на изменение количества товарного запаса'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    $stockId = (int)($b['stock_id'] ?? $b['id'] ?? 0);
+    $newQtyRaw = $b['qty'] ?? null;
+    $uid = function_exists('wms_auth_actor_id') ? (int)wms_auth_actor_id() : 0;
+    $fio = function_exists('wms_auth_fio') ? wms_auth_fio('Товарный запас') : 'Товарный запас';
+    try {
+        if ($stockId <= 0) {
+            throw new RuntimeException('Не выбрана строка запаса');
+        }
+        if ($newQtyRaw === null || $newQtyRaw === '' || !is_numeric($newQtyRaw)) {
+            throw new RuntimeException('Укажите количество числом');
+        }
+        $newQty = round((float)$newQtyRaw, 3);
+        if ($newQty < 0) {
+            throw new RuntimeException('Количество не может быть отрицательным');
+        }
+        $st = $pdo->prepare(
+            'SELECT s.*, p.sku, p.code AS product_code, p.name AS product_name, p.unit, p.quality
+               FROM product_stock s LEFT JOIN products p ON p.id = s.product_id WHERE s.id = :id'
+        );
+        $st->execute([':id' => $stockId]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            throw new RuntimeException('Строка запаса не найдена');
+        }
+        try {
+            $st->closeCursor();
+        } catch (Throwable) {
+        }
+        $oldQty = round((float)($row['qty'] ?? 0), 3);
+        if (abs($oldQty - $newQty) < 0.0005) {
+            echo json_encode(['ok' => true, 'unchanged' => true, 'qty' => $newQty], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $delta = round($newQty - $oldQty, 3);
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare('UPDATE product_stock SET qty = :q WHERE id = :id')->execute([':q' => $newQty, ':id' => $stockId]);
+            $pid = (int)($row['product_id'] ?? 0);
+            if ($pid > 0) {
+                try {
+                    $pdo->prepare('UPDATE products SET qty = COALESCE(qty,0) + :d WHERE id = :id')
+                        ->execute([':d' => $delta, ':id' => $pid]);
+                    $pdo->prepare(
+                        "INSERT INTO product_movements (product_id,doc_date,doc_type,doc_no,cell,qty_change,balance)
+                         VALUES (:p,:d,'correction',:no,:c,:q,(SELECT COALESCE(qty,0) FROM products WHERE id=:p))"
+                    )->execute([':p' => $pid, ':d' => date('Y-m-d H:i:s'), ':no' => 'Корректировка запаса',
+                        ':c' => (string)($row['cell'] ?? ''), ':q' => $delta]);
+                } catch (Throwable) {
+                }
+            }
+            // Синхронизация содержимого ячейки (05) и её остатка/статуса.
+            try {
+                $spdo = wms_storage_pdo();
+                $cellCode = trim((string)($row['cell'] ?? ''));
+                $wid = (int)($row['warehouse_id'] ?? 0);
+                $cell = null;
+                if ($cellCode !== '') {
+                    $cs = $spdo->prepare('SELECT * FROM storage_cells WHERE code = :c AND warehouse_id = :w LIMIT 1');
+                    $cs->execute([':c' => $cellCode, ':w' => $wid]);
+                    $cell = $cs->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
+                if ($cell) {
+                    $sku = (string)($row['sku'] ?? '');
+                    $sumSt = $pdo->prepare(
+                        'SELECT COALESCE(SUM(s.qty),0) FROM product_stock s JOIN products p ON p.id = s.product_id
+                          WHERE s.warehouse_id = :w AND LOWER(TRIM(s.cell)) = LOWER(:c) AND p.sku = :s'
+                    );
+                    $sumSt->execute([':w' => $wid, ':c' => $cellCode, ':s' => $sku]);
+                    $cellQty = round((float)$sumSt->fetchColumn(), 3);
+                    $cc = $spdo->prepare('SELECT id FROM cell_content WHERE cell_id = :id AND sku = :s LIMIT 1');
+                    $cc->execute([':id' => (int)$cell['id'], ':s' => $sku]);
+                    $ccId = (int)($cc->fetchColumn() ?: 0);
+                    if ($cellQty > 0.0005) {
+                        if ($ccId > 0) {
+                            $spdo->prepare('UPDATE cell_content SET qty = :q WHERE id = :id')
+                                ->execute([':q' => $cellQty, ':id' => $ccId]);
+                        } else {
+                            $spdo->prepare(
+                                'INSERT INTO cell_content (cell_id,product_code,sku,name,unit,qty,barcode,pallet)
+                                 VALUES (:c,:pc,:s,:n,:u,:q,:bc,:p)'
+                            )->execute([
+                                ':c' => (int)$cell['id'], ':pc' => $row['product_code'] ?? null, ':s' => $sku,
+                                ':n' => $row['product_name'] ?? $sku, ':u' => $row['unit'] ?? 'шт',
+                                ':q' => $cellQty, ':bc' => null, ':p' => $row['pallet'] ?? null,
+                            ]);
+                        }
+                    } elseif ($ccId > 0) {
+                        $spdo->prepare('DELETE FROM cell_content WHERE id = :id')->execute([':id' => $ccId]);
+                    }
+                    $sumCell = $spdo->prepare('SELECT COALESCE(SUM(qty),0) FROM cell_content WHERE cell_id = :id');
+                    $sumCell->execute([':id' => (int)$cell['id']]);
+                    $total = round((float)$sumCell->fetchColumn(), 3);
+                    require_once __DIR__ . '/../05-yacheyki-hraneniya/CellStatus.php';
+                    $newStatus = CellStatus::actual((string)($cell['status'] ?? 'free'), $total);
+                    $spdo->prepare('UPDATE storage_cells SET qty = :q, status = :st WHERE id = :id')
+                        ->execute([':q' => $total, ':st' => $newStatus, ':id' => (int)$cell['id']]);
+                    try {
+                        $spdo->prepare(
+                            "INSERT INTO cell_history (cell_id,user_id,user_fio,action,field,field_label,old_value,new_value)
+                             VALUES (:c,:u,:f,'update','qty','Количество (корректировка)',:o,:n)"
+                        )->execute([':c' => (int)$cell['id'], ':u' => $uid, ':f' => $fio,
+                            ':o' => (string)$oldQty, ':n' => (string)$newQty]);
+                    } catch (Throwable) {
+                    }
+                }
+            } catch (Throwable) {
+            }
+            // Журнал склада (14): корректировка количества.
+            try {
+                require_once __DIR__ . '/../shared/Journal.php';
+                WmsJournal::log(wms_journal_pdo(), [
+                    'op_type' => 'корректировка',
+                    'doc_type' => 'Товарный запас',
+                    'doc_no' => (string)($row['pallet'] ?? ''),
+                    'sku' => (string)($row['sku'] ?? ''),
+                    'product_name' => (string)($row['product_name'] ?? ''),
+                    'supplier_batch' => (string)($row['supplier_batch'] ?? ''),
+                    'qty' => $newQty,
+                    'pallet' => (string)($row['pallet'] ?? ''),
+                    'sscc' => (string)($row['pallet'] ?? ''),
+                    'cell_from' => (string)($row['cell'] ?? ''),
+                    'cell_to' => (string)($row['cell'] ?? ''),
+                    'zone' => 'Хранение',
+                    'user_id' => $uid,
+                    'user_fio' => $fio,
+                    'comment' => 'Корректировка количества: ' . $oldQty . ' → ' . $newQty . ' шт',
+                    'quality' => (string)($row['quality'] ?? 'новый'),
+                ]);
+            } catch (Throwable) {
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+        echo json_encode(['ok' => true, 'qty' => $newQty, 'delta' => $delta], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(400);
         echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

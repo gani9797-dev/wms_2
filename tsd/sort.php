@@ -25,7 +25,9 @@ require_once __DIR__ . '/../shared/PickBuffer.php';
 //   или заголовок X-Tsd-Token: tsd-12345
 
 const SORT_ZONE = 'shipment'; // зона отгрузки в справочнике ячеек
-const SORT_ZONES = ['storage', 'sorting', 'sort']; // зоны сортировки (хранение)
+// Сортировка разрешена строго из зоны «сортировка» (ячейки ворот Exp1-1).
+// 'storage' сюда сознательно не входит: обычное хранение — не зона сортировки.
+const SORT_ZONES = ['сортировка', 'sorting', 'sort'];
 
 function sot_ok(): bool
 {
@@ -267,6 +269,11 @@ function sot_accepted_serials(PDO $pdo, string $sku): array
         }
     } catch (Throwable) {
     }
+    // Дополнительно — журнал серийных номеров (Приход): именно с ним
+    // требуется сверка при сканировании на отгрузке.
+    foreach (sot_journal_inbound_serials($sku) as $v) {
+        $set[$v] = true;
+    }
     // Уже отгруженные с/н повторно отгружать нельзя — исключаем их.
     try {
         $st = $pdo->prepare(
@@ -317,23 +324,141 @@ function sot_pallet_created(string $sscc): ?string
     return null;
 }
 
-/** Ячейка паллеты: код, зона. */
+/** Ячейка паллеты: код, зона. Источники: cell_content и product_stock. */
 function sot_pallet_cell(string $sscc): ?array
 {
     $sp = sot_storage();
-    if (!$sp) {
-        return null;
+    // Основной остаток на PostgreSQL — product_stock: он обновляется
+    // перемещением в зону сортировки и приоритетнее старого cell_content.
+    $nom = sot_nom();
+    if ($nom && $sp) {
+        try {
+            $st = $nom->prepare('SELECT DISTINCT cell FROM product_stock WHERE TRIM(pallet)=:p AND qty>0 LIMIT 1');
+            $st->execute([':p' => trim($sscc)]);
+            $cell = trim((string)($st->fetchColumn() ?: ''));
+            if ($cell !== '') {
+                $cq = $sp->prepare('SELECT id, code, zone, warehouse_id FROM storage_cells WHERE code=:c LIMIT 1');
+                $cq->execute([':c' => $cell]);
+                $r = $cq->fetch();
+                if ($r) {
+                    return $r;
+                }
+            }
+        } catch (Throwable) {
+        }
+    }
+    if ($sp) {
+        try {
+            $st = $sp->prepare(
+                'SELECT c.id, c.code, c.zone, c.warehouse_id FROM cell_content cc
+                 JOIN storage_cells c ON c.id=cc.cell_id WHERE cc.pallet=:p ORDER BY cc.id DESC LIMIT 1'
+            );
+            $st->execute([':p' => $sscc]);
+            $r = $st->fetch();
+            if ($r) {
+                return $r;
+            }
+        } catch (Throwable) {
+        }
+    }
+    return null;
+}
+
+/** Серийники, принятые на входе, из журнала серийных номеров (op_type=Приход). */
+function sot_journal_inbound_serials(string $sku): array
+{
+    $sku = trim($sku);
+    if ($sku === '') {
+        return [];
+    }
+    $out = [];
+    try {
+        require_once __DIR__ . '/../shared/db.php';
+        require_once __DIR__ . '/../shared/Journal.php';
+        $jp = wms_journal_pdo();
+        $st = $jp->prepare("SELECT DISTINCT serial_no FROM wms_serial_journal
+                             WHERE op_type='Приход' AND sku=:s AND serial_no IS NOT NULL AND serial_no<>''");
+        $st->execute([':s' => $sku]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $v) {
+            $v = trim((string)$v);
+            if ($v !== '') {
+                $out[$v] = true;
+            }
+        }
+    } catch (Throwable) {
+    }
+    return array_keys($out);
+}
+
+/** Проверить/занять промежуточный статус серийника (другой пользователь не отсканирует). */
+function sot_serial_reserve(PDO $pdo, string $serial, string $sku, int $sid, ?int $uid, string $fio): array
+{
+    $serial = trim($serial);
+    if ($serial === '') {
+        return ['ok' => false, 'error' => 'пустой серийный номер'];
     }
     try {
-        $st = $sp->prepare(
-            'SELECT c.id, c.code, c.zone, c.warehouse_id FROM cell_content cc
-             JOIN storage_cells c ON c.id=cc.cell_id WHERE cc.pallet=:p ORDER BY cc.id DESC LIMIT 1'
-        );
-        $st->execute([':p' => $sscc]);
-        $r = $st->fetch();
-        return $r ?: null;
+        $st = $pdo->prepare('SELECT * FROM wms_serial_status WHERE serial_no=:s LIMIT 1');
+        $st->execute([':s' => $serial]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            $sameUser = $uid !== null && (int)($row['user_id'] ?? 0) === (int)$uid;
+            $sameShip = (int)($row['shipment_id'] ?? 0) === $sid;
+            $fresh = strtotime((string)($row['updated_at'] ?? '')) > time() - 600;
+            if (($row['status'] ?? '') === 'reserved' && !$sameUser && $fresh) {
+                return ['ok' => false, 'error' => 'Серийный номер ' . $serial . ' уже сканируется сотрудником '
+                    . (string)($row['user_fio'] ?: ('#' . $row['user_id'])), 'busy' => true];
+            }
+            if (($row['status'] ?? '') === 'done' && $sameShip) {
+                return ['ok' => false, 'error' => 'Серийный номер уже отсортирован по этой отгрузке: ' . $serial];
+            }
+        }
     } catch (Throwable) {
-        return null;
+    }
+    try {
+        $pdo->prepare("DELETE FROM wms_serial_status WHERE serial_no=:s")->execute([':s' => $serial]);
+        $pdo->prepare("INSERT INTO wms_serial_status (serial_no,sku,shipment_id,status,user_id,user_fio,created_at,updated_at)
+                       VALUES (:s,:sku,:sid,'reserved',:u,:f,NOW(),NOW())")
+            ->execute([':s' => $serial, ':sku' => $sku, ':sid' => $sid, ':u' => $uid, ':f' => $fio]);
+    } catch (Throwable) {
+        try {
+            $pdo->prepare("INSERT INTO wms_serial_status (serial_no,sku,shipment_id,status,user_id,user_fio,created_at,updated_at)
+                           VALUES (:s,:sku,:sid,'reserved',:u,:f,datetime('now'),datetime('now'))")
+                ->execute([':s' => $serial, ':sku' => $sku, ':sid' => $sid, ':u' => $uid, ':f' => $fio]);
+        } catch (Throwable) {
+        }
+    }
+    return ['ok' => true];
+}
+
+/** Освободить промежуточные статусы (Esc/сброс). */
+function sot_serial_unlock(PDO $pdo, int $sid, ?int $uid, bool $all): int
+{
+    try {
+        if ($all) {
+            $st = $pdo->prepare("DELETE FROM wms_serial_status WHERE shipment_id=:s AND status='reserved'");
+            $st->execute([':s' => $sid]);
+        } else {
+            $st = $pdo->prepare("DELETE FROM wms_serial_status WHERE shipment_id=:s AND status='reserved'
+                                  AND (:u IS NULL OR user_id=:u)");
+            $st->execute([':s' => $sid, ':u' => $uid]);
+        }
+        return $st->rowCount();
+    } catch (Throwable) {
+        return 0;
+    }
+}
+
+/** Автоочистка зависших промежуточных статусов серийников (TTL 15 минут). */
+function sot_serial_cleanup(PDO $pdo, int $ttlSec = 900): int
+{
+    try {
+        $sql = wms_is_sqlite($pdo)
+            ? "DELETE FROM wms_serial_status WHERE status='reserved' AND updated_at < datetime('now', '-" . max(60, $ttlSec) . " seconds')"
+            : "DELETE FROM wms_serial_status WHERE status='reserved' AND updated_at < NOW() - INTERVAL '" . max(60, $ttlSec) . " seconds'";
+        return (int)$pdo->exec($sql);
+    } catch (Throwable) {
+        return 0;
     }
 }
 
@@ -355,6 +480,11 @@ if (!sot_ok()) {
 $pdo = sot_db();
 $action = $_GET['action'] ?? 'shipment';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+// Снимаем просроченные резервы серийников перед любым действием.
+sot_serial_cleanup($pdo);
+if ($action === 'serial_cleanup') {
+    sj(['ok' => true, 'removed' => sot_serial_cleanup($pdo)]);
+}
 
 // --- Поиск отгрузки по коду (кнопка «Сортировка» -> форма сканирования отгрузки) ---
 if ($action === 'shipment' && $method === 'GET') {
@@ -405,8 +535,10 @@ if ($action === 'product' && $method === 'GET') {
         sj(['error' => 'Товар не принадлежит отгрузке: ' . $code], 404);
     }
     $plan = (float)$item['qty'];
-    $st = $pdo->prepare('SELECT COALESCE(SUM(qty),0) FROM tsd_picks WHERE shipment_id=:s AND sku=:sku');
-    $st->execute([':s' => $sid, ':sku' => $item['sku']]);
+    // «Нужно отсортировать» считаем по журналу сортировки, а не по факту отбора:
+    // отбор (tsd_picks) и сортировка — разные этапы, отбор не должен «съедать» сортировку.
+    $st = $pdo->prepare('SELECT COALESCE(SUM(qty),0) FROM shipment_sort_log WHERE shipment_id=:s AND item_id=:i');
+    $st->execute([':s' => $sid, ':i' => (int)$item['id']]);
     $fact = (float)$st->fetchColumn();
     $need = max(0.0, $plan - $fact);
     $flags = sot_product_flags((string)$item['sku']);
@@ -570,6 +702,8 @@ if ($action === 'serial' && $method === 'GET') {
     $sid = (int)($_GET['id'] ?? 0);
     $code = trim((string)($_GET['code'] ?? ''));
     $sku = trim((string)($_GET['sku'] ?? ''));
+    $uid = (int)($_GET['user_id'] ?? 0) ?: null;
+    $fio = trim((string)($_GET['user_fio'] ?? ''));
     if ($sid <= 0 || $code === '') {
         sj(['error' => 'нужны id отгрузки и серийный номер'], 422);
     }
@@ -581,10 +715,26 @@ if ($action === 'serial' && $method === 'GET') {
     // Сверка по всему списку принятых на входе с/н этой позиции.
     $accepted = $sku !== '' ? sot_accepted_serials($pdo, $sku) : [];
     if ($accepted && !in_array($code, $accepted, true)) {
-        sj(['error' => 'Серийный номер ' . $code . ' не найден среди принятых по позиции ' . $sku,
-            'reason' => 'Серийный номер не принят на входе'], 404);
+        sj(['error' => 'Серийный номер ' . $code . ' не найден в журнале серийных номеров по позиции ' . $sku
+            . '. Необходимо переместить товар в зону разбора.',
+            'reason' => 'Серийный номер не найден — товар в зону разбора'], 404);
     }
-    sj(['serial' => ['code' => $code, 'accepted' => count($accepted)]]);
+    // Промежуточный статус: с/н закрепляется за сотрудником, пока он не завершит.
+    $res = sot_serial_reserve($pdo, $code, $sku, $sid, $uid, $fio);
+    if (empty($res['ok'])) {
+        sj(['error' => $res['error'] ?? 'Серийный номер занят', 'busy' => (bool)($res['busy'] ?? false)], 409);
+    }
+    sj(['serial' => ['code' => $code, 'accepted' => count($accepted), 'status' => 'reserved']]);
+}
+
+// --- Освобождение промежуточных статусов серийников (Esc/сброс) ---
+if ($action === 'serial_unlock' && $method === 'POST') {
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    $sid = (int)($b['shipment_id'] ?? 0);
+    $uid = (int)($b['user_id'] ?? 0) ?: null;
+    $all = (int)($b['all'] ?? 0) === 1;
+    $n = sot_serial_unlock($pdo, $sid, $uid, $all);
+    sj(['ok' => true, 'released' => $n]);
 }
 
 // --- Подтверждение строки сортировки ---
@@ -622,9 +772,35 @@ if ($action === 'confirm' && $method === 'POST') {
         sj(['error' => 'Товар не принадлежит отгрузке'], 404);
     }
     $sku = (string)$item['sku'];
+    // Сортировка разрешена только из зоны «сортировка» (ячейки ворот Exp1-1).
+    if ($pallet === '') {
+        sj(['error' => 'Отсканируй паллету (SSCC): сортировка идёт из зоны «сортировка»'], 422);
+    }
+    $pcell = sot_pallet_cell($pallet);
+    $pzone = strtolower(trim((string)($pcell['zone'] ?? '')));
+    if (!$pcell) {
+        sj(['error' => 'Паллета ' . $pallet . ' не найдена на складе. Перемести товар в зону сортировки.',
+            'reason' => 'Паллета не в зоне сортировки'], 409);
+    }
+    if (!in_array($pzone, SORT_ZONES, true)) {
+        sj(['error' => 'Паллета ' . $pallet . ' находится в зоне «' . (string)$pcell['zone']
+            . '», а сортировка разрешена только из зоны «сортировка». Перемести товар в зону разбора.',
+            'reason' => 'Паллета не в зоне сортировки', 'zone' => (string)$pcell['zone']], 409);
+    }
+    // На одной паллете — только одна отгрузка.
+    try {
+        foreach (sot_pallet_shipments($pdo, $pallet) as $ps) {
+            if ((int)$ps['id'] !== $sid) {
+                sj(['error' => 'Паллета ' . $pallet . ' уже используется в отгрузке '
+                    . (string)$ps['doc_no'] . ' — разные отгрузки на одной паллете запрещены'], 409);
+            }
+        }
+    } catch (Throwable) {
+    }
     $plan = (float)$item['qty'];
-    $st = $pdo->prepare('SELECT COALESCE(SUM(qty),0) FROM tsd_picks WHERE shipment_id=:s AND sku=:sku');
-    $st->execute([':s' => $sid, ':sku' => $sku]);
+    // Остаток к сортировке — по журналу сортировки (см. action=product).
+    $st = $pdo->prepare('SELECT COALESCE(SUM(qty),0) FROM shipment_sort_log WHERE shipment_id=:s AND item_id=:i');
+    $st->execute([':s' => $sid, ':i' => $itemId]);
     $fact = (float)$st->fetchColumn();
     $need = max(0.0, $plan - $fact);
     if ($qty <= 0) {
@@ -637,6 +813,10 @@ if ($action === 'confirm' && $method === 'POST') {
     // Сверка идёт по ВСЕМУ списку принятых с/н позиции: если с/н на входе
     // не сканировали — сверять нечего (признак accepted пустой).
     $acceptedSerials = sot_accepted_serials($pdo, $sku);
+    // Дубли внутри одного списка (защита от обхода клиентской проверки).
+    if (count($serials) !== count(array_unique($serials))) {
+        sj(['error' => 'В списке есть повторяющиеся серийные номера — убери дубли'], 409);
+    }
     foreach ($serials as $sn) {
         $d = $pdo->prepare('SELECT id FROM shipment_sort_log WHERE shipment_id=:s AND serial_no=:c LIMIT 1');
         $d->execute([':s' => $sid, ':c' => $sn]);
@@ -644,8 +824,9 @@ if ($action === 'confirm' && $method === 'POST') {
             sj(['error' => 'Серийник уже отсканирован: ' . $sn], 409);
         }
         if ($acceptedSerials && !in_array($sn, $acceptedSerials, true)) {
-            sj(['error' => 'Серийный номер ' . $sn . ' не найден среди принятых по позиции ' . $sku,
-                'reason' => 'Серийный номер не принят на входе'], 404);
+            sj(['error' => 'Серийный номер ' . $sn . ' не найден в журнале серийных номеров по позиции ' . $sku
+                . '. Необходимо переместить товар в зону разбора.',
+                'reason' => 'Серийный номер не найден — товар в зону разбора'], 404);
         }
     }
     // Количество с/н должно совпадать с количеством штук (циклическое сканирование).
@@ -704,8 +885,17 @@ if ($action === 'confirm' && $method === 'POST') {
     }
     $pdo->beginTransaction();
     try {
-        $pdo->prepare('INSERT INTO tsd_picks (shipment_id,sku,qty,user_id,sscc) VALUES (:s,:sku,:q,:u,:sscc)')
-            ->execute([':s' => $sid, ':sku' => $sku, ':q' => $qty, ':u' => $uid, ':sscc' => ($pallet !== '' ? $pallet : null)]);
+        // Факт отбора = max(уже отобрано, отсортировано). Если позиция уже
+        // отобрана на ТСД, сортировка не должна удваивать tsd_picks.
+        $pq = $pdo->prepare('SELECT COALESCE(SUM(qty),0) FROM tsd_picks WHERE shipment_id=:s AND sku=:sku');
+        $pq->execute([':s' => $sid, ':sku' => $sku]);
+        $pickedNow = (float)$pq->fetchColumn();
+        $sortedAfter = round($fact + $qty, 3);
+        $addPick = round($sortedAfter - $pickedNow, 3);
+        if ($addPick > 0.0001) {
+            $pdo->prepare('INSERT INTO tsd_picks (shipment_id,sku,qty,user_id,sscc) VALUES (:s,:sku,:q,:u,:sscc)')
+                ->execute([':s' => $sid, ':sku' => $sku, ':q' => $addPick, ':u' => $uid, ':sscc' => ($pallet !== '' ? $pallet : null)]);
+        }
         // Лог сортировки: по одной строке на серийник и на марку.
         // Если нет ни серийников, ни марок — одна строка на позицию.
         $ins = $pdo->prepare(
@@ -784,6 +974,44 @@ if ($action === 'confirm' && $method === 'POST') {
             );
             foreach ($acceptMarks as $mk) {
                 $updMark->execute([':t' => $now, ':s' => $sid, ':m' => $mk]);
+            }
+        }
+        // Журнал склада: факт сортировки (виден в модуле 14).
+        try {
+            require_once __DIR__ . '/../shared/Journal.php';
+            WmsJournal::log(wms_journal_pdo(), [
+                'op_type' => 'сортировка',
+                'doc_type' => 'Отгрузка',
+                'doc_no' => (string)($head['doc_no'] ?? ''),
+                'sku' => $sku,
+                'product_name' => (string)($item['name'] ?? ''),
+                'supplier_batch' => (string)($item['supplier_batch'] ?? ''),
+                'qty' => $qty,
+                'pallet' => $pallet,
+                'sscc' => $pallet,
+                'cell_from' => (string)($pcell['code'] ?? ''),
+                'zone' => 'Сортировка',
+                'user_id' => $uid,
+                'user_fio' => (string)($b['user_fio'] ?? ''),
+                'comment' => 'Сортировка на воротах' . ($serials ? ' · с/н ' . count($serials) : ''),
+            ]);
+        } catch (Throwable) {
+        }
+        // Промежуточные статусы отсканированных с/н -> done (онлайн-журнал).
+        if ($serials) {
+            try {
+                $ph = implode(',', array_fill(0, count($serials), '?'));
+                $pdo->prepare("UPDATE wms_serial_status SET status='done', updated_at=NOW()
+                                WHERE shipment_id=? AND serial_no IN ($ph)")
+                    ->execute(array_merge([$sid], $serials));
+            } catch (Throwable) {
+                try {
+                    $ph = implode(',', array_fill(0, count($serials), '?'));
+                    $pdo->prepare("UPDATE wms_serial_status SET status='done', updated_at=datetime('now')
+                                    WHERE shipment_id=? AND serial_no IN ($ph)")
+                        ->execute(array_merge([$sid], $serials));
+                } catch (Throwable) {
+                }
             }
         }
         // Прогресс отгрузки считаем НА ТЕКУЩЕМ подключении: внутри транзакции

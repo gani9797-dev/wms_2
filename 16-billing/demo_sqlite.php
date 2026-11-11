@@ -12,6 +12,8 @@ declare(strict_types=1);
 //   POST ?action=event_add                — ручное событие
 //   POST ?action=event_delete
 //   POST ?action=run                      — биллинговый прогон {from,to,clients[],mode}
+//   GET  ?action=recalc_preview&client_id=&from=&to= — предпросмотр пересчёта клиента
+//   POST ?action=recalc                   — пересчёт клиента за период (полные месяцы)
 //   GET  ?action=charges&client_id=&from=&to= — начисления
 //   POST ?action=adjust                   — корректировка начисления
 //   GET  ?action=storage&client_id=&from=&to= — расшифровка суточного хранения
@@ -308,6 +310,28 @@ try {
             'clients' => (array)($body['clients'] ?? []),
             'mode' => (string)($body['mode'] ?? 'FULL'),
         ]);
+        j($res);
+    }
+
+    // Пересчёт по одному клиенту за произвольный период (полные месяцы).
+    if ($action === 'recalc_preview') {
+        j(billing_recalc_preview(
+            $pdo,
+            (int)($_GET['client_id'] ?? 0),
+            substr((string)($_GET['from'] ?? ''), 0, 10),
+            substr((string)($_GET['to'] ?? ''), 0, 10)
+        ));
+    }
+
+    if ($action === 'recalc' && $method === 'POST') {
+        $uid = function_exists('wms_auth_actor_id') ? (int)wms_auth_actor_id() : 0;
+        $res = billing_recalc_client(
+            $pdo,
+            (int)($body['client_id'] ?? 0),
+            substr((string)($body['from'] ?? ''), 0, 10),
+            substr((string)($body['to'] ?? ''), 0, 10),
+            $uid
+        );
         j($res);
     }
 

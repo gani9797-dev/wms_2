@@ -161,7 +161,8 @@ if ($action === 'finish' && $method === 'POST') {
     $pr = progress($pdo, $sid);
     $pdo->beginTransaction();
     try {
-        $pdo->prepare("UPDATE shipments SET status='assembled', readiness=:p, assembly_end=COALESCE(assembly_end,datetime('now')) WHERE id=:id")
+        $nowSql = function_exists('wms_now_sql') ? wms_now_sql($pdo) : 'NOW()';
+        $pdo->prepare("UPDATE shipments SET status='assembled', readiness=:p, assembly_end=COALESCE(assembly_end,$nowSql) WHERE id=:id")
             ->execute([':p' => $pr['pct'], ':id' => $sid]);
         $pdo->prepare("INSERT INTO shipment_history (shipment_id,user_id,action,old_status,new_status) VALUES (:s,:u,'status',:o,'assembled')")
             ->execute([':s' => $sid, ':u' => $userId, ':o' => $head['status']]);
@@ -178,7 +179,7 @@ if ($action === 'ship_list') {
     require_once __DIR__ . '/../shared/ShipmentPallets.php';
     $in = "'assembled','packing','packed','on_check','checked','ready'";
     $rows = $pdo->query(
-        "SELECT s.id, s.doc_no, s.status, s.consignee, s.vehicle, s.gate, s.plan_shipment_date, w.name AS warehouse
+        "SELECT s.id, s.doc_no, s.status, s.consignee, s.vehicle, s.gate, s.loading_type, s.plan_shipment_date, w.name AS warehouse
          FROM shipments s LEFT JOIN warehouses w ON w.id=s.warehouse_id
          WHERE s.status IN ($in) ORDER BY s.id DESC LIMIT 50"
     )->fetchAll();
@@ -256,4 +257,26 @@ if ($action === 'ship_pallet' && $method === 'POST') {
     j($res);
 }
 
-j(['error' => 'unknown action: ?action=tasks|task|scan|finish|ship_list|ship_task|ship_pallet'], 404);
+// --- «Отгрузить ТС»: отгрузка валом (списать всю отгрузку) ---
+if ($action === 'ship_all' && $method === 'POST') {
+    require_once __DIR__ . '/../shared/ShipmentPallets.php';
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    $sid = (int)($b['shipment_id'] ?? $_GET['id'] ?? 0);
+    if ($sid <= 0 && trim((string)($b['doc_no'] ?? '')) !== '') {
+        $h = $pdo->prepare('SELECT id FROM shipments WHERE doc_no=:q LIMIT 1');
+        $h->execute([':q' => trim((string)$b['doc_no'])]);
+        $sid = (int)($h->fetchColumn() ?: 0);
+    }
+    $uid = (int)($b['user_id'] ?? 0) ?: null;
+    $fio = trim((string)($b['user_fio'] ?? ''));
+    if ($sid <= 0) {
+        j(['error' => 'нужен shipment_id или doc_no'], 422);
+    }
+    $res = wms_ship_bulk($pdo, $sid, $uid, $fio);
+    if (!$res['ok']) {
+        j(['error' => $res['error'], 'code' => $res['code'] ?? 400], $res['code'] ?? 400);
+    }
+    j($res);
+}
+
+j(['error' => 'unknown action: ?action=tasks|task|scan|finish|ship_list|ship_task|ship_pallet|ship_all'], 404);

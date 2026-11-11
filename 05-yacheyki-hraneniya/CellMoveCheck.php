@@ -90,11 +90,8 @@ final class CellMoveCheck
             return $bad('blocked', 'Ячейка ' . $code . ' заблокирована'
                 . ($r !== '' ? ': ' . $r : '') . ' — перемещение запрещено');
         }
-        // 3) Зона и тип: целый паллет — только паллетная ячейка зоны хранения.
-        $zone = trim((string)($cell['zone'] ?? 'storage'));
-        if ($zone !== '' && $zone !== 'storage') {
-            return $bad('zone', 'Ячейка ' . $code . ' не в зоне хранения (зона: ' . $zone . ') — ставить паллету нельзя');
-        }
+        // 3) Перемещение целых паллет разрешено в ячейку ЛЮБОЙ зоны.
+        // Ограничение по зоне для перемещения не применяем (только при размещении).
         $ctype = trim((string)($cell['cell_type'] ?? 'pallet'));
         if ($ctype !== '' && $ctype !== 'pallet') {
             return $bad('cell_type', 'Ячейка ' . $code . ' не паллетная (тип: ' . $ctype . ') — целый паллет не встанет');
@@ -211,7 +208,11 @@ final class CellMoveCheck
         }
         // 14) Секционные правила (режим секции под евро/фин, вместимость яруса).
         if ($snap !== null && isset($snap['bySection'], $snap['byLevel'])) {
-            $chk = CellPlacement::checkCell($cell, $ptype, $pheight, $snap['bySection'], $snap['byLevel']);
+            // Передаём настройки робота: иначе секционное правило «евро/фин»
+            // не работает при перемещении целой паллеты.
+            $robot = CellPlacement::robotSettings($pdo);
+            $chk = CellPlacement::checkCell($cell, $ptype, $pheight, $snap['bySection'], $snap['byLevel'],
+                null, null, $robot);
             if (!$chk['ok']) {
                 return $bad('section', 'Ячейка ' . $code . ': ' . ($chk['error'] ?? 'не подходит по правилам секции'));
             }

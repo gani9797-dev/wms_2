@@ -215,6 +215,7 @@ function wms_permissions_catalog(): array
         'dev_errors' => 'Журнал ошибок (колокольчик, только «Разработчик»)',
         'labels_print' => 'Печать этикеток и просмотр кодов (Администратор/Разработчик)',
         'emp_password' => 'Смена пароля сотрудникам (Администратор/Разработчик)',
+        'stock_qty_edit' => 'Товарный запас: изменение количества, шт (Администратор/Разработчик)',
     ];
 }
 
@@ -305,6 +306,7 @@ function wms_role_permissions_get(PDO $pdo, string $role): array
         if ($role === 'Администратор') {
             $out['emp_password'] = true;
             $out['labels_print'] = true;
+            $out['stock_qty_edit'] = true;
         }
         // «Разработчик» — служебная роль: права всегда полные (включая журнал ошибок),
         // даже если строки в role_permissions ещё не созданы.

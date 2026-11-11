@@ -490,7 +490,9 @@ CREATE TABLE IF NOT EXISTS receipt_operations (
   -- Приёмка без серийных номеров (в форме ТСД вводили «000»).
   no_serial SMALLINT NOT NULL DEFAULT 0,
   -- Причина отбраковки строки (комментарий по строке приёмки).
-  reject_reason TEXT NULL
+  reject_reason TEXT NULL,
+  -- Тип тары, выбранный при приёмке (euro|fin).
+  pallet_type VARCHAR(10) NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ro_receipt ON receipt_operations (receipt_id);
 
@@ -705,7 +707,14 @@ CREATE TABLE IF NOT EXISTS product_stock (
   prod_date DATE NULL,
   qty NUMERIC(14,3) NOT NULL DEFAULT 0,
   receipt_id BIGINT NULL,
-  receipt_no VARCHAR(50) NULL
+  receipt_no VARCHAR(50) NULL,
+  -- Снимок ВГХ (робот «Обновление ВГХ», модуль 13).
+  vgh_length_mm INTEGER NULL,
+  vgh_width_mm INTEGER NULL,
+  vgh_height_mm INTEGER NULL,
+  vgh_weight_kg NUMERIC(14,3) NULL,
+  vgh_volume_m3 NUMERIC(16,6) NULL,
+  vgh_updated_at TIMESTAMP NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ps_prod ON product_stock (product_id);
 CREATE INDEX IF NOT EXISTS idx_ps_wh ON product_stock (warehouse_id);
@@ -1565,6 +1574,15 @@ ALTER TABLE storage_zones ADD COLUMN IF NOT EXISTS affects_placement SMALLINT NO
 ALTER TABLE storage_zones ADD COLUMN IF NOT EXISTS affects_reservation SMALLINT NOT NULL DEFAULT 0;
 ALTER TABLE storage_zones ADD COLUMN IF NOT EXISTS contractor_id BIGINT NULL;
 ALTER TABLE storage_zones ADD COLUMN IF NOT EXISTS is_virtual SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE storage_zones ADD COLUMN IF NOT EXISTS auto_add_clients SMALLINT NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS storage_zone_clients (
+  id BIGSERIAL PRIMARY KEY,
+  zone_id BIGINT NOT NULL,
+  contractor_id BIGINT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE (zone_id, contractor_id)
+);
 
 CREATE TABLE IF NOT EXISTS cell_types (
   id BIGSERIAL PRIMARY KEY,
@@ -1792,6 +1810,24 @@ ALTER TABLE storage_cells ADD COLUMN IF NOT EXISTS quality_lock SMALLINT NOT NUL
 ALTER TABLE product_stock ADD COLUMN IF NOT EXISTS prod_date DATE NULL;
 ALTER TABLE receipt_operations ADD COLUMN IF NOT EXISTS no_serial SMALLINT NOT NULL DEFAULT 0;
 ALTER TABLE receipt_operations ADD COLUMN IF NOT EXISTS reject_reason TEXT NULL;
+ALTER TABLE receipt_operations ADD COLUMN IF NOT EXISTS pallet_type VARCHAR(10) NULL;
+
+-- Промежуточные (онлайн) статусы серийных номеров на сортировке.
+-- reserved — с/н отсканирован и удерживается оператором, released — освобождён,
+-- done — сортировка подтверждена. Отдельный журнал для вкладки модуля 14.
+CREATE TABLE IF NOT EXISTS wms_serial_status (
+  id BIGSERIAL PRIMARY KEY,
+  serial_no VARCHAR(255) NOT NULL,
+  sku VARCHAR(100) NULL,
+  shipment_id BIGINT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'reserved',
+  user_id BIGINT NULL,
+  user_fio VARCHAR(255) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_wms_serial_status_serial ON wms_serial_status (serial_no);
+CREATE INDEX IF NOT EXISTS ix_wms_serial_status_ship ON wms_serial_status (shipment_id, status);
 ALTER TABLE receipt_flags ADD COLUMN IF NOT EXISTS pallet VARCHAR(50) NULL;
 ALTER TABLE receipt_flags ADD COLUMN IF NOT EXISTS qty NUMERIC(14,3) NULL;
 ALTER TABLE shipment_flags ADD COLUMN IF NOT EXISTS pallet VARCHAR(50) NULL;
@@ -1978,3 +2014,44 @@ CREATE TABLE IF NOT EXISTS wms_webhook_outbox (
   sent_at TIMESTAMP NULL
 );
 CREATE INDEX IF NOT EXISTS idx_wh_outbox_status ON wms_webhook_outbox (status, next_attempt_at);
+
+-- ============================================================
+-- Робот обновления ВГХ (модуль 13): расписание и журнал запусков
+-- ============================================================
+CREATE TABLE IF NOT EXISTS vgh_robot_settings (
+  id BIGINT PRIMARY KEY,
+  enabled SMALLINT NOT NULL DEFAULT 0,
+  start_at TIMESTAMP NULL,
+  end_at TIMESTAMP NULL,
+  interval_min INTEGER NOT NULL DEFAULT 60,
+  last_run_at TIMESTAMP NULL,
+  next_run_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL
+);
+INSERT INTO vgh_robot_settings (id, enabled, interval_min) VALUES (1, 0, 60)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS vgh_robot_log (
+  id BIGSERIAL PRIMARY KEY,
+  started_at TIMESTAMP NULL,
+  finished_at TIMESTAMP NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'OK',
+  processed INTEGER NOT NULL DEFAULT 0,
+  updated INTEGER NOT NULL DEFAULT 0,
+  products_updated INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  message TEXT NULL
+);
+
+-- ============================================================
+-- Уникальность серийных номеров (защита от гонок при сортировке/отгрузке)
+-- ============================================================
+CREATE UNIQUE INDEX IF NOT EXISTS ux_sort_log_serial
+  ON shipment_sort_log (shipment_id, serial_no)
+  WHERE serial_no IS NOT NULL AND serial_no <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_shipment_flags_serial
+  ON shipment_flags (shipment_id, serial_no)
+  WHERE flag_type = 'serial' AND serial_no IS NOT NULL AND serial_no <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_receipt_flags_serial
+  ON receipt_flags (receipt_id, serial_no)
+  WHERE flag_type = 'serial' AND serial_no IS NOT NULL AND serial_no <> '';

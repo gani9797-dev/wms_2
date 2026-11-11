@@ -271,19 +271,17 @@ final class CellRepository
      */
     private function decorateRobotTare(array &$r): void
     {
-        $r['robot_tare'] = 'ok';
-        $r['robot_tare_comment'] = '';
-        $key = CellPlacement::sectionKey($r);
-        $bad = $this->problemSections()[$key] ?? null;
-        if ($bad !== null) {
-            $r['robot_tare'] = 'skip';
-            $r['robot_tare_comment'] = (string)($bad['comment'] ?? '');
-            return;
-        }
         $label = self::sectionLabel($r);
-        $r['robot_tare_comment'] = $label !== ''
-            ? 'Секция ' . $label . ' настроена: робот может настроить тару'
-            : 'Секция настроена: робот может настроить тару';
+        $sec = $label !== '' ? 'Секция ' . $label : 'Секция';
+        // Флаг «разные типы паллет»: робот не управляет тарой для этой ячейки.
+        // Флаг снят: робот закрепляет за секцией первый размещённый тип.
+        if ((int)($r['allow_multi_pallet_types'] ?? 0) === 1) {
+            $r['robot_tare'] = 'off';
+            $r['robot_tare_comment'] = 'В ячейке разрешены разные типы паллет — робот не управляет тарой (можно ставить любой тип)';
+        } else {
+            $r['robot_tare'] = 'ok';
+            $r['robot_tare_comment'] = $sec . ': робот настраивает тару — первый размещённый тип закрепляется за секцией';
+        }
     }
 
     /** Название секции: корпус-ряд (например A-01). */

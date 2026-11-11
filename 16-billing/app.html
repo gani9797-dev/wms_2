@@ -56,6 +56,7 @@ tr:hover td{background:#FAFAFF}
 <button data-t="tariffs">Тарифы</button>
 <button data-t="events">События</button>
 <button data-t="run">Прогон</button>
+<button data-t="recalc">Пересчитать</button>
 <button data-t="charges">Начисления</button>
 <button data-t="storage">Хранение</button>
 <button data-t="periods">Периоды</button>
@@ -103,7 +104,7 @@ async function refs(){if(REFS)return REFS;REFS=await api('?action=refs');return 
 function paintTabs(){document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===TAB))}
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{TAB=b.dataset.t;paintTabs();render()});
 function prevPeriod(){const d=new Date();const f=new Date(d.getFullYear(),d.getMonth()-1,1);const t=new Date(d.getFullYear(),d.getMonth(),0);
- const iso=x=>x.toISOString().slice(0,10);return [iso(f),iso(t)]}
+ const iso=x=>x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');return [iso(f),iso(t)]}
 function periodInputsHtml(from,to){return `<div class="bar"><span class="hint">Период:</span><input type="date" id="pf" value="${from}"><input type="date" id="pt" value="${to}"></div>`}
 
 async function render(){
@@ -112,6 +113,7 @@ async function render(){
   if(TAB==='tariffs')return renderTariffs();
   if(TAB==='events')return renderEvents();
   if(TAB==='run')return renderRun();
+  if(TAB==='recalc')return renderRecalc();
   if(TAB==='charges')return renderCharges();
   if(TAB==='storage')return renderStorage();
   if(TAB==='periods')return renderPeriods();
@@ -344,6 +346,68 @@ async function renderRun(){
  };
  $('rdry').onclick=()=>go('DRY_RUN');
  $('rfull').onclick=()=>go('FULL');
+}
+
+/* ---------------- Пересчёт по клиенту ---------------- */
+async function renderRecalc(){
+ const r=await refs();const [f,t]=prevPeriod();
+ const clients=r.clients||[];
+ $('pane').innerHTML=`<div class="card" style="padding:16px">
+ <h2 style="margin:0 0 6px;font-size:18px">Пересчитать начисления клиента</h2>
+ <div class="hint">Выберите клиента и период. Пересчитываются <b>полные календарные месяцы</b>, пересекающиеся с периодом: все операции клиента (разовые события и суточное хранение) рассчитываются заново, старые активные начисления замещаются новыми. Ручные корректировки сохраняются. Закрытые периоды нужно сначала открыть в разделе «Периоды».</div>
+ <div class="grid3" style="margin-top:6px">
+   <div class="fld"><label>Клиент *</label><select id="rcClient">${clients.map((c,i)=>`<option value="${c.id}"${i===0?' selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+   <div class="fld"><label>Период с *</label><input type="date" id="rcFrom" value="${f}"></div>
+   <div class="fld"><label>По *</label><input type="date" id="rcTo" value="${t}"></div>
+ </div>
+ <div id="rcPreview" class="hint" style="margin:8px 0"></div>
+ <div class="bar"><button class="btn pri" id="rcGo">Пересчитать</button></div>
+ <div id="rcRes"></div></div>`;
+
+ const cid=()=>+$('rcClient').value||0;
+ const qs=()=>'client_id='+cid()+'&from='+encodeURIComponent($('rcFrom').value)+'&to='+encodeURIComponent($('rcTo').value);
+ const preview=async()=>{
+  const box=$('rcPreview');
+  if(!cid()){box.innerHTML='<span style="color:#B71C1C">Выберите клиента</span>';$('rcGo').disabled=true;return}
+  box.textContent='Проверка периода…';
+  try{
+   const p=await api('?action=recalc_preview&'+qs());
+   const months=(p.months||[]).map(m=>m.label).join(', ');
+   let html=`К пересчёту: <b>${esc(months||'—')}</b> · событий: <b>${p.events}</b> · активных начислений: <b>${p.active_charges}</b> · суток хранения: <b>${p.storage_days}</b>`;
+   if((p.closed_months||[]).length)html+='<div style="color:#B71C1C;margin-top:4px">⛔ Закрытые периоды: '+esc(p.closed_months.join(', '))+' — сначала откройте период в разделе «Периоды».</div>';
+   box.innerHTML=html;
+   $('rcGo').disabled=(p.closed_months||[]).length>0;
+  }catch(e){box.innerHTML='<span style="color:#B71C1C">'+esc(e.message)+'</span>';$('rcGo').disabled=true}
+ };
+ $('rcClient').onchange=preview;$('rcFrom').onchange=preview;$('rcTo').onchange=preview;
+
+ $('rcGo').onclick=async()=>{
+  if(!cid()){toast('Выберите клиента');return}
+  const name=($('rcClient').selectedOptions[0]||{}).textContent||'';
+  if(!confirm(`Пересчитать клиента «${name}» за ${$('rcFrom').value} — ${$('rcTo').value}?\nВсе операции периода будут рассчитаны заново, старые начисления замещены.`))return;
+  const btn=$('rcGo');btn.disabled=true;$('rcRes').innerHTML='<div class="hint">Расчёт…</div>';
+  try{
+   const d=await api('?action=recalc',{client_id:cid(),from:$('rcFrom').value,to:$('rcTo').value});
+   const problems=[];
+   (d.months||[]).forEach(m=>(m.stats.problems||[]).forEach(p=>problems.push(Object.assign({month:m.label},p))));
+   $('rcRes').innerHTML=`<div class="card" style="padding:14px">
+    <b>Пересчёт выполнен: ${esc(d.client_name)}</b>
+    <div class="hint">Период: ${esc((d.months||[]).map(m=>m.label).join(', '))}</div>
+    <table style="margin-top:8px"><thead><tr><th>Месяц</th><th>Событий</th><th>Начислено</th><th>Без тарифа</th><th>Услуга отключена</th><th>Суток хранения</th><th>Сумма без НДС</th></tr></thead><tbody>
+    ${(d.months||[]).map(m=>`<tr><td>${esc(m.label)}</td><td>${m.stats.events}</td><td>${m.stats.charged}</td><td>${m.stats.no_tariff}</td><td>${m.stats.service_disabled}</td><td>${m.stats.storage_days}</td><td class="pos">${fmt(m.stats.amount_net)}</td></tr>`).join('')}
+    <tr><td><b>Итого</b></td><td><b>${d.totals.events}</b></td><td><b>${d.totals.charged}</b></td><td>${d.totals.no_tariff}</td><td>${d.totals.service_disabled}</td><td><b>${d.totals.storage_days}</b></td><td><b>${fmt(d.totals.amount_net)}</b></td></tr>
+    </tbody></table>
+    ${problems.length?('<h3 style="margin:12px 0 6px;font-size:14px">Проблемы ('+problems.length+')</h3><table><thead><tr><th>Месяц</th><th>Дата</th><th>Тип</th><th>Услуга</th><th>Причина</th></tr></thead><tbody>'+
+      problems.map(p=>`<tr><td>${esc(p.month||'')}</td><td>${esc(p.date||'')}</td><td>${esc(p.type||'')}</td><td>${esc(p.service||'')}</td><td>${esc(p.reason||'')}</td></tr>`).join('')+'</tbody></table>'):'<div class="hint" style="margin-top:8px;color:#1B7F32">Проблем нет</div>'}
+    <div style="margin-top:10px"><button class="btn" id="rcToCharges">Открыть начисления →</button></div>
+   </div>`;
+   $('rcToCharges').onclick=()=>{TAB='charges';paintTabs();render()};
+   toast('Пересчитано: '+fmt(d.totals.amount_net)+' без НДС');
+   preview();
+  }catch(e){$('rcRes').innerHTML='<div class="card" style="padding:14px;color:#B71C1C">Ошибка: '+esc(e.message)+'</div>'}
+  finally{btn.disabled=false}
+ };
+ preview();
 }
 
 /* ---------------- Начисления ---------------- */

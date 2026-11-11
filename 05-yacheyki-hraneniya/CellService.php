@@ -534,7 +534,7 @@ final class CellService
             // Освободили ячейку полностью — сбрасываем тип паллеты и пересчитываем
             // временные блокировки яруса ("временно занята" при 3 финах на 3.6).
             if ($newSrc <= 0) {
-                $this->pdo->prepare("UPDATE storage_cells SET pallet_type = NULL, pallet_count = 0 WHERE id = :id")
+                $this->pdo->prepare("UPDATE storage_cells SET pallet_type = NULL, pallet_count = 0, reserved_qty = 0 WHERE id = :id")
                     ->execute([':id' => $src['id']]);
                 try {
                     require_once __DIR__ . '/CellPlacement.php';

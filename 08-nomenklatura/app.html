@@ -122,7 +122,7 @@ body.navhide main{max-width:none}
 <div class="chips" id="chips"></div>
 <div class="massbar" id="massbar"><b id="masscnt">Выбрано: 0</b><span class="hint">массовое редактирование карточек · информация по хранению скрыта</span><button class="btn" id="massedit">Массовое редактирование</button><button class="btn" id="massbc">Печать ШК</button><button class="btn" id="masslabel">Печать этикеток</button><button class="btn" id="massclear">Снять выбор</button></div>
 <div class="card" style="overflow:auto">
-<table data-sort-mode="server"><thead><tr><th><input type="checkbox" id="chall"></th><th data-col="code" data-sort="code">Код</th><th data-col="sku" data-sort="sku">Артикул</th><th data-col="name" data-sort="name">Наименование</th><th data-col="unit" data-sort="unit">Ед. изм.</th><th data-col="category" data-sort="category">Категория</th><th data-col="qty" data-sort="qty">Остаток</th><th data-col="reserved" data-sort="reserved">Зарезервировано</th><th data-col="status" data-sort="status">Статус</th><th data-col="barcode" data-sort="barcode">Штрихкод</th><th id="colset" class="gear" title="Настройки полей">⚙️</th></tr></thead>
+<table data-sort-mode="server"><thead><tr><th><input type="checkbox" id="chall"></th><th data-col="code" data-sort="code">Код</th><th data-col="sku" data-sort="sku">Артикул</th><th data-col="name" data-sort="name">Наименование</th><th data-col="unit" data-sort="unit">Ед. изм.</th><th data-col="category" data-sort="category">Категория</th><th data-col="qty" data-sort="qty">Остаток</th><th data-col="reserved" data-sort="reserved">Зарезервировано</th><th data-col="status" data-sort="status">Статус</th><th data-col="barcode" data-sort="barcode">Штрихкод</th><th data-col="created" data-sort="created">Дата создания</th><th id="colset" class="gear" title="Настройки полей">⚙️</th></tr></thead>
 <tbody id="rows"><tr><td colspan="11">Загрузка...</td></tr></tbody></table>
 <div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
 <select id="pp"><option>16</option><option selected>24</option><option>50</option><option>100</option></select></div>
@@ -434,7 +434,7 @@ function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';set
 const fmtN=v=>{if(v===null||v===undefined||v==='')return '0';const n=Number(v);return isFinite(n)?n.toLocaleString('ru-RU',{maximumFractionDigits:3}):v};
 // Экранирование значений из БД перед вставкой в innerHTML (защита от XSS).
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-const dFmt=s=>(s||'').slice(0,16).replace('T',' ');
+const dFmt=s=>{if(!s)return '';const t=String(s).trim();if(/^\d{2}\.\d{2}\.\d{4}/.test(t))return t;const m=t.replace('T',' ').match(/^(\d{4})-(\d{2})-(\d{2})(?:[ ](\d{2}):(\d{2})(?::(\d{2}))?)?/);return m?(m[3]+'.'+m[2]+'.'+m[1]+(m[4]?(' '+m[4]+':'+m[5]+(m[6]?':'+m[6]:'')):'')):t;};
 function flagVal(id){const e=$(id);return e&&e.checked?'1':''}
 function params(){const p=new URLSearchParams({action:'list',page,per_page:perPage});
 const v=(id,k)=>{const e=$(id);if(e&&e.value!==''&&e.value!==null)p.set(k,e.value)};
@@ -486,7 +486,7 @@ return `<tr data-id="${esc(o.id)}" class="${curId===o.id?'sel':''}"><td><input t
 <td data-col="code"><a class="num code-link" data-id="${esc(o.id)}">${esc(o.code||'')}</a></td><td data-col="sku"><span class="sku-plain">${esc(o.sku||'')}</span></td><td data-col="name">${esc(o.name||'')}</td>
 <td data-col="unit">${esc(o.unit||'')}</td><td data-col="category">${esc(o.category||'')}</td><td data-col="qty" style="color:#38A169">${fmtN(o.qty)}</td><td data-col="reserved">${fmtN(o.reserved_qty)}</td>
 <td data-col="status">${stBadge(o)}${o.is_danger?'<br><span class="danger">⚠ Опасный груз</span>':''}</td>
-<td data-col="barcode">${bcHtml}</td><td>⋮</td></tr>`}).join('')||'<tr><td colspan=11>Ничего не найдено</td></tr>';
+<td data-col="barcode">${bcHtml}</td><td data-col="created">${o.created_at?dFmt(o.created_at):'—'}</td><td>⋮</td></tr>`}).join('')||'<tr><td colspan=12>Ничего не найдено</td></tr>';
 applyCols();
 const pages=Math.max(1,Math.ceil(j.total/perPage));let h='';
 h+=`<button data-p="1" title="В начало">«</button><button data-p="${Math.max(1,page-1)}" title="Назад">‹</button>`;
@@ -559,10 +559,10 @@ $('fclr').onclick=clrF;$('freset').onclick=e=>{e.preventDefault();clrF()};
 $('q').onchange=()=>{page=1;load()};$('pp').onchange=e=>{perPage=+e.target.value;page=1;load()};
 // Сортировка реестра по любому столбцу (А→Я / Я→А) — серверная, с пагинацией.
 Sort.init({mode:'server', key:'sku', dir:'ASC', onChange:()=>{page=1;load()}});
-const ALLCOLS=[['code','Код'],['sku','Артикул'],['name','Наименование'],['unit','Единица измерения'],['category','Категория'],['qty','Остаток'],['reserved','Зарезервировано'],['status','Статус товара'],['barcode','Штрихкод']];
+const ALLCOLS=[['code','Код'],['sku','Артикул'],['name','Наименование'],['unit','Единица измерения'],['category','Категория'],['qty','Остаток'],['reserved','Зарезервировано'],['status','Статус товара'],['barcode','Штрихкод'],['created','Дата создания']];
 const COLFORM='products';
 let colCfg=null;
-function colDefaults(){return{code:1,sku:1,name:1,unit:1,category:1,qty:1,reserved:1,status:1,barcode:1}}
+function colDefaults(){return{code:1,sku:1,name:1,unit:1,category:1,qty:1,reserved:1,status:1,barcode:1,created:1}}
 function getCols(){return (colCfg&&typeof colCfg==='object')?colCfg:colDefaults()}
 async function colFetch(){try{const r=await (await fetch(API+'?action=columns_get&form='+COLFORM)).json();let c=(r&&r.cols)||null;
 if((!c||!Object.keys(c).length)){try{const s=JSON.parse(localStorage.getItem('nomen_cols')||'null');if(s&&typeof s==='object'&&Object.keys(s).length){c=s;await fetch(API+'?action=columns_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({form:COLFORM,cols:c})})}}catch(e){}}

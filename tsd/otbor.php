@@ -484,6 +484,98 @@ if ($action === 'gate_info' && $method === 'GET') {
     oj($g);
 }
 
+// --- Форма экспедиции: сборочная паллета + ворота + ячейка сортировки ---
+if ($action === 'expedition_info' && $method === 'GET') {
+    require_once __DIR__ . '/../shared/db.php';
+    $sid = (int)($_GET['shipment_id'] ?? $_GET['id'] ?? 0);
+    if ($sid <= 0) {
+        oj(['error' => 'нужен shipment_id'], 422);
+    }
+    $gates = wms_pick_shipment_gates($pdo, $sid);
+    $buf = wms_pick_buffer_state($pdo, $sid);
+    // Сборочная паллета: из буфера, иначе последняя отсканированная в отборе.
+    $assembly = trim((string)($buf['assembly_sscc'] ?? ''));
+    $pickPallet = '';
+    try {
+        $q = $pdo->prepare("SELECT sscc FROM tsd_picks WHERE shipment_id=:s AND sscc IS NOT NULL AND sscc<>'' ORDER BY id DESC LIMIT 1");
+        $q->execute([':s' => $sid]);
+        $pickPallet = trim((string)($q->fetchColumn() ?: ''));
+    } catch (Throwable) {
+    }
+    $sdb = wms_storage_pdo();
+    $cells = [];
+    foreach (($gates['gates'] ?? []) as $g) {
+        try {
+            $cq = $sdb->prepare("SELECT code FROM storage_cells WHERE LOWER(zone) IN ('сортировка','sorting','sort')
+                AND UPPER(code) LIKE :p AND COALESCE(is_archived,0)=0 ORDER BY code");
+            $prefix = preg_match('/^EXP/i', (string)$g) ? strtoupper((string)$g) : ('EXP' . strtoupper((string)$g));
+            $cq->execute([':p' => $prefix . '-%']);
+            foreach ($cq->fetchAll(PDO::FETCH_COLUMN) as $c) {
+                $cells[(string)$g][] = (string)$c;
+            }
+        } catch (Throwable) {
+        }
+    }
+    // Если у ворот нет своих ячеек — предлагаем все ячейки сортировки.
+    if (!$cells) {
+        try {
+            $all = $sdb->query("SELECT code FROM storage_cells WHERE LOWER(zone) IN ('сортировка','sorting','sort') AND COALESCE(is_archived,0)=0 ORDER BY code")->fetchAll(PDO::FETCH_COLUMN);
+            $cells['*'] = array_map('strval', $all);
+        } catch (Throwable) {
+        }
+    }
+    $doc = [];
+    try {
+        $dq = $pdo->prepare("SELECT id, name, created_at FROM shipment_documents WHERE shipment_id=:s AND name LIKE 'Экспедиция:%' ORDER BY id DESC LIMIT 1");
+        $dq->execute([':s' => $sid]);
+        $doc = $dq->fetch(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable) {
+    }
+    oj(['ok' => true, 'shipment_id' => $sid, 'doc_no' => $gates['doc_no'] ?? '',
+        'gates' => $gates['gates'] ?? [], 'has_gates' => (bool)($gates['has_gates'] ?? false),
+        'assembly_pallet' => $assembly, 'pick_pallet' => $pickPallet,
+        'cells' => $cells, 'saved' => $doc, 'buffer' => $buf]);
+}
+
+if ($action === 'expedition_save' && $method === 'POST') {
+    require_once __DIR__ . '/../shared/db.php';
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    $sid = (int)($b['shipment_id'] ?? 0);
+    $pallet = trim((string)($b['pallet'] ?? $b['assembly_pallet'] ?? ''));
+    $gate = trim((string)($b['gate'] ?? ''));
+    $gateCell = trim((string)($b['gate_cell'] ?? ''));
+    $uid = (int)($b['user_id'] ?? 0) ?: null;
+    $fio = trim((string)($b['user_fio'] ?? ''));
+    if ($sid <= 0 || $pallet === '' || $gate === '' || $gateCell === '') {
+        oj(['error' => 'нужны shipment_id, паллета, ворота и ячейка ворот'], 422);
+    }
+    $gates = wms_pick_shipment_gates($pdo, $sid);
+    if (($gates['has_gates'] ?? false) && !wms_pick_gate_allowed($gates['gates'] ?? [], $gate)) {
+        oj(['error' => 'Ворота ' . $gate . ' не указаны в отгрузке ' . ($gates['doc_no'] ?? '')], 409);
+    }
+    $sdb = wms_storage_pdo();
+    $cq = $sdb->prepare('SELECT * FROM storage_cells WHERE UPPER(code)=UPPER(:c) LIMIT 1');
+    $cq->execute([':c' => $gateCell]);
+    $cell = $cq->fetch(PDO::FETCH_ASSOC) ?: null;
+    $zone = function_exists('mb_strtolower') ? mb_strtolower(trim((string)($cell['zone'] ?? '')), 'UTF-8')
+        : strtolower(trim((string)($cell['zone'] ?? '')));
+    if (!$cell || !in_array($zone, ['сортировка', 'sorting', 'sort'], true)) {
+        oj(['error' => 'Ячейка ' . $gateCell . ' не в зоне сортировки. Отсканируй ячейку ворот формата Exp1-1.'], 409);
+    }
+    $payload = json_encode(['pallet' => $pallet, 'gate' => $gate, 'gate_cell' => (string)$cell['code'],
+        'user_id' => $uid, 'user_fio' => $fio, 'saved_at' => date('Y-m-d H:i:s')], JSON_UNESCAPED_UNICODE);
+    $name = 'Экспедиция: паллета ' . $pallet . ' → ворота ' . $gate . ' / ' . (string)$cell['code'];
+    $pdo->prepare("INSERT INTO shipment_documents (shipment_id,name,format,pages,file_path) VALUES (:s,:n,'json',1,:p)")
+        ->execute([':s' => $sid, ':n' => $name, ':p' => $payload]);
+    $pdo->prepare("INSERT INTO shipment_history (shipment_id,user_id,user_fio,action,field,new_value)
+                   VALUES (:s,:u,:f,'expedition','Экспедиция',:n)")
+        ->execute([':s' => $sid, ':u' => $uid, ':f' => $fio,
+            ':n' => 'Паллета ' . $pallet . ' → ворота ' . $gate . ' / ' . (string)$cell['code']]);
+    oj(['ok' => true, 'pallet' => $pallet, 'gate' => $gate, 'gate_cell' => (string)$cell['code'],
+        'doc_no' => $gates['doc_no'] ?? '', 'hint' => 'Экспедиция сохранена: неси паллету ' . $pallet
+            . ' на ворота ' . $gate . ' (ячейка ' . (string)$cell['code'] . ')']);
+}
+
 // --- Перенос паллеты в зону сортировки (контроль из схемы) ---
 if ($action === 'move_to_sort' && $method === 'POST') {
     $b = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -507,6 +599,30 @@ if ($action === 'move_to_sort' && $method === 'POST') {
     if ($gate === '') {
         oj(['error' => 'Укажи ворота сортировки', 'gates' => $gates['gates']], 422);
     }
+    // Ячейка ворот обязана быть реальной ячейкой зоны «сортировка» (формат Exp1-1).
+    if ($gateCell === '') {
+        oj(['error' => 'Отсканируй ячейку ворот (например Exp1-1)', 'gates' => $gates['gates']], 422);
+    }
+    $gateCellRow = null;
+    try {
+        require_once __DIR__ . '/../shared/db.php';
+        $sdb = wms_storage_pdo();
+        $cq = $sdb->prepare('SELECT * FROM storage_cells WHERE UPPER(code)=UPPER(:c) LIMIT 1');
+        $cq->execute([':c' => $gateCell]);
+        $gateCellRow = $cq->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable) {
+    }
+    if (!$gateCellRow) {
+        oj(['error' => 'Ячейка ворот не найдена: ' . $gateCell
+            . '. Создай ячейку формата Exp1-1 в зоне «сортировка».', 'gate_cell' => $gateCell], 404);
+    }
+    $gz = function_exists('mb_strtolower') ? mb_strtolower(trim((string)$gateCellRow['zone']), 'UTF-8')
+        : strtolower(trim((string)$gateCellRow['zone']));
+    if (!in_array($gz, ['сортировка', 'sorting', 'sort'], true)) {
+        oj(['error' => 'Ячейка ' . $gateCell . ' не в зоне сортировки (зона: ' . (string)$gateCellRow['zone']
+            . '). Отсканируй ячейку ворот формата Exp1-1.', 'gate_cell' => $gateCell,
+            'zone' => (string)$gateCellRow['zone']], 409);
+    }
     if (!$okMove) {
         $pdo->prepare('INSERT INTO tsd_otbor_logs (shipment_id,cell,sku,user_id,reason) VALUES (:s,:c,:sku,:u,:r)')
             ->execute([':s' => $sid, ':c' => ($gateCell !== '' ? $gateCell : 'ЗОНА-СОРТИРОВКИ'), ':sku' => $pallet, ':u' => $uid, ':r' => 'Ошибка перемещения в зону сортировки']);
@@ -519,6 +635,38 @@ if ($action === 'move_to_sort' && $method === 'POST') {
         ->execute([':s' => $sid, ':u' => $uid, ':o' => 'Паллет ' . $pallet, ':n' => 'Перенесена на ворота сортировки ' . $gate . ' (' . $gateCell . ')']);
     // Буфер отбора: товар перенесён на ворота (picked -> at_gate), сборка по SSCC впереди.
     $moved = wms_pick_buffer_to_gate($pdo, $sid, $gate, $uid);
+    // Перенос остатка паллеты в реальную ячейку сортировки (для контроля зоны на сортировке).
+    try {
+        $sdb2 = wms_storage_pdo();
+        $ndb2 = wms_nomenclature_pdo();
+        $fq = $ndb2->prepare('SELECT DISTINCT cell FROM product_stock WHERE TRIM(pallet)=:p AND qty>0');
+        $fq->execute([':p' => $pallet]);
+        $fromCells = $fq->fetchAll(PDO::FETCH_COLUMN);
+        $uq = $ndb2->prepare('UPDATE product_stock SET cell=:to WHERE TRIM(pallet)=:p AND qty>0');
+        $uq->execute([':to' => (string)$gateCellRow['code'], ':p' => $pallet]);
+        // Старые ячейки: пересчитать занятость.
+        foreach ($fromCells as $fc) {
+            $fc = trim((string)$fc);
+            if ($fc === '' || strcasecmp($fc, (string)$gateCellRow['code']) === 0) {
+                continue;
+            }
+            $sum = $ndb2->prepare('SELECT COALESCE(SUM(qty),0) q, SUM(CASE WHEN qty>0 THEN 1 ELSE 0 END) p FROM product_stock WHERE cell=:c');
+            $sum->execute([':c' => $fc]);
+            $rr = $sum->fetch(PDO::FETCH_ASSOC) ?: ['q' => 0, 'p' => 0];
+            $sdb2->prepare("UPDATE storage_cells SET qty=:q, pallet_count=:p,
+                              status=CASE WHEN :q2>0 THEN 'busy' ELSE 'free' END,
+                              pallet_type=CASE WHEN :q3>0 THEN pallet_type ELSE NULL END
+                            WHERE code=:c")
+                ->execute([':q' => (float)$rr['q'], ':p' => (int)$rr['p'], ':q2' => (float)$rr['q'],
+                    ':q3' => (float)$rr['q'], ':c' => $fc]);
+        }
+        $gq = $ndb2->prepare('SELECT COALESCE(SUM(qty),0) q, COUNT(*) p FROM product_stock WHERE cell=:c');
+        $gq->execute([':c' => (string)$gateCellRow['code']]);
+        $gr = $gq->fetch(PDO::FETCH_ASSOC) ?: ['q' => 0, 'p' => 0];
+        $sdb2->prepare("UPDATE storage_cells SET qty=:q, pallet_count=:p, status='busy' WHERE id=:id")
+            ->execute([':q' => (float)$gr['q'], ':p' => max(1, (int)$gr['p']), ':id' => (int)$gateCellRow['id']]);
+    } catch (Throwable) {
+    }
     // Журнал склада: перемещение из промежуточной ячейки пользователя на ворота.
     try {
         require_once __DIR__ . '/../shared/Journal.php';
@@ -531,7 +679,7 @@ if ($action === 'move_to_sort' && $method === 'POST') {
             'pallet' => $pallet,
             'sscc' => $pallet,
             'cell_from' => wms_pick_buffer_cell($uid),
-            'cell_to' => 'ВОРОТА-' . $gate,
+            'cell_to' => (string)$gateCellRow['code'],
             'zone' => 'Сортировка',
             'user_id' => $uid,
             'user_fio' => $fio,

@@ -582,6 +582,9 @@ function billing_run(PDO $pdo, array $opts): array
     $to = substr((string)($opts['to'] ?? ''), 0, 10);
     $clients = array_values(array_filter(array_map('intval', (array)($opts['clients'] ?? []))));
     $mode = strtoupper((string)($opts['mode'] ?? 'FULL')) === 'DRY_RUN' ? 'DRY_RUN' : 'FULL';
+    // Пересчёт (вкладка «Пересчитать»): замещаем все активные начисления клиента,
+    // у которых дата попадает в период, даже если прошлый прогон был за другой диапазон.
+    $recalc = !empty($opts['recalc']);
     if ($from === '' || $to === '' || $from > $to) {
         throw new RuntimeException('Укажите период (с и по)');
     }
@@ -594,7 +597,7 @@ function billing_run(PDO $pdo, array $opts): array
     $stats = [
         'mode' => $mode, 'from' => $from, 'to' => $to, 'events' => 0, 'charged' => 0,
         'no_tariff' => 0, 'service_disabled' => 0, 'storage_days' => 0, 'amount_net' => 0.0,
-        'min_extra' => 0.0, 'problems' => [],
+        'min_extra' => 0.0, 'problems' => [], 'recalc' => $recalc,
     ];
     $inTx = false;
     try {
@@ -612,7 +615,13 @@ function billing_run(PDO $pdo, array $opts): array
             $st->execute([':f' => $from, ':t' => $to, ':cs' => json_encode($clients), ':m' => $mode]);
             $runId = (int)$pdo->lastInsertId();
             // Идемпотентность: прошлые активные начисления периода → SUPERSEDED.
-            $w = "status='ACTIVE' AND period_from=:f AND period_to=:t";
+            // В режиме пересчёта ориентируемся на дату начисления, а не на точное
+            // совпадение period_from/period_to; ручные корректировки сохраняем.
+            if ($recalc) {
+                $w = "status='ACTIVE' AND adjustment_of_id IS NULL AND charge_date BETWEEN :f AND :t";
+            } else {
+                $w = "status='ACTIVE' AND period_from=:f AND period_to=:t";
+            }
             $p = [':f' => $from, ':t' => $to];
             if ($clients) {
                 $ph = [];
@@ -625,9 +634,19 @@ function billing_run(PDO $pdo, array $opts): array
             }
             $upd = $pdo->prepare("UPDATE billing_charge SET status='SUPERSEDED' WHERE $w");
             $upd->execute($p);
-            $pdo->prepare("UPDATE billing_event SET status='NEW', reason=NULL
-                            WHERE event_date BETWEEN :f AND :t AND status IN ('CHARGED','NO_TARIFF','SERVICE_DISABLED')")
-                ->execute([':f' => $from, ':t' => $to]);
+            // События за период (только по выбранным клиентам!) → снова к расчёту.
+            $ew = "event_date BETWEEN :f AND :t AND status IN ('CHARGED','NO_TARIFF','SERVICE_DISABLED','ANOMALY')";
+            $ep = [':f' => $from, ':t' => $to];
+            if ($clients) {
+                $ph = [];
+                foreach ($clients as $i => $cl) {
+                    $k = ':ecl' . $i;
+                    $ph[] = $k;
+                    $ep[$k] = (int)$cl;
+                }
+                $ew .= ' AND client_id IN (' . implode(',', $ph) . ')';
+            }
+            $pdo->prepare("UPDATE billing_event SET status='NEW', reason=NULL WHERE $ew")->execute($ep);
             // Расшифровка хранения за прошлый прогон заменяется новой.
             $dw = 'day BETWEEN :f AND :t';
             $dp = [':f' => $from, ':t' => $to];
@@ -752,6 +771,167 @@ function billing_run(PDO $pdo, array $opts): array
         throw $e;
     }
     return $stats;
+}
+
+// ============================================================
+// Пересчёт по клиенту за произвольный период (вкладка «Пересчитать»)
+// ============================================================
+
+/** Русские названия месяцев. */
+function billing_month_name(int $m): string
+{
+    $names = [1 => 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+        'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+    return $names[$m] ?? (string)$m;
+}
+
+/**
+ * Полные календарные месяцы, пересекающиеся с периодом.
+ * @return array<int,array{from:string,to:string,label:string}>
+ */
+function billing_recalc_months(string $from, string $to): array
+{
+    $from = substr($from, 0, 10);
+    $to = substr($to, 0, 10);
+    if ($from === '' || $to === '' || $from > $to) {
+        throw new RuntimeException('Укажите корректный период (с и по)');
+    }
+    $months = [];
+    $cur = new DateTime(date('Y-m-01', strtotime($from)));
+    $end = new DateTime(date('Y-m-01', strtotime($to)));
+    $guard = 0;
+    while ($cur <= $end && $guard++ < 120) {
+        $mFrom = $cur->format('Y-m-01');
+        $mTo = $cur->format('Y-m-t');
+        $months[] = [
+            'from' => $mFrom,
+            'to' => $mTo,
+            'label' => billing_month_name((int)$cur->format('n')) . ' ' . $cur->format('Y'),
+        ];
+        $cur->modify('+1 month');
+    }
+    return $months;
+}
+
+/** Клиент биллинга по ID (или исключение). */
+function billing_client_row(PDO $pdo, int $clientId): array
+{
+    if ($clientId <= 0) {
+        throw new RuntimeException('Выберите клиента');
+    }
+    $st = $pdo->prepare('SELECT * FROM billing_client WHERE id=:id');
+    $st->execute([':id' => $clientId]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        throw new RuntimeException('Клиент не найден');
+    }
+    return $row;
+}
+
+/**
+ * Предпросмотр пересчёта: месяцы, объём операций, закрытые периоды.
+ * @return array
+ */
+function billing_recalc_preview(PDO $pdo, int $clientId, string $from, string $to): array
+{
+    $client = billing_client_row($pdo, $clientId);
+    $months = billing_recalc_months($from, $to);
+    $closed = [];
+    foreach ($months as $m) {
+        if (billing_period_status($pdo, $m['from'], $m['to'], $clientId) === 'CLOSED') {
+            $closed[] = $m['label'];
+        }
+    }
+    $mFrom = $months[0]['from'];
+    $mTo = $months[count($months) - 1]['to'];
+    $events = 0;
+    $charges = 0;
+    $storageDays = 0;
+    try {
+        $st = $pdo->prepare("SELECT COUNT(*) FROM billing_event WHERE client_id=:c AND event_date BETWEEN :f AND :t
+                AND event_type_code NOT LIKE 'STORAGE_%' AND event_type_code <> 'ADJUSTMENT'");
+        $st->execute([':c' => $clientId, ':f' => $mFrom, ':t' => $mTo]);
+        $events = (int)$st->fetchColumn();
+        $st = $pdo->prepare("SELECT COUNT(*) FROM billing_charge WHERE client_id=:c AND status='ACTIVE'
+                AND adjustment_of_id IS NULL AND charge_date BETWEEN :f AND :t");
+        $st->execute([':c' => $clientId, ':f' => $mFrom, ':t' => $mTo]);
+        $charges = (int)$st->fetchColumn();
+        $st = $pdo->prepare("SELECT COUNT(*) FROM billing_stock_daily WHERE client_id=:c AND day BETWEEN :f AND :t");
+        $st->execute([':c' => $clientId, ':f' => $mFrom, ':t' => $mTo]);
+        $storageDays = (int)$st->fetchColumn();
+    } catch (Throwable) {
+    }
+    return [
+        'ok' => $closed === [],
+        'client_id' => (int)$client['id'],
+        'client_name' => (string)$client['name'],
+        'from' => $mFrom,
+        'to' => $mTo,
+        'months' => $months,
+        'events' => $events,
+        'active_charges' => $charges,
+        'storage_days' => $storageDays,
+        'closed_months' => $closed,
+    ];
+}
+
+/**
+ * Пересчитать все операции клиента за период.
+ * Период расширяется до полных календарных месяцев, чтобы не ломать
+ * месячную идемпотентность обычных прогонов. Каждый месяц считается
+ * отдельным прогоном; старые активные начисления замещаются.
+ *
+ * @return array{ok:bool,client_id:int,client_name:string,from:string,to:string,months:array,totals:array}
+ */
+function billing_recalc_client(PDO $pdo, int $clientId, string $from, string $to, int $userId = 0): array
+{
+    $client = billing_client_row($pdo, $clientId);
+    $months = billing_recalc_months($from, $to);
+
+    // Предварительная проверка закрытых периодов — не начинаем частичный пересчёт.
+    $closed = [];
+    foreach ($months as $m) {
+        if (billing_period_status($pdo, $m['from'], $m['to'], $clientId) === 'CLOSED') {
+            $closed[] = $m['label'];
+        }
+    }
+    if ($closed) {
+        throw new RuntimeException('Периоды закрыты: ' . implode(', ', $closed)
+            . '. Откройте период в разделе «Периоды» (с указанием причины) перед пересчётом.');
+    }
+
+    $out = [
+        'ok' => true,
+        'client_id' => (int)$client['id'],
+        'client_name' => (string)$client['name'],
+        'from' => $months[0]['from'],
+        'to' => $months[count($months) - 1]['to'],
+        'requested_from' => substr($from, 0, 10),
+        'requested_to' => substr($to, 0, 10),
+        'months' => [],
+        'totals' => [
+            'events' => 0, 'charged' => 0, 'no_tariff' => 0, 'service_disabled' => 0,
+            'storage_days' => 0, 'amount_net' => 0.0, 'min_extra' => 0.0, 'problems' => 0,
+        ],
+    ];
+    foreach ($months as $m) {
+        $r = billing_run($pdo, [
+            'from' => $m['from'], 'to' => $m['to'],
+            'clients' => [$clientId], 'mode' => 'FULL', 'recalc' => true, 'user' => $userId,
+        ]);
+        $out['months'][] = [
+            'from' => $m['from'], 'to' => $m['to'], 'label' => $m['label'],
+            'stats' => $r,
+        ];
+        foreach (['events', 'charged', 'no_tariff', 'service_disabled', 'storage_days', 'min_extra'] as $k) {
+            $out['totals'][$k] = ($out['totals'][$k] ?? 0) + (float)($r[$k] ?? 0);
+        }
+        $out['totals']['amount_net'] += (float)($r['amount_net'] ?? 0);
+        $out['totals']['problems'] += count((array)($r['problems'] ?? []));
+    }
+    $out['totals']['amount_net'] = round((float)$out['totals']['amount_net'], 2);
+    $out['totals']['min_extra'] = round((float)$out['totals']['min_extra'], 2);
+    return $out;
 }
 
 /** Карта «тип события → услуга». */

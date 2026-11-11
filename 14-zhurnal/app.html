@@ -131,6 +131,24 @@ body.navhide main{max-width:none}
 </div>
 </div>
 </details>
+
+<details class="acc" id="secSerialStatus">
+<summary>🟢 <b>Онлайн-статусы серийных номеров</b> <span class="hint">— промежуточные статусы сортировки в реальном времени</span></summary>
+<div class="sec">
+<div class="bar">
+<input id="qss" type="text" placeholder="🔍 Поиск: с/н, артикул, отгрузка, сотрудник ...">
+<button class="btn" id="rss">Обновить</button>
+</div>
+<div class="hint" style="margin:2px 0 10px">reserved — номер отсканирован и закреплён за сотрудником (другой пользователь его не отсканирует); done — сортировка подтверждена; released — номер освобождён.</div>
+<div class="card" style="overflow:auto">
+<table id="tblSerialStatus"><thead><tr>
+<th>Обновлено</th><th>Серийный номер</th><th>Статус</th><th>Артикул</th><th>Наименование</th>
+<th>Отгрузка</th><th>Сотрудник</th><th>Создан</th>
+</tr></thead>
+<tbody id="rowsSerialStatus"><tr><td colspan="8">Загрузка…</td></tr></tbody></table>
+</div>
+</div>
+</details>
 </main>
 
 <div class="fpanel" id="fp">
@@ -164,7 +182,10 @@ function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';set
 const fmtN=v=>{if(v===null||v===undefined||v==='')return '0';const n=Number(v);return isFinite(n)?n.toLocaleString('ru-RU',{maximumFractionDigits:3}):v};
 // Экранирование значений из БД перед вставкой в innerHTML (защита от XSS).
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-const dFmt=s=>(s||'').slice(0,16).replace('T',' ');
+const dFmt=s=>{if(!s)return '';const t=String(s).trim();
+ if(/^\d{2}\.\d{2}\.\d{4}/.test(t))return t;
+ const m=t.replace('T',' ').match(/^(\d{4})-(\d{2})-(\d{2})(?:[ ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+ return m?(m[3]+'.'+m[2]+'.'+m[1]+(m[4]?(' '+m[4]+':'+m[5]+':'+(m[6]||'00')):'')):t;};
 function flagVal(id){const e=$(id);return e&&e.checked?'1':''}
 
 // Типы операций журнала склада и журнала серийных номеров (WmsJournal::OP_TYPES / SERIAL_OP_TYPES).
@@ -395,6 +416,35 @@ $('exp').onclick=()=>{
 if(localStorage.getItem('navhide')==='1')document.body.classList.add('navhide');
 $('navhidebtn').onclick=()=>{document.body.classList.add('navhide');try{localStorage.setItem('navhide','1')}catch(e){}};
 $('navshowbtn').onclick=()=>{document.body.classList.remove('navhide');try{localStorage.setItem('navhide','0')}catch(e){}};
+
+// --- Онлайн-статусы серийных номеров (обновление каждые 10 секунд) ---
+function ssBadge(s){
+  const map={reserved:['#8A5300','#FFF3E0','зарезервирован'],done:['#1B5E20','#E8F5E9','завершён'],released:['#5A6072','#EEF0F4','освобождён']};
+  const v=map[s]||['#5A6072','#EEF0F4',s||'—'];
+  return `<span style="display:inline-block;background:${v[1]};color:${v[0]};border-radius:8px;padding:2px 8px;font-weight:700;font-size:12px">${esc(v[2])}</span>`;
+}
+async function loadSerialStatus(){
+  try{
+    const r=await fetch(API+'?action=serial_status_list');
+    const d=await r.json();
+    let rows=d.rows||[];
+    const q=(($('qss')||{value:''}).value||'').trim().toLowerCase();
+    if(q)rows=rows.filter(x=>[x.serial_no,x.sku,x.product_name,x.shipment_doc_no,x.user_fio].some(v=>String(v||'').toLowerCase().includes(q)));
+    $('rowsSerialStatus').innerHTML=rows.map(x=>`<tr>
+<td>${esc(dFmt(x.updated_at||x.created_at))}</td>
+<td><b>${esc(x.serial_no||'')}</b></td>
+<td>${ssBadge(x.status)}</td>
+<td>${esc(x.sku||'—')}</td>
+<td>${esc(x.product_name||'')}</td>
+<td>${esc(x.shipment_doc_no||('#'+(x.shipment_id||'')))}</td>
+<td>${esc(x.user_fio||('#'+(x.user_id||'')))}</td>
+<td>${esc(dFmt(x.created_at))}</td></tr>`).join('')||'<tr><td colspan="8">Нет данных</td></tr>';
+  }catch(e){$('rowsSerialStatus').innerHTML='<tr><td colspan="8">Ошибка загрузки</td></tr>'}
+}
+if($('qss'))$('qss').oninput=loadSerialStatus;
+if($('rss'))$('rss').onclick=loadSerialStatus;
+loadSerialStatus();
+setInterval(loadSerialStatus,10000);
 
 buildOpChecks();
 syncOpTypes();

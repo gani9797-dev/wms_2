@@ -77,6 +77,13 @@ header('Content-Type: application/json; charset=utf-8');
 
 try {
     if ($action === 'list') {
+        // Самовосстановление настроек тары секций (робот): занятая паллета закрепляет
+        // тип за секцией, вторая тара получает крест. Смешанные ячейки не трогаем.
+        try {
+            CellPlacement::reconcileEmptyCells($pdo);
+            CellPlacement::syncManagedSections($pdo);
+        } catch (Throwable) {
+        }
         echo json_encode($repo->paginate(CellFilter::fromArray($_GET)), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'show') {
         $row = $repo->findById((int)($_GET['id'] ?? 0));

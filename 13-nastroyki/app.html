@@ -107,7 +107,7 @@ tr:hover td{background:#fafaff}
 <!-- СКЛАД И ХРАНЕНИЕ -->
 <section id="v-storage" class="view">
 <div class="bar"><button class="btn" data-go="hub">← Все настройки</button></div>
-<div class="tabs" id="stTabs"><span class="on" data-st="zones">Зоны склада</span><span data-st="cells">Тип ячеек</span><span data-st="pallets">Тип паллет</span><span data-st="lpn">Категория LPN</span><span data-st="rules">Правила</span><span data-st="robot">🤖 Робот размещения</span></div>
+<div class="tabs" id="stTabs"><span class="on" data-st="zones">Зоны склада</span><span data-st="cells">Тип ячеек</span><span data-st="pallets">Тип паллет</span><span data-st="lpn">Категория LPN</span><span data-st="rules">Правила</span></div>
 <div class="card"><div class="bar" style="margin-top:0"><button class="btn pri" id="stAdd">+ Создать</button></div>
 <table><thead id="stHead"><tr><th>Код</th><th>Наименование</th><th>Назначение</th><th>Влияние</th><th>Клиент</th><th>Ячейки</th><th>Статус</th><th></th></tr></thead><tbody id="stBody"></tbody></table>
 <div id="rulesBox" style="display:none;margin-top:10px;color:#666;font-size:13px">Правила: <span class="chip">Размещение</span><span class="chip">Перемещение</span><span class="chip">Пополнение</span><span class="chip">Сбор</span><span class="chip">Инвентаризация</span></div></div>
@@ -124,7 +124,7 @@ tr:hover td{background:#fafaff}
 
 <div class="cell-sub" id="cellSubZones">
 <div class="bar" style="margin-top:0"><button class="btn pri" id="cellZoneAdd">+ Зона</button></div>
-<table><thead><tr><th>Код</th><th>Наименование</th><th>Назначение</th><th>Влияние</th><th>Клиент</th><th>Ячейки</th><th>Статус</th><th></th></tr></thead><tbody id="cellZoneBody"></tbody></table>
+<table><thead><tr><th>Код</th><th>Наименование</th><th>Назначение</th><th>Влияние</th><th>Клиент</th><th>Ячейки / заполнено</th><th>Статус</th><th></th></tr></thead><tbody id="cellZoneBody"></tbody></table>
 </div>
 
 <div class="cell-sub" id="cellSubLocks" style="display:none">
@@ -185,24 +185,39 @@ tr:hover td{background:#fafaff}
 <!-- РОБОТЫ РАЗМЕЩЕНИЯ -->
 <section id="v-robots" class="view">
 <div class="bar"><button class="btn" data-go="hub">← Все настройки</button></div>
+<div class="tabs" id="robTabs">
+<span class="on" data-rt="place">🤖 Робот по размещению</span>
+<span data-rt="vgh">📐 Робот по обновлению ВГХ</span>
+<span data-rt="import">📥 Робот импорта in/out</span>
+</div>
+
+<div id="rob-place"><div class="card"><div class="hint">Загрузка настроек робота размещения…</div></div></div>
+
+<div id="rob-vgh" style="display:none">
 <div class="card">
-<h2 style="margin:0 0 8px">Настройки робота размещения</h2>
-<p class="hint" style="margin-bottom:12px">Секционная блокировка типа паллеты: первая паллета в пустой секции закрепляет за секцией тип тары (евро или фин). Секция открывается снова, когда становится полностью пустой. Лимиты секции: евро — 4 паллеты, фин — 3 паллеты (3-я ячейка яруса блокируется с причиной «Фин секция»).</p>
+<h2 style="margin:0 0 6px">Робот по обновлению ВГХ</h2>
+<p class="hint">После изменения габаритов (длина / ширина / высота / вес) в карточке товара робот пересчитывает снимок ВГХ в товарном запасе: габариты паллеты, высоту с товаром, объём и вес брутто. Модуль 8.1 показывает сохранённый снимок, пока он есть.</p>
 <div class="grid2">
-<div class="fld"><label>Секционная блокировка типа паллеты</label>
-<label class="chk"><input type="checkbox" id="rb_section_lock" style="width:auto"> Включить робота секционной блокировки</label>
-<div class="hint" style="margin-top:4px">Когда включено: пустая секция принимает любой тип паллеты. Первая поставленная паллета закрепляет за секцией тип тары (евро/фин). Свободные ячейки секции перенастраиваются под этот тип. Секция становится полностью пустой — открывается снова под любой тип.</div>
+<div class="fld"><label>Робот включён</label><select id="vr_enabled"><option value="1">Да</option><option value="0">Нет</option></select></div>
+<div class="fld"><label>Интервал запуска, минут</label><input id="vr_interval" type="number" min="1" max="10080" value="60"></div>
+<div class="fld"><label>Начало работы (дата и время)</label><input id="vr_start" type="datetime-local"></div>
+<div class="fld"><label>Окончание работы (пусто — бессрочно)</label><input id="vr_end" type="datetime-local"></div>
 </div>
-<div class="fld"><label>Макс паллет евро в секции</label><input id="rb_euro_cap" type="number" min="1" value="4"></div>
-<div class="fld"><label>Макс паллет фин в секции</label><input id="rb_fin_cap" type="number" min="1" value="3"></div>
-<div class="fld"><label>Блокировать 3-ю ячейку яруса под фин</label>
-<label class="chk"><input type="checkbox" id="rb_fin_block_3rd" style="width:auto" checked> Причина блокировки: «Фин секция»</label>
-<div class="hint" style="margin-top:4px">При 3 финах на ярусе (балка 3,6 м) следующая свободная ячейка блокируется с причиной «(Фин секция)».</div>
+<div class="hint">Робот работает в окне «начало — окончание» с заданным интервалом. Если окончание не указано — бессрочно. Кнопка «Запустить единоразово» выполняет пересчёт сразу, независимо от расписания.</div>
+<div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center">
+<button class="btn pri" id="vr_save">Сохранить настройки</button>
+<button class="btn" id="vr_run">Запустить единоразово</button>
+<span id="vr_msg" class="hint"></span>
+</div>
+<div id="vr_state" class="hint" style="margin-top:8px"></div>
+<div id="vr_result" style="margin-top:10px"></div>
+<div class="fld" style="margin-top:14px"><label>SQL робота</label><pre id="vr_sql" style="background:#FAFAFC;border:1px solid #F0F0F0;border-radius:8px;padding:10px;font:11px/1.45 Consolas,monospace;white-space:pre-wrap;max-height:260px;overflow:auto"></pre></div>
+<div class="fld" style="margin-top:10px"><label>Журнал запусков</label><div style="max-height:300px;overflow:auto"><table><thead><tr><th>Начало</th><th>Статус</th><th>Обработано</th><th>Обновлено</th><th>Товары (объём)</th><th>мс</th><th>Сообщение</th></tr></thead><tbody id="vr_log"></tbody></table></div></div>
 </div>
 </div>
-<div style="display:flex;gap:10px;margin-top:14px"><button class="btn pri" id="rb_save">Сохранить настройки робота</button><button class="btn" id="rb_reset">Сброс к значениям по умолчанию</button></div>
-</div>
-<div class="card" style="margin-top:14px">
+
+<div id="rob-import" style="display:none">
+<div class="card">
 <h2 style="margin:0 0 8px">Робот импорта in/out</h2>
 <p class="hint" style="margin-bottom:12px">Папка <b>in</b> — приходы в модуль 02, папка <b>out</b> — заказы в модуль 03.1. Поддерживаются CSV, TXT, XLSX, XLSM. Один файл = один документ. Дубликаты блокируются. После обработки файл и txt-отчёт попадают в success/ или error/.</p>
 <div class="grid2">
@@ -214,6 +229,7 @@ tr:hover td{background:#fafaff}
 <div class="fld"><label>Основной код / сценарий робота</label><textarea id="ir_code" rows="5" style="font-family:monospace"></textarea></div>
 <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap"><button class="btn pri" id="ir_save">Сохранить робота</button><button class="btn" id="ir_run">Запустить сейчас</button><span id="ir_status" class="hint" style="align-self:center"></span></div>
 <div class="fld" style="margin-top:14px"><label>Журнал робота</label><div style="max-height:320px;overflow:auto"><table><thead><tr><th>Дата</th><th>Папка</th><th>Файл</th><th>Статус</th><th>Документ</th><th>Сообщение</th></tr></thead><tbody id="ir_log"></tbody></table></div></div>
+</div>
 </div>
 </section>
 
@@ -315,9 +331,16 @@ tr:hover td{background:#fafaff}
 <div class="fld"><label>Для чего эта зона</label><input id="f_zonePurpose" placeholder="Например: хранение товара клиента А"></div>
 <div class="grid2"><div class="fld"><label>Влияет на размещение</label><select id="f_zonePlace"><option value="0">Нет</option><option value="1">Да — приоритет при размещении</option></select></div>
 <div class="fld"><label>Влияет на резервирование</label><select id="f_zoneReserve"><option value="0">Нет</option><option value="1">Да — приоритет при резервировании</option></select></div></div>
-<div class="grid2"><div class="fld"><label>Клиент (зона приравнена к клиенту)</label><select id="f_zoneClient"><option value="">Не привязана</option></select></div>
-<div class="fld"><label>Тип зоны</label><select id="f_zoneVirtual"><option value="0">С ячейками</option><option value="1">Пустая (только для отчётов)</option></select></div></div>
-<div class="fld"><label>Статус</label><select id="f_zoneActive"><option value="1">Активная</option><option value="0">Не активная</option></select></div>
+<div class="fld"><label>Клиенты зоны (можно несколько)</label>
+<select id="f_zoneClients" multiple size="5" style="width:100%;padding:6px;border:1px solid #E2E8F0;border-radius:8px"></select>
+<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;align-items:center">
+<button type="button" class="btn" id="f_zoneClientsAll">Выбрать всех</button>
+<button type="button" class="btn" id="f_zoneClientsNone">Снять выбор</button>
+<label class="chk" style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" id="f_zoneAuto" style="width:auto"> Добавлять новых клиентов автоматически (из приходных документов)</label>
+</div>
+<div class="hint">Если включено — каждый новый клиент из приходного документа автоматически попадёт в эту зону.</div></div>
+<div class="grid2"><div class="fld"><label>Тип зоны</label><select id="f_zoneVirtual"><option value="0">С ячейками</option><option value="1">Пустая (только для отчётов)</option></select></div>
+<div class="fld"><label>Статус</label><select id="f_zoneActive"><option value="1">Активная</option><option value="0">Не активная</option></select></div></div>
 <div style="display:flex;gap:8px;margin-top:12px"><button class="btn pri" id="zoneSave">Сохранить</button><button class="btn" id="zoneCancel">Отменить</button></div>
 <div class="fld" style="margin-top:12px;color:#8A92A6;font-size:12px">Зона с признаком «Влияет на размещение» даёт приоритет ячейкам этой зоны при размещении через ТСД. «Влияет на резервирование» — приоритет остаткам из этих ячеек при резервировании под отгрузку. «Пустая» зона может не иметь ячеек и используется в отчётах.</div>
 </div></div>
@@ -364,7 +387,7 @@ var SECTIONS=[
 {n:'Автоматизация',d:'other:auto',e:'⚡',s:'Накладные, счета',link:'../13.1-avtoformirovanie-nakladnyh/app.html'},
 {n:'Отчеты',d:'other:rep',e:'📊',s:'Перейти в модуль',link:'../11-nablyudeniya/app.html'},
 {n:'Журнал изменений',d:'other:log',e:'🕘',s:'История настроек'},
-{n:'Системные параметры',d:'other:sys',e:'🛠️',s:'Константы системы'},{n:'Персонал',d:'personnel',e:'👥',s:'Роли сотрудников и права доступа'},{n:'Роботы размещения',d:'robots',e:'🤖',s:'Секционная блокировка типа паллеты, лимиты секции'}];
+{n:'Системные параметры',d:'other:sys',e:'🛠️',s:'Константы системы'},{n:'Персонал',d:'personnel',e:'👥',s:'Роли сотрудников и права доступа'},{n:'Роботы',d:'robots',e:'🤖',s:'Размещение, обновление ВГХ, импорт in/out'}];
 var OTH_TXT={refs:'Раздел-заглушка: общие справочники ведутся в своих модулях.',nom:'Карточки товаров, штрихкоды, упаковка — в модуле 8.',post:'Правила приёмки и размещение — в модуле 2.',reestr:'Слоты прибытия ТС настраиваются здесь в разделе «Ворота», оперативный реестр — в модуле 1.',zak:'Логика заказов — в модуле 3.1.',otg:'Логика отгрузок — в модуле 3.',zad:'Типы заданий и автопостановка — в модуле 7.',inv:'Параметры инвентаризации — в модуле 6.',per:'Графики, отделы, должности — в модуле 10.',kpi:'Формулы и ставки — в 13.4.',bil:'Тарифы и счета — в 9.1 / 13.2.',doc:'Шаблоны нумерации документов.',ntf:'Каналы и шаблоны — в модуле 12.',tsd:'Шаблоны ШК и префиксы — в модуле ТСД.',int:'Ключи API и вебхуки.',usr:'Пользователи, роли, права.',auto:'Автоправила накладных/счетов — 13.1, 13.2.',rep:'Источники отчётов — в модуле 11.',log:'Полная история — вкладка «История изменений» в «Организации и складах».',sys:'Часовой пояс по умолчанию, единицы измерения, округления.'};
 function renderHub(f){var h=document.getElementById('hub');h.innerHTML='';SECTIONS.filter(function(s){return !f||s.n.toLowerCase().indexOf(f.toLowerCase())>=0}).forEach(function(s){var d=document.createElement('div');d.className='tile'+(s.d==='org'?' hot':'');d.innerHTML=s.e+'<br>'+s.n+'<small>'+s.s+'</small>';d.onclick=function(){go(s.d)};h.appendChild(d)})}
 function go(d){document.querySelectorAll('.view').forEach(function(v){v.classList.remove('on')});
@@ -376,7 +399,7 @@ else if(d==='cells'){document.getElementById('v-cells').classList.add('on');t.te
 else if(d==='clients'){document.getElementById('v-clients').classList.add('on');t.textContent='Контрагенты';renderClients()}
 else if(d==='gates'){document.getElementById('v-gates').classList.add('on');t.textContent='Ворота и бронирование';renderGates()}
 else if(d==='personnel'){document.getElementById('v-personnel').classList.add('on');t.textContent='Персонал';persLoad()}
-else if(d==='robots'){document.getElementById('v-robots').classList.add('on');t.textContent='Роботы размещения';renderRobots()}
+else if(d==='robots'){document.getElementById('v-robots').classList.add('on');t.textContent='Роботы';renderRobots()}
 else if(d==='integration'){document.getElementById('v-integration').classList.add('on');t.textContent='Интеграция и логирование';renderIntegration()}
 else if(d.indexOf('other:')===0){document.getElementById('v-other').classList.add('on');var k=d.split(':')[1];var s=SECTIONS.filter(function(x){return x.d===d})[0];document.getElementById('othTitle').textContent=s?s.n:k;document.getElementById('othText').textContent=OTH_TXT[k]||'';var a=document.getElementById('othLink');if(s&&s.link){a.style.display='';a.href=s.link}else{a.style.display='none'}t.textContent=s?s.n:'Настройки'}}
 document.querySelectorAll('[data-go]').forEach(function(b){b.onclick=function(){go(b.getAttribute('data-go'))}});
@@ -438,7 +461,6 @@ ss('wms13_wh',whs);document.getElementById('whModal').classList.remove('open');r
 
 /* ---------- Склад и хранение ---------- */
 var ST_DEF={zones:[{code:'A',name:'Зона приёмки',extra:'BD6',on:1},{code:'B',name:'Зона хранения',extra:'BD6',on:1},{code:'C',name:'Зона брака',extra:'BD2',on:1}],locks:[{code:'mechanical',name:'Механическая',extra:'Замок / печать',on:1},{code:'seal',name:'Пломба',extra:'Контрольная пломба',on:1},{code:'quarantine',name:'Карантин',extra:'Товар под карантином',on:1},{code:'damage',name:'Повреждение',extra:'Ячейка повреждена',on:1},{code:'inventory',name:'Инвентаризация',extra:'Блокировка на время инвент.',on:1}],cells:[{code:'PAL',name:'Паллетная',extra:'1200×800',on:1},{code:'SHELF',name:'Стеллажная',extra:'—',on:1}],pallets:[{code:'EUR',name:'EUR-паллет 1200×800',extra:'до 1500 кг',on:1},{code:'FIN',name:'FIN-паллет 1200×1000',extra:'до 1200 кг',on:1}],lpn:[{code:'BOX',name:'Короб',extra:'—',on:1},{code:'PALLET',name:'Паллет',extra:'—',on:1}],rules:[{code:'R1',name:'Размещение: ближняя свободная',extra:'placement',on:1},{code:'R2',name:'Пополнение по min/max',extra:'replenish',on:1}]};
-var ROB_DEF={section_lock:1,euro_cap:4,fin_cap:3,fin_block_3rd:1};
 var st=ls('wms13_st',ST_DEF), stKey='zones';
 /* ---------- Зоны ячеек: справочник в БД (storage_zones) ---------- */
 var ZONE_API='demo_sqlite.php', zoneRows=[], zoneClients=[];
@@ -450,8 +472,8 @@ function zoneLoad(){
   ]).then(function(rs){
     zoneRows=(rs[0]&&rs[0].rows)||[];
     zoneClients=(rs[1]&&rs[1].rows)||[];
-    var sel=document.getElementById('f_zoneClient');
-    if(sel)sel.innerHTML='<option value="">Не привязана</option>'+zoneClients.map(function(c){return '<option value="'+c.id+'">'+esc(c.name)+'</option>'}).join('');
+    var sel=document.getElementById('f_zoneClients');
+    if(sel)sel.innerHTML=zoneClients.map(function(c){return '<option value="'+c.id+'">'+esc(c.name)+'</option>'}).join('');
     renderSt();renderCells();
   });
 }
@@ -463,8 +485,13 @@ function zoneFlags(z){
 }
 function zoneTr(z,index){
   var tr=document.createElement('tr');
-  var client=zoneClientName(z.contractor_id)||'—';
-  var empty=+z.is_virtual===1?'<span class="st-off">Пустая</span>':('Ячеек: '+(z.cells_count||0));
+  var cids=(z.client_ids&&z.client_ids.length)?z.client_ids:(z.contractor_id?[z.contractor_id]:[]);
+  var client=cids.map(zoneClientName).filter(Boolean).join(', ')||'—';
+  if(+z.auto_add_clients===1)client+=' <span class="chip" style="font-size:10px">+авто</span>';
+  var empty=+z.is_virtual===1?'<span class="st-off">Пустая</span>'
+    :('Ячеек: '+(z.cells_count||0)+' · свободно '+(z.cells_free||0)
+      +'<br><span class="'+(+z.is_full===1?'st-off':'st-ok')+'">заполнено '+(z.fill_pct||0)+'%'
+      +(+z.is_full===1?' · ЗОНА ПОЛНА':'')+'</span>');
   tr.innerHTML='<td><b>'+esc(z.code)+'</b></td><td>'+esc(z.name)+'</td><td>'+esc(z.purpose||'—')+'</td>'
     +'<td>'+zoneFlags(z)+'</td><td>'+esc(client)+'</td><td>'+empty+'</td>'
     +'<td>'+(+z.is_active===1?'<span class="st-ok">Активная</span>':'<span class="st-off">Не активная</span>')+'</td>';
@@ -483,7 +510,13 @@ function zoneOpen(id){
   document.getElementById('f_zonePurpose').value=z?(z.purpose||''):'';
   document.getElementById('f_zonePlace').value=z?(+z.affects_placement===1?'1':'0'):'0';
   document.getElementById('f_zoneReserve').value=z?(+z.affects_reservation===1?'1':'0'):'0';
-  document.getElementById('f_zoneClient').value=z&&z.contractor_id?String(z.contractor_id):'';
+  var zsel=document.getElementById('f_zoneClients');
+  if(zsel){
+    var cids=(z&&z.client_ids&&z.client_ids.length)?z.client_ids:((z&&z.contractor_id)?[z.contractor_id]:[]);
+    var want={};cids.forEach(function(v){want[+v]=1});
+    for(var i=0;i<zsel.options.length;i++)zsel.options[i].selected=!!want[+zsel.options[i].value];
+  }
+  document.getElementById('f_zoneAuto').checked=z?(+z.auto_add_clients===1):false;
   document.getElementById('f_zoneVirtual').value=z?(+z.is_virtual===1?'1':'0'):'0';
   document.getElementById('f_zoneActive').value=z?(+z.is_active===1?'1':'0'):'1';
   document.getElementById('zoneModal').classList.add('open');
@@ -494,7 +527,8 @@ function zoneSave(){
     purpose:document.getElementById('f_zonePurpose').value.trim(),
     affects_placement:+document.getElementById('f_zonePlace').value?1:0,
     affects_reservation:+document.getElementById('f_zoneReserve').value?1:0,
-    contractor_id:+document.getElementById('f_zoneClient').value||null,
+    client_ids:[].slice.call(document.getElementById('f_zoneClients').selectedOptions).map(function(o){return +o.value}).filter(Boolean),
+    auto_add_clients:document.getElementById('f_zoneAuto').checked?1:0,
     is_virtual:+document.getElementById('f_zoneVirtual').value?1:0,
     is_active:+document.getElementById('f_zoneActive').value?1:0};
   if(!body.code||!body.name){toast('Заполните код и наименование зоны');return}
@@ -513,6 +547,10 @@ function zoneDelete(z){
 }
 document.getElementById('zoneCancel').onclick=function(){document.getElementById('zoneModal').classList.remove('open')};
 document.getElementById('zoneSave').onclick=zoneSave;
+var _zoneAll=document.getElementById('f_zoneClientsAll');
+if(_zoneAll)_zoneAll.onclick=function(){var s=document.getElementById('f_zoneClients');if(s){for(var i=0;i<s.options.length;i++)s.options[i].selected=true}};
+var _zoneNone=document.getElementById('f_zoneClientsNone');
+if(_zoneNone)_zoneNone.onclick=function(){var s=document.getElementById('f_zoneClients');if(s){for(var i=0;i<s.options.length;i++)s.options[i].selected=false}};
 document.querySelectorAll('#stTabs span').forEach(function(s){s.onclick=function(){document.querySelectorAll('#stTabs span').forEach(function(x){x.classList.remove('on')});s.classList.add('on');stKey=s.getAttribute('data-st');renderSt()}});
 function renderSt(){var b=document.getElementById('stBody');var h=document.getElementById('stHead');b.innerHTML='';
 if(stKey==='robot'){if(h)h.innerHTML='';var addBtn=document.getElementById('stAdd');if(addBtn)addBtn.style.display='none';var rb=document.getElementById('rulesBox');if(rb)rb.style.display='none';loadPlaceRobot();return;}
@@ -690,68 +728,273 @@ document.getElementById('persSaveRights').onclick=function(){
   .then(function(r){return r.json()}).then(function(x){toast(x.error?('Ошибка: '+x.error):'Права роли сохранены')});
 };
 
-/* ---------- Роботы размещения ---------- */
-var robots=ls('wms13_robots',ROB_DEF);
-var irCfg=null;
-function renderRobots(){
-document.getElementById('rb_section_lock').checked=!!robots.section_lock;
-document.getElementById('rb_euro_cap').value=robots.euro_cap;
-document.getElementById('rb_fin_cap').value=robots.fin_cap;
-document.getElementById('rb_fin_block_3rd').checked=!!robots.fin_block_3rd;
-robotLoad();
-}
-function robotStatusText(r){
- if(!r)return '';
- var parts=[];
- if(r.processed&&r.processed.length)parts.push('Загружено: '+r.processed.length);
- if(r.errors&&r.errors.length)parts.push('Ошибок: '+r.errors.length);
- if(r.skipped&&r.skipped.length)parts.push(r.skipped.join('; '));
- return parts.join(' · ')||'Проверено, новых файлов нет';
-}
-function robotRenderLog(rows){
- var b=document.getElementById('ir_log');if(!b)return;
- b.innerHTML=(rows||[]).map(function(x){
-  var st=x.status==='success'?'<span class="st-ok">Успех</span>':'<span class="st-off">Ошибка</span>';
-  return '<tr><td>'+esc(x.created_at||'')+'</td><td>'+esc(x.folder||'')+'</td><td>'+esc(x.filename||'')+'</td><td>'+st+'</td><td>'+esc(x.doc_no||'—')+'</td><td>'+esc(x.message||'')+'</td></tr>';
- }).join('')||'<tr><td colspan="6" style="color:#999">Записей пока нет</td></tr>';
-}
-function robotLoad(){
- fetch(ZONE_API+'?action=robot_get').then(function(r){return r.json()}).then(function(j){
-  irCfg=j.settings||{};
-  document.getElementById('ir_enabled').value=(+irCfg.enabled?'1':'0');
-  document.getElementById('ir_interval').value=irCfg.interval_min||10;
-  document.getElementById('ir_wh').value=irCfg.warehouse_id||1;
-  document.getElementById('ir_formats').value=(irCfg.formats||[]).join(',');
-  document.getElementById('ir_code').value=irCfg.code||'';
-  if(irCfg.last_run)document.getElementById('ir_status').textContent='Последний запуск: '+new Date(irCfg.last_run*1000).toLocaleString('ru-RU');
-  if(j.last_tick)document.getElementById('ir_status').textContent=robotStatusText(j.last_tick);
-  robotRenderLog(j.log||[]);
- }).catch(function(){});
-}
-document.getElementById('ir_save').onclick=function(){
- var body={enabled:+document.getElementById('ir_enabled').value?1:0,
-  interval_min:+document.getElementById('ir_interval').value||10,
-  warehouse_id:+document.getElementById('ir_wh').value||1,
-  formats:document.getElementById('ir_formats').value,
-  code:document.getElementById('ir_code').value};
- fetch(ZONE_API+'?action=robot_save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-  .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
-  .then(function(x){toast(x.ok?'Робот сохранён':'Ошибка: '+(x.j.error||''));if(x.ok)robotLoad()})
-  .catch(function(){toast('Нет связи с сервером')});
-};
-document.getElementById('ir_run').onclick=function(){
- var btn=this;btn.disabled=true;document.getElementById('ir_status').textContent='Робот работает...';
- fetch(ZONE_API+'?action=robot_run',{method:'POST'}).then(function(r){return r.json()}).then(function(j){
-  document.getElementById('ir_status').textContent=robotStatusText(j);
-  robotRenderLog(j.log||[]);toast(robotStatusText(j));btn.disabled=false;
- }).catch(function(){document.getElementById('ir_status').textContent='Ошибка связи';btn.disabled=false});
-};
-document.getElementById('rb_save').onclick=function(){
-robots={section_lock:$('rb_section_lock').checked?1:0,euro_cap:+$('rb_euro_cap').value||4,fin_cap:+$('rb_fin_cap').value||3,fin_block_3rd:$('rb_fin_block_3rd').checked?1:0};
-ss('wms13_robots',robots);toast('Настройки робота сохранены')};
-document.getElementById('rb_reset').onclick=function(){
-robots=JSON.parse(JSON.stringify(ROB_DEF));ss('wms13_robots',robots);renderRobots();toast('Сброс к значениям по умолчанию')};
+/* ---------- Роботы ---------- */
+var robKey = 'place';
+var irCfg = null;
 
+function robTab(k) {
+    robKey = k;
+    document.querySelectorAll('#robTabs span').forEach(function (s) {
+        s.classList.toggle('on', s.getAttribute('data-rt') === k);
+    });
+    ['place', 'vgh', 'import'].forEach(function (x) {
+        var e = document.getElementById('rob-' + x);
+        if (e) e.style.display = (x === k ? '' : 'none');
+    });
+    if (k === 'place') loadPlaceRobotTab();
+    if (k === 'vgh') vghLoad();
+    if (k === 'import') robotLoad();
+}
+document.querySelectorAll('#robTabs span').forEach(function (s) {
+    s.onclick = function () { robTab(s.getAttribute('data-rt')); };
+});
+function renderRobots() { robTab('place'); }
+
+/* --- Робот по размещению (серверные настройки CellPlacement) --- */
+function loadPlaceRobotTab() {
+    var box = document.getElementById('rob-place');
+    if (!box) return;
+    box.innerHTML = '<div class="card"><div class="hint">Загрузка настроек…</div></div>';
+    fetch('demo_sqlite.php?action=place_robot_get', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+        var s = (j && j.settings) || {};
+        function num(k, label) {
+            return '<div class="fld"><label>' + label + '</label><input id="pr_' + k + '" type="number" min="1" max="50" value="' + (s[k] !== undefined ? s[k] : '') + '"></div>';
+        }
+        function chk(k, label) {
+            return '<div class="fld"><label class="chk" style="font-weight:400"><input type="checkbox" id="pr_' + k + '" style="width:auto"' + (+s[k] ? ' checked' : '') + '> ' + label + '</label></div>';
+        }
+        box.innerHTML = '<div class="card"><h2 style="margin:0 0 6px">Робот по размещению</h2>'
+            + '<p class="hint">Секционная блокировка типа паллеты: первая паллета в пустой секции закрепляет тип тары (евро/фин). Секция открывается снова, когда полностью пуста. Вместимость яруса: балка 3,2 / 3,6 м — по ячейкам под евро и фин; 3-я фин-ячейка на 3,6 м блокируется.</p>'
+            + '<div class="grid2">'
+            + chk('section_pallet_lock', 'Включить секционную блокировку типа паллеты')
+            + num('euro_cap_per_section', 'Макс паллет евро в секции')
+            + num('fin_cap_per_section', 'Макс паллет фин в секции')
+            + chk('fin_block_3rd_cell', 'Блокировать 3-ю ячейку яруса под фин (балка 3,6 м)')
+            + num('beam36_fin_block_place', 'Номер блокируемой ячейки (балка 3,6 м)')
+            + num('beam36_euro_places', 'Ячеек на ярусе под евро (балка 3,6 м)')
+            + num('beam36_fin_places', 'Ячеек на ярусе под фин (балка 3,6 м)')
+            + num('beam32_euro_places', 'Ячеек на ярусе под евро (балка 3,2 м)')
+            + num('beam32_fin_places', 'Ячеек на ярусе под фин (балка 3,2 м)')
+            + '</div><div style="margin-top:14px"><button class="btn pri" id="prSave2">Сохранить настройки</button> <span id="prMsg2" class="hint"></span></div></div>'
+            + '<div class="card" style="margin-top:14px"><h2 style="margin:0 0 6px">Эмитация размещения</h2>'
+            + '<p class="hint">Укажите номер паллеты (SSCC) и конечную ячейку — робот покажет, подходит ли ячейка и почему (зона клиента, занятость, высота, тара, правила секции и яруса).</p>'
+            + '<div class="grid2"><div class="fld"><label>Номер паллеты (SSCC)</label><input id="sim_pallet" placeholder="14563298796"></div>'
+            + '<div class="fld"><label>Код ячейки</label><input id="sim_cell" placeholder="G01-01-02-01"></div></div>'
+            + '<div style="display:flex;gap:10px;align-items:center"><button class="btn pri" id="sim_go">Эмитация</button><span id="sim_msg" class="hint"></span></div>'
+            + '<div id="sim_res" style="margin-top:10px"></div></div>';
+        document.getElementById('sim_go').onclick = function () {
+            var p = document.getElementById('sim_pallet').value.trim();
+            var c = document.getElementById('sim_cell').value.trim();
+            var m = document.getElementById('sim_msg');
+            if (!p || !c) { m.textContent = 'Укажите паллету и ячейку'; return; }
+            m.textContent = 'Проверка…';
+            fetch('demo_sqlite.php?action=place_simulate', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pallet: p, cell: c })
+            }).then(function (r) { return r.json(); }).then(function (j) {
+                m.textContent = '';
+                if (j.error) {
+                    document.getElementById('sim_res').innerHTML = '<div class="card" style="color:#B00020">' + esc(j.error) + '</div>';
+                    return;
+                }
+                renderSim(j);
+            }).catch(function () { m.textContent = 'Ошибка связи'; });
+        };
+        document.getElementById('prSave2').onclick = function () {
+            var body = {};
+            ['section_pallet_lock', 'fin_block_3rd_cell'].forEach(function (k) {
+                var e = document.getElementById('pr_' + k);
+                body[k] = e && e.checked ? 1 : 0;
+            });
+            ['euro_cap_per_section', 'fin_cap_per_section', 'beam36_fin_block_place', 'beam36_euro_places', 'beam36_fin_places', 'beam32_euro_places', 'beam32_fin_places'].forEach(function (k) {
+                var e = document.getElementById('pr_' + k);
+                if (e) body[k] = +e.value || 0;
+            });
+            fetch('demo_sqlite.php?action=place_robot_save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                .then(function (r) { return r.json(); }).then(function (x) {
+                    var m = document.getElementById('prMsg2'); if (!m) return;
+                    m.textContent = (x && x.error) ? ('Ошибка: ' + x.error) : 'Сохранено';
+                    setTimeout(function () { if (m) m.textContent = ''; }, 2500);
+                }).catch(function () {
+                    var m = document.getElementById('prMsg2'); if (m) m.textContent = 'Ошибка связи';
+                });
+        };
+    }).catch(function () {
+        box.innerHTML = '<div class="card" style="color:#C53030">Не удалось загрузить настройки робота по размещению</div>';
+    });
+}
+
+function renderSim(j) {
+    var ok = !!j.ok;
+    var pal = j.pallet || {};
+    var cell = j.cell || {};
+    var html = '<div class="card" style="padding:12px;border-color:' + (ok ? '#C6F6D5' : '#FEB2B2') + ';background:' + (ok ? '#F7FFF9' : '#FFF5F5') + '">'
+        + '<b>' + (ok ? '✅ ' : '⛔ ') + esc(j.summary || '') + '</b>'
+        + '<div class="hint" style="margin-top:6px">Паллета ' + esc(pal.code || '') + ': ' + esc(pal.sku || '—')
+        + ' · ' + esc(pal.qty || 0) + ' шт · тара ' + esc(pal.pallet_type_label || '') + ' · высота '
+        + (pal.height_mm ? esc(pal.height_mm) + ' мм' : '—') + ' (' + esc(pal.height_source || '') + ')</div>'
+        + '<div class="hint">Ячейка ' + esc(cell.code || '') + ': зона ' + esc(cell.zone || '') + ', статус '
+        + esc(cell.status || '') + ', высота ' + (cell.cell_height_mm ? esc(cell.cell_height_mm) + ' мм' : '—')
+        + ', тара ' + esc(cell.allowed_pallet_types || '') + '</div>'
+        + '<table style="margin-top:8px"><thead><tr><th>Проверка</th><th>Результат</th><th>Пояснение</th></tr></thead><tbody>'
+        + (j.checks || []).map(function (c) {
+            return '<tr><td>' + esc(c.label || '') + '</td><td>'
+                + (c.ok ? '<span class="st-ok">OK</span>' : '<span class="st-off">Нет</span>')
+                + '</td><td style="font-size:12px;color:' + (c.ok ? '#4A5568' : '#B00020') + '">' + esc(c.detail || '') + '</td></tr>';
+        }).join('')
+        + '</tbody></table>';
+    if (j.suggested) {
+        html += '<div class="hint" style="margin-top:8px">Робот предлагает: <b>' + esc(j.suggested.cell || '') + '</b>'
+            + (j.suggested.reason ? (' — ' + esc(j.suggested.reason)) : '') + '</div>';
+    } else {
+        html += '<div class="hint" style="margin-top:8px;color:#B45309">Робот не нашёл ни одной подходящей ячейки.</div>';
+    }
+    html += '</div>';
+    document.getElementById('sim_res').innerHTML = html;
+}
+
+/* --- Робот по обновлению ВГХ --- */
+function vghDt(v) {
+    if (!v) return '';
+    return String(v).replace(' ', 'T').slice(0, 16);
+}
+function vghLog(rows) {
+    var b = document.getElementById('vr_log');
+    if (!b) return;
+    b.innerHTML = (rows || []).map(function (x) {
+        var st = x.status === 'OK' ? '<span class="st-ok">OK</span>' : '<span class="st-off">Ошибка</span>';
+        return '<tr><td>' + esc(x.started_at || '') + '</td><td>' + st + '</td><td>' + esc(x.processed || 0) + '</td><td>'
+            + esc(x.updated || 0) + '</td><td>' + esc(x.products_updated || 0) + '</td><td>' + esc(x.duration_ms || 0)
+            + '</td><td>' + esc(x.message || '') + '</td></tr>';
+    }).join('') || '<tr><td colspan="7" style="color:#999">Запусков ещё не было</td></tr>';
+}
+function vghState(st) {
+    var b = document.getElementById('vr_state');
+    if (!b) return;
+    st = st || {};
+    var p = [];
+    p.push(st.in_window ? 'в окне работы' : 'вне окна работы');
+    if (st.expired) p.push('срок работы истёк');
+    if (st.next_run_at) p.push('следующий запуск: ' + String(st.next_run_at).replace('T', ' '));
+    if (st.last_run_at) p.push('последний запуск: ' + String(st.last_run_at).replace('T', ' '));
+    b.textContent = p.join(' · ');
+}
+function vghResult(r) {
+    var b = document.getElementById('vr_result');
+    if (!b || !r) return;
+    var errs = r.errors || [];
+    b.innerHTML = '<div class="card" style="padding:12px;background:#F7FFF9;border-color:#C6F6D5">'
+        + '<b>Пересчёт выполнен</b> · обработано строк: <b>' + esc(r.processed || 0) + '</b>'
+        + ', обновлено: <b>' + esc(r.updated || 0) + '</b>, объём товаров: <b>' + esc(r.products_updated || 0) + '</b>'
+        + ', время: ' + esc(r.duration_ms || 0) + ' мс'
+        + (errs.length ? ('<div style="color:#B00020;margin-top:6px">Ошибки: ' + errs.map(esc).join('; ') + '</div>') : '')
+        + '</div>';
+}
+function vghLoad() {
+    fetch('demo_sqlite.php?action=vgh_robot_get', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+        var s = j.settings || {};
+        var en = document.getElementById('vr_enabled'); if (en) en.value = String(+s.enabled ? 1 : 0);
+        var iv = document.getElementById('vr_interval'); if (iv) iv.value = s.interval_min || 60;
+        var st = document.getElementById('vr_start'); if (st) st.value = vghDt(s.start_at);
+        var en2 = document.getElementById('vr_end'); if (en2) en2.value = vghDt(s.end_at);
+        var sq = document.getElementById('vr_sql'); if (sq) sq.textContent = j.sql || '';
+        vghState(j.state || {});
+        vghLog(j.log || []);
+        if (j.last_tick) vghResult(j.last_tick);
+    }).catch(function () {
+        var b = document.getElementById('vr_state');
+        if (b) b.textContent = 'Не удалось загрузить настройки робота ВГХ';
+    });
+}
+document.getElementById('vr_save').onclick = function () {
+    var body = {
+        enabled: +document.getElementById('vr_enabled').value ? 1 : 0,
+        interval_min: +document.getElementById('vr_interval').value || 60,
+        start_at: document.getElementById('vr_start').value,
+        end_at: document.getElementById('vr_end').value
+    };
+    var m = document.getElementById('vr_msg');
+    fetch('demo_sqlite.php?action=vgh_robot_save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json(); }).then(function (j) {
+            if (j.error) { m.textContent = 'Ошибка: ' + j.error; return; }
+            m.textContent = 'Сохранено';
+            setTimeout(function () { m.textContent = ''; }, 2500);
+            vghLoad();
+        }).catch(function () { m.textContent = 'Ошибка связи'; });
+};
+document.getElementById('vr_run').onclick = function () {
+    var btn = this;
+    btn.disabled = true;
+    var m = document.getElementById('vr_msg');
+    m.textContent = 'Пересчёт…';
+    fetch('demo_sqlite.php?action=vgh_robot_run', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (j) {
+        m.textContent = '';
+        vghResult(j);
+        vghState(j.state || {});
+        vghLog(j.log || []);
+        btn.disabled = false;
+    }).catch(function () { m.textContent = 'Ошибка связи'; btn.disabled = false; });
+};
+
+/* --- Робот импорта in/out --- */
+function robotStatusText(r) {
+    if (!r) return '';
+    var parts = [];
+    if (r.processed && r.processed.length) parts.push('Загружено: ' + r.processed.length);
+    if (r.errors && r.errors.length) parts.push('Ошибок: ' + r.errors.length);
+    if (r.skipped && r.skipped.length) parts.push(r.skipped.join('; '));
+    return parts.join(' · ') || 'Проверено, новых файлов нет';
+}
+function robotRenderLog(rows) {
+    var b = document.getElementById('ir_log');
+    if (!b) return;
+    b.innerHTML = (rows || []).map(function (x) {
+        var st = x.status === 'success' ? '<span class="st-ok">Успех</span>' : '<span class="st-off">Ошибка</span>';
+        return '<tr><td>' + esc(x.created_at || '') + '</td><td>' + esc(x.folder || '') + '</td><td>' + esc(x.filename || '')
+            + '</td><td>' + st + '</td><td>' + esc(x.doc_no || '—') + '</td><td>' + esc(x.message || '') + '</td></tr>';
+    }).join('') || '<tr><td colspan="6" style="color:#999">Записей пока нет</td></tr>';
+}
+function robotLoad() {
+    fetch(ZONE_API + '?action=robot_get').then(function (r) { return r.json(); }).then(function (j) {
+        irCfg = j.settings || {};
+        var en = document.getElementById('ir_enabled'); if (en) en.value = (+irCfg.enabled ? '1' : '0');
+        var iv = document.getElementById('ir_interval'); if (iv) iv.value = irCfg.interval_min || 10;
+        var wh = document.getElementById('ir_wh'); if (wh) wh.value = irCfg.warehouse_id || 1;
+        var fm = document.getElementById('ir_formats'); if (fm) fm.value = (irCfg.formats || []).join(',');
+        var cd = document.getElementById('ir_code'); if (cd) cd.value = irCfg.code || '';
+        var stt = document.getElementById('ir_status');
+        if (stt && irCfg.last_run) stt.textContent = 'Последний запуск: ' + new Date(irCfg.last_run * 1000).toLocaleString('ru-RU');
+        if (stt && j.last_tick) stt.textContent = robotStatusText(j.last_tick);
+        robotRenderLog(j.log || []);
+    }).catch(function () { });
+}
+document.getElementById('ir_save').onclick = function () {
+    var body = {
+        enabled: +document.getElementById('ir_enabled').value ? 1 : 0,
+        interval_min: +document.getElementById('ir_interval').value || 10,
+        warehouse_id: +document.getElementById('ir_wh').value || 1,
+        formats: document.getElementById('ir_formats').value,
+        code: document.getElementById('ir_code').value
+    };
+    fetch(ZONE_API + '?action=robot_save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (x) { toast(x.ok ? 'Робот сохранён' : 'Ошибка: ' + (x.j.error || '')); if (x.ok) robotLoad(); })
+        .catch(function () { toast('Нет связи с сервером'); });
+};
+document.getElementById('ir_run').onclick = function () {
+    var btn = this;
+    btn.disabled = true;
+    document.getElementById('ir_status').textContent = 'Робот работает...';
+    fetch(ZONE_API + '?action=robot_run', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (j) {
+        document.getElementById('ir_status').textContent = robotStatusText(j);
+        robotRenderLog(j.log || []);
+        toast(robotStatusText(j));
+        btn.disabled = false;
+    }).catch(function () {
+        document.getElementById('ir_status').textContent = 'Ошибка связи';
+        btn.disabled = false;
+    });
+};
 /* ---------- Интеграция и логирование ---------- */
 var INT_PAGE=1, INT_PAGES=1;
 function eh(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}

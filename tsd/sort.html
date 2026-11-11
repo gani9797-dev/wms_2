@@ -62,6 +62,7 @@ let SERIALS=[];    // отсканированные серийники
 let SER_AGG={};    // с/н -> агрегационный QR-код (QR с несколькими с/н через «;»)
 let PENDING_QTY=0; // введённое количество
 let ASM=null;      // состояние сборки отгрузки (буфер отбора)
+let ESC_ONCE=0;    // первый Esc на экране с/н — сохранить промежуточный статус
 function toast(t,ms){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',ms||2600)}
 function api(p,o){o=o||{};o.headers=Object.assign({'Content-Type':'application/json','X-Tsd-Token':TOKEN},o.headers||{});return fetch('sort.php'+p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN),o)}
 const post=(a,b)=>api('?action='+a,{method:'POST',body:JSON.stringify(b||{})}).then(r=>r.json().then(j=>({s:r.status,j})));
@@ -74,7 +75,18 @@ function go(name,fn){NAV.push({name,fn});if(NAV.length>40)NAV.splice(0,NAV.lengt
 function goReplace(name,fn){if(NAV.length)NAV[NAV.length-1]={name,fn};else NAV.push({name,fn});paintBack();const r=fn();if(r&&r.catch)r.catch(()=>{})}
 function back(){if(NAV.length>1){NAV.pop();paintBack();const r=NAV[NAV.length-1].fn();if(r&&r.catch)r.catch(()=>{})}}
 $('navback').onclick=()=>back();
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();back();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+ // Серийные номера: 1-й Esc сохраняет промежуточный статус, 2-й — сбрасывает и к товару.
+ const top=NAV.length?NAV[NAV.length-1].name:'';
+ if(top==='serials'&&SERIALS.length){
+  if(!ESC_ONCE){ESC_ONCE=1;toast('Отсканировано '+SERIALS.length+' с/н. Промежуточный статус сохранён. Esc ещё раз — вернуться к товару и сбросить.',6000);return}
+  ESC_ONCE=0;
+  post('serial_unlock',{shipment_id:DOC?DOC.id:0,user_id:uid(),all:0}).catch(()=>{});
+  SERIALS=[];SER_AGG={};PENDING_QTY=0;
+  goReplace('doc',()=>scrDoc());
+  return;
+ }
+ back();}});
 // Шапка документа: код, клиент, % собрана, задания.
 function head(){
  if(!DOC){$('dhead').textContent='сканируй код отгрузки';return}
@@ -394,7 +406,7 @@ async function scanSerial(){
  for(const v of parts){
   if(SERIALS.length>=total){lastErr='Все серийные номера уже отсканированы';break}
   if(SERIALS.indexOf(v)>=0){lastErr='Серийник уже отсканирован: '+v;continue}
-  const r=await api('?action=serial&id='+(DOC?DOC.id:0)+'&code='+encodeURIComponent(v)+'&sku='+encodeURIComponent(ITEM.sku));
+  const r=await api('?action=serial&id='+(DOC?DOC.id:0)+'&code='+encodeURIComponent(v)+'&sku='+encodeURIComponent(ITEM.sku)+'&user_id='+encodeURIComponent(uid()||'')+'&user_fio='+encodeURIComponent(ME?ME.fio:''));
   const j=await r.json().catch(()=>({}));
   if(!r.ok){lastErr=j.error||'Серийник уже отсканирован';continue}
   SERIALS.push(v);

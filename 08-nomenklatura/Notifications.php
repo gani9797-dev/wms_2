@@ -130,7 +130,9 @@ final class Notifications
     public static function push(PDO $pdo, string $kind, string $title, ?string $body = null, ?string $sku = null, int $important = 0, ?int $userId = null): void
     {
         try {
-            if (in_array($kind, self::KINDS, true)) {
+            // Важные уведомления (например, размещение в чужую зону) не
+            // подавляются настройками подписки — они обязательны для склада.
+            if (in_array($kind, self::KINDS, true) && $important !== 1) {
                 try {
                     if ($userId !== null) {
                         $st = $pdo->prepare("SELECT is_on FROM notification_subscriptions WHERE event_kind = :k AND user_id = :u LIMIT 1");

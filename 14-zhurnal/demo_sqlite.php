@@ -62,6 +62,40 @@ function wms_journal_collect(callable $query, array $f): array
     return ['rows' => $rows, 'total' => $total, 'from' => $from, 'to' => $to];
 }
 
+/** Московское время журнала: ДД.ММ.ГГГГ ЧЧ:ММ:СС (сервер БД — Europe/Moscow). */
+function wms_journal_msk_time(mixed $v): string
+{
+    $s = trim((string)($v ?? ''));
+    if ($s === '') {
+        return '';
+    }
+    $s = str_replace('T', ' ', $s);
+    try {
+        if (preg_match('/(?:[+-]\d{2}:?\d{2}|Z)$/', $s)) {
+            $dt = new DateTime($s);
+            $dt->setTimezone(new DateTimeZone('Europe/Moscow'));
+            return $dt->format('d.m.Y H:i:s');
+        }
+        // Журнал пишет doc_date через PHP date() в UTC — переводим в Москву.
+        $dt = new DateTime($s, new DateTimeZone('UTC'));
+        $dt->setTimezone(new DateTimeZone('Europe/Moscow'));
+        return $dt->format('d.m.Y H:i:s');
+    } catch (Throwable) {
+        return $s;
+    }
+}
+
+function wms_journal_msk_rows(array $rows): array
+{
+    foreach ($rows as &$r) {
+        if (isset($r['doc_date'])) {
+            $r['doc_date'] = wms_journal_msk_time($r['doc_date']);
+        }
+    }
+    unset($r);
+    return $rows;
+}
+
 /** Значение ячейки CSV: кавычки и разделитель приводим к безопасному виду. */
 function wms_journal_csv_val(mixed $v): string
 {
@@ -76,7 +110,7 @@ function wms_journal_csv_stock(array $rows): string
     $lines = ["\xEF\xBB\xBF" . implode(';', $head)];
     foreach ($rows as $r) {
         $lines[] = implode(';', [
-            wms_journal_csv_val($r['doc_date'] ?? ''),
+            wms_journal_csv_val(wms_journal_msk_time($r['doc_date'] ?? '')),
             wms_journal_csv_val($r['op_type'] ?? ''),
             wms_journal_csv_val($r['doc_type'] ?? ''),
             wms_journal_csv_val($r['doc_no'] ?? ''),
@@ -103,7 +137,7 @@ function wms_journal_csv_serial(array $rows): string
     $lines = ["\xEF\xBB\xBF" . implode(';', $head)];
     foreach ($rows as $r) {
         $lines[] = implode(';', [
-            wms_journal_csv_val($r['doc_date'] ?? ''),
+            wms_journal_csv_val(wms_journal_msk_time($r['doc_date'] ?? '')),
             wms_journal_csv_val($r['serial_no'] ?? ''),
             wms_journal_csv_val($r['op_type'] ?? ''),
             wms_journal_csv_val($r['sku'] ?? ''),
@@ -127,15 +161,36 @@ try {
     if ($action === 'list') {
         $f = $_GET;
         $d = WmsJournal::query($pdo, $f);
+        $d['rows'] = wms_journal_msk_rows($d['rows'] ?? []);
         $d['active_filters'] = wms_journal_active_filters($f);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($d, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
     } elseif ($action === 'serial_list') {
         $f = $_GET;
         $d = WmsJournal::querySerial($pdo, $f);
+        $d['rows'] = wms_journal_msk_rows($d['rows'] ?? []);
         $d['active_filters'] = wms_journal_active_filters($f);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($d, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
+    } elseif ($action === 'serial_status_list') {
+        // Онлайн-статусы серийных номеров на сортировке (промежуточные/завершённые).
+        $rows = [];
+        try {
+            $st = $pdo->query(
+                "SELECT ss.id, ss.serial_no, ss.sku, ss.shipment_id, ss.status,
+                        ss.user_id, ss.user_fio, ss.created_at, ss.updated_at,
+                        s.doc_no AS shipment_doc_no, p.name AS product_name
+                   FROM wms_serial_status ss
+                   LEFT JOIN shipments s ON s.id=ss.shipment_id
+                   LEFT JOIN products p ON p.sku=ss.sku
+                  ORDER BY ss.updated_at DESC, ss.id DESC LIMIT 500"
+            );
+            $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable) {
+            $rows = [];
+        }
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['rows' => $rows, 'total' => count($rows)], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     } elseif ($action === 'op_types') {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
@@ -164,7 +219,7 @@ try {
     } else {
         http_response_code(404);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['error' => 'Неизвестное действие. Доступно: list, serial_list, export, op_types'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['error' => 'Неизвестное действие. Доступно: list, serial_list, serial_status_list, export, op_types'], JSON_UNESCAPED_UNICODE);
     }
 } catch (Throwable $e) {
     http_response_code(400);

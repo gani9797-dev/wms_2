@@ -407,18 +407,10 @@ final class CellPlacement
         $beam = self::normalizeBeam($cell['beam_width'] ?? self::BEAM_32);
         $cap = self::levelCapacity($beam, $palletType, $robot);
 
-        // Правило заказчика: если в секции (ряд + секция) хоть у одной ячейки
-        // включён флаг «разрешены разные типы паллет» — робот в этой секции
-        // не размещает (размещение вручную возможно, автоматика — нет).
-        foreach ($secCells as $s) {
-            if ($isIgn($s)) {
-                continue;
-            }
-            if ((int)($s['allow_multi_pallet_types'] ?? 0) === 1) {
-                return $bad('Секция настроена на разные типы паллет — робот здесь не размещает (ячейка '
-                    . (string)($cell['code'] ?? '') . ')');
-            }
-        }
+        // Флаг «разрешены разные типы паллет»: в этой ячейке робот не управляет
+        // тарой (можно ставить любой тип), секционное закрепление для неё не действует.
+        // Если флаг снят — робот ведёт всю секцию: первый тип закрепляется за секцией.
+        $cellMixed = (int)($cell['allow_multi_pallet_types'] ?? 0) === 1;
 
         // Правило «разные товары в одной ячейке»: снятый флаг allow_mixed_goods.
         $mixed = self::mixedGoodsError($cell, (array)($cell['content_skus'] ?? []), self::skuList($sku));
@@ -456,12 +448,16 @@ final class CellPlacement
 
         // --- Секционная блокировка типа паллеты (робот) ---
         $secMode = null; // euro|fin|null
-        $secHasOccupied = false;
+        $secHasManaged = false;
         foreach ($secCells as $s) {
             if ($isIgn($s) || !self::isOccupied($s)) {
                 continue;
             }
-            $secHasOccupied = true;
+            // Ячейки с флагом «разные типы» вне управления тарами робота.
+            if ((int)($s['allow_multi_pallet_types'] ?? 0) === 1) {
+                continue;
+            }
+            $secHasManaged = true;
             if (($s['pallet_type'] ?? '') === null || ($s['pallet_type'] ?? '') === '') {
                 continue; // старые данные без типа — режим не блокируем
             }
@@ -474,9 +470,8 @@ final class CellPlacement
                 $secMode = $secMode ?? 'fin';
             }
         }
-        // Если секция пустая и робот включён — любой тип допустим (секция откроется при первом размещении).
-        // Если секция не пустая и робот включён — тип паллеты должен совпадать с типом секции.
-        if ($robot['section_pallet_lock'] === 1 && $secHasOccupied && $secMode !== null && $secMode !== $palletType) {
+        // Секцию под один тип ведёт робот только для ячеек БЕЗ флага «разные типы».
+        if (!$cellMixed && $robot['section_pallet_lock'] === 1 && $secHasManaged && $secMode !== null && $secMode !== $palletType) {
             return $bad($secMode === 'euro'
                 ? 'Секция настроена под евро: фин ставить нельзя'
                 : 'Секция занята финами: добивка только финами');
@@ -502,7 +497,7 @@ final class CellPlacement
 
         // Для 3.6 + фин: блокировка заданной ячейки яруса (по умолчанию 3-й).
         $blockPlace = (string)(int)($robot['beam36_fin_block_place'] ?? 3);
-        if ($robot['fin_block_3rd_cell'] === 1 && $beam > 3.4 && $palletType === 'fin') {
+        if (!$cellMixed && $robot['fin_block_3rd_cell'] === 1 && $beam > 3.4 && $palletType === 'fin') {
             // На балке 3,6 под фин доступны 1-я, 2-я и 4-я ячейки;
             // заданная (по умолчанию 3-я) блокируется всегда.
             $placeNo = trim((string)($cell['place_no'] ?? ''));
@@ -690,7 +685,7 @@ final class CellPlacement
      */
     public static function suggest(PDO $pdo, string $palletType, ?int $palletHeightMm = null,
         ?int $warehouseId = null, string|array|null $sku = null, ?int $contractorId = null,
-        string $quality = 'новый'): ?array
+        string $quality = 'новый', array $excludeCodes = [], bool $allowFallback = false): ?array
     {
         $palletType = self::normalizePalletType($palletType);
 
@@ -721,7 +716,45 @@ final class CellPlacement
             $sql .= " AND COALESCE(quality_lock, 0) = 0";
         }
         $params = [];
-        if ($clientZones) {
+        if ($allowFallback) {
+            // Аварийный подбор: клиентская зона заполнена (например, strim).
+            // Разрешаем другие клиентские зоны и обычное хранение. Зоны приёмки,
+            // отгрузки и сортировки в подбор не попадают.
+            $fb = [];
+            foreach (array_keys($priorityZones) as $z) {
+                if (strtolower(trim((string)$z)) === 'storage') {
+                    continue;
+                }
+                foreach (self::zoneVariants((string)$z) as $v) {
+                    $fb[$v] = true;
+                }
+            }
+            try {
+                $zq = $pdo->prepare(
+                    "SELECT z.code FROM storage_zone_clients c
+                       JOIN storage_zones z ON z.id = c.zone_id
+                      WHERE c.contractor_id = :c AND COALESCE(z.is_active,1) = 1
+                        AND LOWER(z.code) NOT IN ('storage','receiving','quarantine','shipment','sorting','сортировка')"
+                );
+                $zq->execute([':c' => (int)$contractorId]);
+                foreach ($zq->fetchAll(PDO::FETCH_COLUMN) as $z) {
+                    foreach (self::zoneVariants((string)$z) as $v) {
+                        $fb[$v] = true;
+                    }
+                }
+            } catch (Throwable) {
+            }
+            // Если у клиента есть другие зоны — уходим именно в них.
+            // Общее хранение подключаем только когда других клиентских зон нет.
+            $zoneCodes = $fb ? array_values(array_unique(array_keys($fb))) : ['storage'];
+            $ph = [];
+            foreach ($zoneCodes as $i => $z) {
+                $k = ':fb' . $i;
+                $ph[] = $k;
+                $params[$k] = $z;
+            }
+            $sql .= ' AND LOWER(zone) IN (' . implode(',', $ph) . ')';
+        } elseif ($clientZones) {
             // Только зоны клиента. Его конкретные ячейки добавляем в выборку
             // отдельным условием — они «свои» даже при другой зоне.
             $zoneCodes = [];
@@ -806,6 +839,19 @@ final class CellPlacement
 
         $cands = [];
         foreach ($free as $i => $cell) {
+            // Исключить уже предложенные/текущие ячейки (кнопка «другая ячейка»).
+            if ($excludeCodes) {
+                $skip = false;
+                foreach ($excludeCodes as $ex) {
+                    if (self::sameCellCode((string)$ex, (string)($cell['code'] ?? ''))) {
+                        $skip = true;
+                        break;
+                    }
+                }
+                if ($skip) {
+                    continue;
+                }
+            }
             $cell['content_skus'] = $content[(int)($cell['id'] ?? 0)] ?? [];
             $chk = self::checkCell($cell, $palletType, $palletHeightMm, $bySection, $byLevel, null, $sku, $robot, $quality);
             if (!$chk['ok']) {
@@ -944,6 +990,27 @@ final class CellPlacement
             'zone' => (string)($top['cell']['zone'] ?? ''),
             'reasons' => self::placementReasons($top, $ctx),
         ];
+        // Аварийное размещение: ячейка вне заявленных зон клиента.
+        if ($allowFallback && $clientZones) {
+            $chosen = strtolower(trim((string)($top['cell']['zone'] ?? '')));
+            $inRequested = false;
+            foreach ($clientZones as $z) {
+                foreach (self::zoneVariants((string)$z) as $v) {
+                    if ($v === $chosen) {
+                        $inRequested = true;
+                        break 2;
+                    }
+                }
+            }
+            if (!$inRequested) {
+                $zoneName = self::zoneDisplayName($pdo, (string)($top['cell']['zone'] ?? ''));
+                $placement['fallback'] = true;
+                $placement['requested_zones'] = $clientZones;
+                $placement['zone_name'] = $zoneName;
+                $placement['warning'] = 'Товар будет размещен в зоне «' . $zoneName . '»';
+                $placement['reasons'][] = $placement['warning'];
+            }
+        }
         $placement['reason'] = implode('; ', $placement['reasons']);
         return [
             'cell' => $top['cell'],
@@ -953,6 +1020,450 @@ final class CellPlacement
             'section_full' => (bool)$top['section_full'],
             'section_free' => (int)$top['sec_free'],
             'section_incomplete' => !$top['section_full'],
+        ];
+    }
+
+    /** Человекочитаемое название зоны по коду (для предупреждений на ТСД). */
+    public static function zoneDisplayName(PDO $pdo, string $zoneCode): string
+    {
+        $code = trim($zoneCode);
+        if ($code === '') {
+            return 'хранение';
+        }
+        try {
+            $st = $pdo->prepare('SELECT name FROM storage_zones WHERE LOWER(code)=LOWER(:c) LIMIT 1');
+            $st->execute([':c' => $code]);
+            $name = trim((string)($st->fetchColumn() ?: ''));
+            if ($name !== '') {
+                return $name;
+            }
+        } catch (Throwable) {
+        }
+        $map = ['storage' => 'Хранение', 'shipment' => 'Отгрузка', 'receiving' => 'Приёмка',
+            'quarantine' => 'Карантин', 'sorting' => 'Сортировка', 'сортировка' => 'Сортировка'];
+        return $map[strtolower($code)] ?? $code;
+    }
+
+    /**
+     * Диагностика размещения: объясняет, почему паллета не подходит к ячейке.
+     * Используется модулем 13 → «Роботы» → «Эмитация размещения».
+     *
+     * Проверки повторяют правила suggest()/checkCell(): клиентские зоны, занятость,
+     * блокировки, высота, тара, смешанные товары, качество, секционные правила,
+     * лимиты и ярус. Возвращает пошаговый отчёт и фактическое предложение робота.
+     *
+     * @return array{ok:bool,summary:string,pallet:array,cell:array,checks:array,
+     *               blockers:array,suggested:?array,same_as_suggested:bool,robot:array}
+     */
+    public static function diagnose(PDO $sdb, string $palletCode, string $cellCode, ?int $warehouseId = null): array
+    {
+        require_once __DIR__ . '/../shared/db.php';
+        $palletCode = trim($palletCode);
+        $cellCode = trim($cellCode);
+        $checks = [];
+        $add = static function (string $key, string $label, bool $ok, string $detail) use (&$checks): void {
+            $checks[] = ['key' => $key, 'label' => $label, 'ok' => $ok, 'detail' => $detail];
+        };
+        $ndb = self::$nomenclaturePdo ?? (function_exists('wms_nomenclature_pdo') ? wms_nomenclature_pdo() : $sdb);
+
+        // --- 1. Паллета: строки товарного запаса по SSCC ---
+        $rows = [];
+        if ($palletCode !== '') {
+            try {
+                $st = $ndb->prepare(
+                    "SELECT s.*, p.sku, p.name, p.length_mm, p.width_mm, p.height_mm, p.weight_g,
+                            p.pallet_type AS prod_pallet_type, p.pallet_height_mm, p.contractor_id, p.unit
+                       FROM product_stock s LEFT JOIN products p ON p.id = s.product_id
+                      WHERE TRIM(COALESCE(s.pallet, '')) = :p
+                      ORDER BY s.id LIMIT 100"
+                );
+                $st->execute([':p' => $palletCode]);
+                $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Throwable) {
+            }
+        }
+        $skus = [];
+        $qty = 0.0;
+        $stockType = '';
+        $prodType = '';
+        $heightSnapshot = 0;
+        $heightCard = 0;
+        $weightKg = 0.0;
+        $quality = 'новый';
+        $contractorId = null;
+        $palletCells = [];
+        $name = '';
+        foreach ($rows as $r) {
+            if (trim((string)($r['sku'] ?? '')) !== '') {
+                $skus[(string)$r['sku']] = true;
+            }
+            $qty += (float)($r['qty'] ?? 0);
+            if (trim((string)($r['pallet_type'] ?? '')) !== '') {
+                $stockType = self::normalizePalletType((string)$r['pallet_type']);
+            }
+            if (trim((string)($r['prod_pallet_type'] ?? '')) !== '') {
+                $prodType = self::normalizePalletType((string)$r['prod_pallet_type']);
+            }
+            $heightSnapshot = max($heightSnapshot, (int)($r['vgh_height_mm'] ?? 0));
+            $heightCard = max($heightCard, (int)($r['pallet_height_mm'] ?? 0));
+            $w = (float)($r['vgh_weight_kg'] ?? 0);
+            if ($w <= 0 && (float)($r['weight_g'] ?? 0) > 0) {
+                $w = (float)$r['qty'] * (float)$r['weight_g'] / 1000.0 + 25;
+            }
+            $weightKg += $w;
+            if ($contractorId === null && isset($r['contractor_id']) && $r['contractor_id'] !== null && $r['contractor_id'] !== '') {
+                $contractorId = (int)$r['contractor_id'];
+            }
+            if ((string)($r['quality'] ?? '') === 'Брак') {
+                $quality = 'Брак';
+            }
+            if ($name === '' && trim((string)($r['name'] ?? '')) !== '') {
+                $name = (string)$r['name'];
+            }
+            $pc = trim((string)($r['cell'] ?? ''));
+            if ($pc !== '') {
+                $palletCells[$pc] = true;
+            }
+        }
+        $skus = array_keys($skus);
+        $ptype = $stockType !== '' ? $stockType : ($prodType !== '' ? $prodType : 'euro');
+        $heightMm = null;
+        $heightSource = 'не задана (проверка высоты пропускается)';
+        if ($heightSnapshot > 0) {
+            $heightMm = $heightSnapshot;
+            $heightSource = 'снимок ВГХ (робот обновления ВГХ)';
+        } elseif ($heightCard > 0) {
+            $heightMm = $heightCard;
+            $heightSource = 'карточка товара (pallet_height_mm)';
+        }
+        $tsdPallet = null;
+        if (!$rows && $palletCode !== '') {
+            try {
+                $rdb = function_exists('wms_receipts_pdo') ? wms_receipts_pdo() : null;
+                if ($rdb) {
+                    $st = $rdb->prepare('SELECT sscc,status,qty_total,weight,created_at,receipt_id FROM tsd_pallets WHERE sscc=:s LIMIT 1');
+                    $st->execute([':s' => $palletCode]);
+                    $tsdPallet = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
+            } catch (Throwable) {
+            }
+        }
+        $client = self::clientContext($sdb, $contractorId);
+        $add('pallet', 'Паллета найдена в товарном запасе', (bool)$rows,
+            $rows
+                ? ('SSCC ' . $palletCode . ' · SKU: ' . (implode(', ', $skus) ?: '—') . ' · ' . round($qty, 3) . ' шт'
+                    . ($palletCells ? ' · ячейки: ' . implode(', ', array_keys($palletCells)) : ''))
+                : ('SSCC ' . $palletCode . ' не найден в product_stock'
+                    . ($tsdPallet ? ' (есть в приёмке, статус: ' . (string)($tsdPallet['status'] ?? '') . ')' : '')
+                    . '. Размещение возможно только после приёмки.'));
+        $pallet = [
+            'code' => $palletCode,
+            'found' => (bool)$rows,
+            'sku' => implode(', ', $skus),
+            'name' => $name,
+            'qty' => round($qty, 3),
+            'pallet_type' => $ptype,
+            'pallet_type_label' => $ptype === 'fin' ? 'Фин' : 'Евро',
+            'height_mm' => $heightMm,
+            'height_source' => $heightSource,
+            'weight_kg' => round($weightKg, 2),
+            'quality' => $quality,
+            'contractor_id' => $contractorId,
+            'contractor_name' => (string)($client['name'] ?? ''),
+            'cells' => array_keys($palletCells),
+            'tsd' => $tsdPallet,
+        ];
+
+        // --- 2. Ячейка ---
+        $cellRows = [];
+        if ($cellCode !== '') {
+            try {
+                $sql = 'SELECT * FROM storage_cells WHERE UPPER(code)=UPPER(:c)';
+                $cp = [':c' => $cellCode];
+                if ($warehouseId) {
+                    $sql .= ' AND warehouse_id=:w';
+                    $cp[':w'] = $warehouseId;
+                }
+                $sql .= ' ORDER BY id LIMIT 5';
+                $st = $sdb->prepare($sql);
+                $st->execute($cp);
+                $cellRows = $st->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Throwable) {
+            }
+        }
+        if (!$cellRows) {
+            $add('cell', 'Ячейка существует', false, 'Ячейка ' . ($cellCode !== '' ? $cellCode : '(не указана)') . ' не найдена');
+            $blockers = [];
+            foreach ($checks as $c) {
+                if (!$c['ok']) {
+                    $blockers[] = $c['detail'];
+                }
+            }
+            return [
+                'ok' => false,
+                'summary' => 'Не подходит: ' . ($blockers[0] ?? 'ячейка не найдена'),
+                'pallet' => $pallet,
+                'cell' => ['code' => $cellCode],
+                'checks' => $checks,
+                'blockers' => $blockers,
+                'suggested' => null,
+                'same_as_suggested' => false,
+                'robot' => self::robotSettings($sdb),
+            ];
+        }
+        $cell = $cellRows[0];
+        $add('cell', 'Ячейка существует', true,
+            'Код ' . (string)$cell['code'] . ' · склад ' . (string)($cell['warehouse_id'] ?? '')
+            . ($cellRows[1] ?? null ? ' (найдено несколько ячеек с таким кодом — проверьте склад)' : ''));
+        $add('archived', 'Ячейка не в архиве', (int)($cell['is_archived'] ?? 0) !== 1,
+            (int)($cell['is_archived'] ?? 0) === 1 ? 'Ячейка в архиве — робот её не рассматривает' : 'OK');
+        $ct = strtolower(trim((string)($cell['cell_type'] ?? '')));
+        $add('cell_type', 'Ячейка паллетного типа', $ct === '' || $ct === 'pallet',
+            $ct === '' || $ct === 'pallet' ? 'OK' : ('Тип ячейки: ' . $ct . ' — подбор идёт только по pallet'));
+
+        $snap = self::snapshot($sdb, $warehouseId);
+        $robot = self::robotSettings($sdb);
+        $contentSkus = $snap['content'][(int)$cell['id']] ?? [];
+        $secKey = self::sectionKey($cell);
+        $lvlKey = self::levelKey($cell);
+        $beam = self::normalizeBeam($cell['beam_width'] ?? self::BEAM_32);
+        $cap = self::levelCapacity($beam, $ptype, $robot);
+
+        // --- 3. Зона: клиентские зоны / storage ---
+        $priorityZones = [];
+        try {
+            require_once __DIR__ . '/../shared/StorageZones.php';
+            $priorityZones = wms_storage_zone_priority($sdb, $contractorId, 'placement');
+        } catch (Throwable) {
+        }
+        $zone = self::normalizeZone((string)($cell['zone'] ?? ''));
+        $zoneVariants = [];
+        foreach ($client['zones'] as $z) {
+            foreach (self::zoneVariants($z) as $v) {
+                $zoneVariants[$v] = true;
+            }
+        }
+        foreach (array_keys($priorityZones) as $z) {
+            foreach (self::zoneVariants((string)$z) as $v) {
+                $zoneVariants[$v] = true;
+            }
+        }
+        $isClientCell = false;
+        foreach ($client['cells'] as $cc) {
+            if (self::sameCellCode((string)$cc, (string)$cell['code'])) {
+                $isClientCell = true;
+                break;
+            }
+        }
+        if ($client['zones']) {
+            $zoneOk = isset($zoneVariants[$zone]) || $isClientCell;
+            $zoneDetail = $zoneOk
+                ? ('Зона ячейки "' . $zone . '" входит в зоны клиента «' . (string)$client['name'] . '»')
+                : ('Клиент «' . (string)$client['name'] . '» размещает только в зонах: '
+                    . implode(', ', $client['zones']) . '. Зона ячейки — "' . $zone . '"'
+                    . ($isClientCell ? ' (ячейка указана в «своих» ячейках клиента)' : '') . '.');
+        } elseif ($priorityZones || $client['cells']) {
+            $zoneOk = $zone === 'storage' || isset($zoneVariants[$zone]) || $isClientCell;
+            $zoneDetail = $zoneOk
+                ? ('Зона "' . $zone . '" разрешена')
+                : ('Робот размещает в зоне storage и приоритетных зонах клиента; зона ячейки — "' . $zone . '".');
+        } else {
+            $zoneOk = $zone === 'storage';
+            $zoneDetail = $zoneOk
+                ? 'Зона хранения (storage) — OK'
+                : ('Робот по общим правилам размещает только в зоне storage; зона ячейки — "' . $zone . '".');
+        }
+        $add('zone', 'Зона ячейки разрешена для размещения', $zoneOk, $zoneDetail);
+
+        // --- 4. Занятость / блокировки ---
+        $lockOk = (int)($cell['is_locked'] ?? 0) !== 1;
+        $lockReason = trim((string)($cell['lock_reason'] ?? ''));
+        $add('locked', 'Ячейка не заблокирована', $lockOk,
+            $lockOk ? 'Блокировки нет' : ('Заблокирована' . ($lockReason !== '' ? ': ' . $lockReason : '')));
+        $freeOk = (($cell['status'] ?? '') === 'free') && (float)($cell['qty'] ?? 0) <= 0;
+        $add('free', 'Ячейка свободна', $freeOk,
+            $freeOk ? 'Статус free, остаток 0' : ('Статус: ' . (string)($cell['status'] ?? '') . ', остаток: ' . (float)($cell['qty'] ?? 0)));
+
+        // --- 5. Высота ---
+        $ch = (int)($cell['cell_height_mm'] ?? 0);
+        if ($heightMm !== null && $heightMm > 0 && $ch > 0) {
+            $hOk = $ch >= $heightMm;
+            $add('height', 'Высота паллеты проходит', $hOk,
+                'Паллета ' . $heightMm . ' мм (' . $heightSource . '), ячейка ' . $ch . ' мм'
+                . ($hOk ? ' — запас ' . ($ch - $heightMm) . ' мм' : ' — не хватает ' . ($heightMm - $ch) . ' мм'));
+        } else {
+            $add('height', 'Проверка высоты', true,
+                $ch > 0
+                    ? ('Высота паллеты не задана — проверка пропущена (ячейка ' . $ch . ' мм)')
+                    : 'Высота ячейки не задана — проверка пропущена');
+        }
+
+        // --- 6. Тара ---
+        $typeOk = self::cellAllowsType($cell, $ptype);
+        $add('pallet_type', 'Тара разрешена в ячейке/секции', $typeOk,
+            'Паллета: ' . ($ptype === 'fin' ? 'Фин' : 'Евро') . ', ячейка разрешает: '
+            . (string)($cell['allowed_pallet_types'] ?? 'euro,fin'));
+
+        // --- 7. Смешанные товары ---
+        $mixed = self::mixedGoodsError($cell, (array)$contentSkus, $skus);
+        $add('mixed', 'Правило «разные товары в одной ячейке»', $mixed === null,
+            $mixed ?? ('В ячейке уже лежит: ' . (implode(', ', (array)$contentSkus) ?: 'ничего') . ' — совместимо'));
+
+        // --- 8. Качество ---
+        $qOk = !((int)($cell['quality_lock'] ?? 0) === 1 && $quality === 'Брак');
+        $add('quality', 'Качество товара допускается', $qOk,
+            $qOk ? ('Паллета: ' . $quality) : 'В ячейке запрещён брак (флаг «Только новый товар»), паллета помечена «Брак»');
+
+        // --- 9. Управление тарой (флаг «разные типы паллет») ---
+        $cellMixed = (int)($cell['allow_multi_pallet_types'] ?? 0) === 1;
+        $add('section_multi', 'Режим управления тарой', true,
+            $cellMixed
+                ? 'В ячейке разрешены разные типы паллет — робот не управляет тарой для этой ячейки (можно ставить любой тип)'
+                : 'Разные типы отключены — робот закрепляет тип тары за секцией (первый размещённый тип)');
+
+        // --- 10. Секционная блокировка типа (робот) ---
+        $secHasManaged = false;
+        $secMode = null;
+        foreach ($snap['bySection'][$secKey] ?? [] as $s) {
+            if (!self::isOccupied($s)) {
+                continue;
+            }
+            // Ячейки с флагом «разные типы» в управлении тарой секции не участвуют.
+            if ((int)($s['allow_multi_pallet_types'] ?? 0) === 1) {
+                continue;
+            }
+            $secHasManaged = true;
+            if (trim((string)($s['pallet_type'] ?? '')) === '') {
+                continue;
+            }
+            $t = self::normalizePalletType((string)$s['pallet_type']);
+            if ($t === 'euro') {
+                $secMode = 'euro';
+                break;
+            }
+            if ($t === 'fin') {
+                $secMode = $secMode ?? 'fin';
+            }
+        }
+        $secTypeOk = $cellMixed || !($robot['section_pallet_lock'] === 1 && $secHasManaged && $secMode !== null && $secMode !== $ptype);
+        $add('section_type', 'Тип тары секции соответствует паллете', $secTypeOk,
+            $cellMixed
+                ? 'Не применяется: в ячейке разрешены разные типы паллет'
+                : (!$secTypeOk
+                    ? ('Секция занята тарой «' . ($secMode === 'euro' ? 'Евро' : 'Фин') . '» — «'
+                        . ($ptype === 'fin' ? 'Фин' : 'Евро') . '» ставить нельзя')
+                    : ($secHasManaged ? ('Тип секции: ' . ($secMode === 'euro' ? 'Евро' : ($secMode === 'fin' ? 'Фин' : 'не определён')))
+                        : 'Секция пуста — тип закрепится за первой паллетой')));
+
+        // --- 11. Лимит паллет в секции ---
+        $secPalletTotal = 0;
+        foreach ($snap['bySection'][$secKey] ?? [] as $s) {
+            if (self::isOccupied($s)) {
+                $secPalletTotal += max(1, (int)($s['pallet_count'] ?? 0));
+            }
+        }
+        $secCap = $ptype === 'fin' ? (int)($robot['fin_cap_per_section'] ?? 3) : (int)($robot['euro_cap_per_section'] ?? 4);
+        $secCapOk = ($secPalletTotal + 1) <= $secCap;
+        $add('section_cap', 'Лимит паллет в секции', $secCapOk,
+            'Занято ' . $secPalletTotal . ' из ' . $secCap . ' (' . ($ptype === 'fin' ? 'фин' : 'евро') . ')'
+            . ($secCapOk ? '' : ' — размещение превысит лимит'));
+
+        // --- 12. 3-я фин-ячейка на балке 3,6 ---
+        $finBlockOk = true;
+        $finBlockDetail = 'Правило не применяется (не фин или балка 3,2 м)';
+        if (!$cellMixed && $robot['fin_block_3rd_cell'] === 1 && $beam > 3.4 && $ptype === 'fin') {
+            $blockPlace = (int)($robot['beam36_fin_block_place'] ?? 3);
+            $placeNo = (int)($cell['place_no'] ?? 0);
+            $finBlockOk = $placeNo !== $blockPlace;
+            $finBlockDetail = $finBlockOk
+                ? ('Балка 3,6 м, место ' . $placeNo . ' не блокируется (заблокировано место ' . $blockPlace . ')')
+                : ('Балка 3,6 м: место ' . $blockPlace . ' яруса заблокировано для фин-паллет');
+        }
+        $add('fin_block', 'Ячейка не заблокирована под фин (балка 3,6)', $finBlockOk, $finBlockDetail);
+
+        // --- 13. Ярус ---
+        $lvlBusy = 0;
+        foreach ($snap['byLevel'][$lvlKey] ?? [] as $s) {
+            if (self::isOccupied($s) || self::isTempBlocked($s)) {
+                $lvlBusy++;
+            }
+        }
+        $lvlOk = $lvlBusy < $cap;
+        $add('level', 'На ярусе есть свободное место', $lvlOk,
+            'Ярус: ' . $lvlBusy . ' из ' . $cap . ' мест занято (балка '
+            . ($beam <= 3.4 ? '3,2' : '3,6') . ' м, ' . ($ptype === 'fin' ? 'фин' : 'евро') . ')'
+            . ($lvlOk ? '' : ' — ярус полон'));
+
+        // --- 14. Итоговая проверка checkCell ---
+        $verdict = self::checkCell($cell, $ptype, $heightMm, $snap['bySection'], $snap['byLevel'],
+            null, $skus, $robot, $quality);
+        $add('verdict', 'Итоговая проверка робота (checkCell)', $verdict['ok'],
+            $verdict['ok'] ? 'Все правила выполнены' : (string)($verdict['error'] ?? 'не подходит'));
+
+        // --- 15. Что предлагает робот ---
+        $sug = null;
+        try {
+            $sug = self::suggest($sdb, $ptype, $heightMm, $warehouseId, $skus, $contractorId, $quality);
+        } catch (Throwable) {
+        }
+        $suggested = null;
+        if ($sug) {
+            $reasons = (array)($sug['placement']['reasons'] ?? []);
+            $suggested = [
+                'cell' => (string)($sug['cell']['code'] ?? ''),
+                'reasons' => $reasons,
+                'reason' => (string)($sug['placement']['reason'] ?? implode('; ', $reasons)),
+            ];
+        }
+        $same = $suggested ? self::sameCellCode($cell['code'], $suggested['cell']) : false;
+
+        $blockers = [];
+        foreach ($checks as $c) {
+            if (!$c['ok']) {
+                $blockers[] = $c['detail'];
+            }
+        }
+        $ok = !$blockers;
+        if ($ok && $suggested && !$same) {
+            $add('priority', 'Приоритет робота', true,
+                'Ячейка подходит, но робот предлагает ' . $suggested['cell'] . ' по приоритету: '
+                . ($suggested['reason'] !== '' ? $suggested['reason'] : 'свободная ячейка'));
+        } elseif ($ok && !$suggested) {
+            $add('priority', 'Приоритет робота', true,
+                'Ячейка подходит, но сейчас у робота нет свободных кандидатов (проверьте занятость и зоны).');
+        }
+        $summary = $ok
+            ? ('Ячейка ' . (string)$cell['code'] . ' подходит для паллеты ' . $palletCode)
+            : ('Не подходит: ' . implode('; ', array_slice($blockers, 0, 3))
+                . (count($blockers) > 3 ? ' …' : ''));
+
+        return [
+            'ok' => $ok,
+            'summary' => $summary,
+            'pallet' => $pallet,
+            'cell' => [
+                'code' => (string)$cell['code'],
+                'warehouse_id' => (int)($cell['warehouse_id'] ?? 0),
+                'zone' => (string)($cell['zone'] ?? ''),
+                'status' => (string)($cell['status'] ?? ''),
+                'is_locked' => (int)($cell['is_locked'] ?? 0),
+                'lock_reason' => (string)($cell['lock_reason'] ?? ''),
+                'cell_height_mm' => (int)($cell['cell_height_mm'] ?? 0),
+                'allowed_pallet_types' => (string)($cell['allowed_pallet_types'] ?? ''),
+                'beam_width' => $beam,
+                'place_no' => (int)($cell['place_no'] ?? 0),
+                'level_no' => (int)($cell['level_no'] ?? 0),
+                'allow_multi_pallet_types' => (int)($cell['allow_multi_pallet_types'] ?? 0),
+                'quality_lock' => (int)($cell['quality_lock'] ?? 0),
+                'allow_mixed_goods' => (int)($cell['allow_mixed_goods'] ?? 1),
+                'section' => $secKey,
+                'level' => $lvlKey,
+            ],
+            'checks' => $checks,
+            'blockers' => $blockers,
+            'suggested' => $suggested,
+            'same_as_suggested' => $same,
+            'robot' => $robot,
         ];
     }
 
@@ -1162,8 +1673,11 @@ final class CellPlacement
         try {
             // --- Лимит секции по количеству паллет (робот) ---
             $secKey = self::sectionKey($cell);
+            $managed = (int)($cell['allow_multi_pallet_types'] ?? 0) === 0;
             $secPalletTotal = 0;
             $secHasOccupied = false;
+            $secHasManaged = false;
+            $secMode = null;
             $stSec = $pdo->prepare(
                 "SELECT id, pallet_count, pallet_type, qty, status FROM storage_cells
                  WHERE warehouse_id = :w AND building = :b AND row_no = :s
@@ -1176,7 +1690,25 @@ final class CellPlacement
                 if (self::isOccupied($sc)) {
                     $secHasOccupied = true;
                     $secPalletTotal += (int)($sc['pallet_count'] ?? 0) > 0 ? (int)($sc['pallet_count'] ?? 0) : 1;
+                    // Занятость для управления секцией: только ячейки без флага «разные типы».
+                    if ((int)($sc['allow_multi_pallet_types'] ?? 0) === 0) {
+                        $secHasManaged = true;
+                        $ptSec = trim((string)($sc['pallet_type'] ?? ''));
+                        if ($ptSec !== '') {
+                            $tSec = self::normalizePalletType($ptSec);
+                            if ($tSec === 'euro') {
+                                $secMode = 'euro';
+                            } elseif ($tSec === 'fin') {
+                                $secMode = $secMode ?? 'fin';
+                            }
+                        }
+                    }
                 }
+            }
+            // Тип секции уже закреплён другой управляемой паллетой — несовместимую тару не принимаем.
+            if ($managed && $secMode !== null && $secMode !== $palletType) {
+                throw new RuntimeException('Секция настроена под ' . ($secMode === 'euro' ? 'евро' : 'фин')
+                    . ': ' . ($palletType === 'fin' ? 'фин' : 'евро') . ' ставить нельзя');
             }
             $secCap = $palletType === 'fin' ? ($robot['fin_cap_per_section'] ?? 3) : ($robot['euro_cap_per_section'] ?? 4);
             if (($secPalletTotal + 1) > $secCap) {
@@ -1185,22 +1717,32 @@ final class CellPlacement
             }
 
             // --- Секционная блокировка типа паллеты (робот) ---
-            // Если секция пустая и робот включён — первая паллета закрепляет тип тары за секцией.
-            if ($robot['section_pallet_lock'] === 1 && !$secHasOccupied) {
+            // Размещённая паллета закрепляет тип за секцией: свободные управляемые
+            // ячейки (без флага «разные типы») получают только этот тип — вторая тара
+            // (например, фин при евро) отмечается крестом и блокируется к размещению.
+            // Работает и когда секция уже частично занята управляемой паллетой.
+            $tuned = false;
+            if ($managed && $robot['section_pallet_lock'] === 1) {
                 $pdo->prepare(
                     "UPDATE storage_cells SET allowed_pallet_types = :pt
                      WHERE warehouse_id = :w AND building = :b AND row_no = :s
                        AND is_archived = 0 AND is_locked = 0 AND status = 'free'
                        AND (qty IS NULL OR qty <= 0)
-                       AND COALESCE(allow_multi_pallet_types, 1) = 1"
+                       AND COALESCE(allow_multi_pallet_types, 0) = 0"
                 )->execute([':pt' => $palletType, ':w' => $cell['warehouse_id'],
                     ':b' => $cell['building'], ':s' => $cell['row_no']]);
+                $tuned = true;
             }
 
             $pdo->prepare(
                 "UPDATE storage_cells SET pallet_type = :pt, pallet_count = 1, status = 'reserved',
                         reserved_qty = COALESCE(reserved_qty, 0) + 1 WHERE id = :id"
             )->execute([':pt' => $palletType, ':id' => $cellId]);
+            // Занятая ячейка тоже фиксирует разрешённый тип (колонка Евро/Фин).
+            if ($managed) {
+                $pdo->prepare('UPDATE storage_cells SET allowed_pallet_types = :pt WHERE id = :id')
+                    ->execute([':pt' => $palletType, ':id' => $cellId]);
+            }
 
             try {
                 $pdo->prepare(
@@ -1211,10 +1753,8 @@ final class CellPlacement
             } catch (Throwable) {
             }
 
-            // Вся секция под тип паллеты после первого размещения в пустой секции (робот).
             // Если робот выключен — старая логика: только 3.2 + евро перенастраивает секцию.
-            $tuned = false;
-            if ($robot['section_pallet_lock'] === 0 && $beam <= 3.4 && $palletType === 'euro') {
+            if ($managed && $robot['section_pallet_lock'] === 0 && $beam <= 3.4 && $palletType === 'euro') {
                 $cnt = $pdo->prepare(
                     "SELECT COUNT(*) FROM storage_cells
                      WHERE warehouse_id = :w AND building = :b AND row_no = :s
@@ -1229,19 +1769,16 @@ final class CellPlacement
                          WHERE warehouse_id = :w AND building = :b AND row_no = :s
                            AND is_archived = 0 AND is_locked = 0 AND status = 'free'
                            AND (qty IS NULL OR qty <= 0)
-                           AND COALESCE(allow_multi_pallet_types, 1) = 1"
+                           AND COALESCE(allow_multi_pallet_types, 0) = 0"
                     )->execute([':w' => $cell['warehouse_id'], ':b' => $cell['building'], ':s' => $cell['row_no']]);
                     $tuned = true;
                 }
-            } elseif ($robot['section_pallet_lock'] === 1 && !$secHasOccupied) {
-                // Уже перенастроили выше при первом размещении в пустую секцию.
-                $tuned = true;
             }
 
             // 3.6 + фин: при 3 занятых на ярусе — блокируем следующую свободную
             // ячейку яруса (по порядку place_no/code) с причиной "(Фин секция)".
             $blocked = null;
-            if ($beam > 3.4 && $palletType === 'fin') {
+            if ($managed && $beam > 3.4 && $palletType === 'fin') {
                 $q = $pdo->prepare(
                     "SELECT COUNT(*) FROM storage_cells
                      WHERE warehouse_id = :w AND building = :b AND row_no = :s AND level_no = :l
@@ -1416,6 +1953,141 @@ final class CellPlacement
     }
 
     /**
+     * Автокоррекция «пустых, но занятых» ячеек: если в ячейке нет остатка ни в
+     * product_stock, ни в cell_content, а статус busy — возвращаем свободный статус.
+     * Лечит случаи, когда паллету убрали, а статус ячейки остался занятым.
+     * @return int количество исправленных ячеек
+     */
+    public static function reconcileEmptyCells(PDO $cellPdo, ?PDO $nomPdo = null): int
+    {
+        if ($nomPdo === null && function_exists('wms_nomenclature_pdo')) {
+            $nomPdo = wms_nomenclature_pdo();
+        }
+        if (!$nomPdo) {
+            return 0;
+        }
+        try {
+            $rows = $cellPdo->query(
+                "SELECT id, code, qty, pallet_count, pallet_type
+                   FROM storage_cells
+                  WHERE is_archived = 0 AND status = 'busy' AND COALESCE(qty, 0) > 0"
+            )->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable) {
+            return 0;
+        }
+        $n = 0;
+        foreach ($rows as $r) {
+            $code = trim((string)($r['code'] ?? ''));
+            if ($code === '') {
+                continue;
+            }
+            $stock = 0.0;
+            try {
+                $st = $nomPdo->prepare(
+                    'SELECT COALESCE(SUM(qty), 0) FROM product_stock
+                      WHERE LOWER(TRIM(cell)) = LOWER(:c) AND qty > 0'
+                );
+                $st->execute([':c' => $code]);
+                $stock = (float)$st->fetchColumn();
+            } catch (Throwable) {
+            }
+            $content = 0.0;
+            try {
+                $ct = $cellPdo->prepare('SELECT COALESCE(SUM(qty), 0) FROM cell_content WHERE cell_id = :id');
+                $ct->execute([':id' => (int)$r['id']]);
+                $content = (float)$ct->fetchColumn();
+            } catch (Throwable) {
+            }
+            if ($stock > 0.0005 || $content > 0.0005) {
+                continue;
+            }
+            try {
+                $cellPdo->prepare(
+                    "UPDATE storage_cells SET status = 'free', qty = 0, reserved_qty = 0,
+                            pallet_count = 0, pallet_type = NULL WHERE id = :id"
+                )->execute([':id' => (int)$r['id']]);
+                $cellPdo->prepare(
+                    "INSERT INTO cell_history (cell_id, user_id, user_fio, action, field, field_label, old_value, new_value)
+                     VALUES (:c, 1, 'Система', 'update', 'status', 'Статус', :o, 'Свободна (пустая)')"
+                )->execute([':c' => (int)$r['id'], ':o' => 'Занята · ' . (float)($r['qty'] ?? 0) . ' шт']);
+                $n++;
+            } catch (Throwable) {
+            }
+        }
+        return $n;
+    }
+    /**
+     * Самовосстановление настроек тары по секциям (робот):
+     * если в секции есть занятая управляемая паллета (флаг «разные типы» снят),
+     * все управляемые ячейки секции настраиваются под её тип (евро/фин) —
+     * вторая тара получает крест и блокируется к размещению.
+     * Пустая секция: свободные управляемые ячейки — под оба типа.
+     * Ячейки с флагом «разные типы паллет» не трогаем.
+     * @return int количество обновлённых ячеек
+     */
+    public static function syncManagedSections(PDO $pdo): int
+    {
+        $robot = self::robotSettings($pdo);
+        if ((int)$robot['section_pallet_lock'] !== 1) {
+            return 0;
+        }
+        try {
+            $rows = $pdo->query(
+                "SELECT id,warehouse_id,building,row_no,level_no,place_no,status,qty,pallet_count,
+                        pallet_type,allow_multi_pallet_types,allowed_pallet_types,is_locked
+                   FROM storage_cells WHERE is_archived = 0"
+            )->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable) {
+            return 0;
+        }
+        $groups = [];
+        foreach ($rows as $r) {
+            $groups[self::sectionKey($r)][] = $r;
+        }
+        $upd = $pdo->prepare('UPDATE storage_cells SET allowed_pallet_types = :t WHERE id = :id');
+        $n = 0;
+        foreach ($groups as $cells) {
+            $mode = null;
+            $conflict = false;
+            foreach ($cells as $c) {
+                if ((int)($c['allow_multi_pallet_types'] ?? 0) === 1 || !self::isOccupied($c)) {
+                    continue;
+                }
+                $t = trim((string)($c['pallet_type'] ?? ''));
+                if ($t === '') {
+                    continue;
+                }
+                $t = self::normalizePalletType($t);
+                if ($mode === null) {
+                    $mode = $t;
+                } elseif ($mode !== $t) {
+                    $conflict = true;
+                }
+            }
+            if ($conflict) {
+                continue;
+            }
+            $target = $mode ?? 'euro,fin';
+            foreach ($cells as $c) {
+                if ((int)($c['allow_multi_pallet_types'] ?? 0) === 1) {
+                    continue;
+                }
+                if ($mode === null && self::isOccupied($c)) {
+                    continue;
+                }
+                if ((string)($c['allowed_pallet_types'] ?? '') === $target) {
+                    continue;
+                }
+                try {
+                    $upd->execute([':t' => $target, ':id' => (int)$c['id']]);
+                    $n++;
+                } catch (Throwable) {
+                }
+            }
+        }
+        return $n;
+    }
+    /**
      * Разблокировать тип паллеты секции, если она стала полностью пустой.
      * Вызывается после освобождения ячейки: если в секции больше нет занятых ячеек,
      * все свободные ячейки секции возвращаются к allowed_pallet_types = 'euro,fin'.
@@ -1447,7 +2119,7 @@ final class CellPlacement
              WHERE warehouse_id = :w AND building = :b AND row_no = :s
                AND is_archived = 0 AND is_locked = 0 AND status = 'free'
                AND (qty IS NULL OR qty <= 0)
-               AND COALESCE(allow_multi_pallet_types, 1) = 1"
+               AND COALESCE(allow_multi_pallet_types, 0) = 0"
         );
         $st->execute([':w' => $warehouseId, ':b' => $building, ':s' => $rowNo]);
         return $st->rowCount();

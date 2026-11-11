@@ -138,6 +138,8 @@ if ($action === 'scan' && $method === 'POST') {
     $pallet = trim((string)($b['pallet'] ?? ''));
     $serial = trim((string)($b['serial'] ?? ''));
     $marking = trim((string)($b['marking'] ?? ''));
+    $palletType = in_array(strtolower(trim((string)($b['pallet_type'] ?? ''))), ['fin', 'фин', 'финская'], true) ? 'fin'
+        : (trim((string)($b['pallet_type'] ?? '')) !== '' ? 'euro' : null);
     $receiverId = (int)($b['receiver_id'] ?? 0) ?: null;
 
     if ($rid <= 0 || $code === '') {
@@ -262,11 +264,11 @@ if ($action === 'scan' && $method === 'POST') {
         }
         try {
             $pdo->prepare(
-                "INSERT INTO receipt_operations (receipt_id,line_no,sku,supplier_batch,accept_status,accept_date,receiver_id,pallet,sku_qty,qty)
-                 VALUES (:r,:ln,:sku,:b,'Принято',datetime('now'),:rec,:pal,1,:q)"
+                "INSERT INTO receipt_operations (receipt_id,line_no,sku,supplier_batch,accept_status,accept_date,receiver_id,pallet,sku_qty,qty,pallet_type)
+                 VALUES (:r,:ln,:sku,:b,'Принято',datetime('now'),:rec,:pal,1,:q,:pt)"
             )->execute([':r' => $rid, ':ln' => ($itemId ? (int)($item['line_no'] ?? 0) : 0),
                 ':sku' => $sku, ':b' => (string)$batch, ':rec' => $receiverId,
-                ':pal' => ($pallet !== '' ? $pallet : null), ':q' => $qty]);
+                ':pal' => ($pallet !== '' ? $pallet : null), ':q' => $qty, ':pt' => $palletType]);
         } catch (Throwable) {
             // Старая БД без колонки supplier_batch.
             $pdo->prepare(

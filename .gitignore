@@ -30,6 +30,7 @@ Thumbs.db
 .env
 shared/robot_settings.json
 shared/.robot.lock
+shared/.vgh_robot.lock
 
 # Robot exchange reports
 in/success/*
@@ -44,3 +45,6 @@ out/error/*
 # Local SQLite data (not published)
 *.sqlite
 документация/cleanup-backup-*.json
+
+# Сформированные файлы факта отгрузки (локальные, не в git)
+факт отгрузка/

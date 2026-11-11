@@ -1,0 +1,184 @@
+<mxfile host="app.diagrams.net" agent="WMS TiMLog" version="24.7.17" type="device">
+  <diagram id="tare-rules" name="1. Правила тары в ячейках">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1660" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="t1" value="Ячейки и тара: как работает робот размещения" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#4C2A9E;" vertex="1" parent="1">
+          <mxGeometry x="40" y="16" width="900" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="t2" value="Флаг «Разрешены разные типы паллет» в карточке ячейки определяет, управляет ли робот тарой. Колонки Евро/Фин в реестре показывают настройку." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="40" y="52" width="1100" height="24" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ha" value="Галка «Разные типы паллет» СТОИТ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;fontSize=15;fontStyle=1;fontColor=#8A3B00;" vertex="1" parent="1">
+          <mxGeometry x="80" y="110" width="420" height="54" as="geometry"/>
+        </mxCell>
+        <mxCell id="a1" value="Робот не управляет тарой этой ячейки" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E0B080;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="80" y="200" width="420" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a2" value="Можно ставить любые типы тары (евро, фин, другие заведённые)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E0B080;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="80" y="306" width="420" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a3" value="Секционное закрепление типа для этой ячейки не применяется" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E0B080;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="80" y="412" width="420" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="ea1" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#E65100;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="290" y="164" as="sourcePoint"/>
+            <mxPoint x="290" y="200" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ea2" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#E65100;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="290" y="270" as="sourcePoint"/>
+            <mxPoint x="290" y="306" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ea3" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#E65100;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="290" y="376" as="sourcePoint"/>
+            <mxPoint x="290" y="412" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="hb" value="Галка СНЯТА" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;fontSize=15;fontStyle=1;fontColor=#1B5E20;" vertex="1" parent="1">
+          <mxGeometry x="560" y="110" width="440" height="54" as="geometry"/>
+        </mxCell>
+        <mxCell id="b1" value="Робот управляет тарой секции (ряд + секция)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A5D6A7;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="560" y="200" width="440" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="b2" value="Пустая секция по умолчанию настроена под евро И фин" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A5D6A7;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="560" y="300" width="440" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="b3" value="Первая паллета: евро → вся секция под евро; фин → под фин" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A5D6A7;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="560" y="400" width="440" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="b4" value="Свободные управляемые ячейки получают этот тип; другая тара — крест и запрет размещения" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A5D6A7;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="560" y="500" width="440" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="b5" value="Секция полностью освободилась → снова евро + фин" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A5D6A7;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="560" y="600" width="440" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="eb1" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="780" y="164" as="sourcePoint"/>
+            <mxPoint x="780" y="200" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eb2" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="780" y="264" as="sourcePoint"/>
+            <mxPoint x="780" y="300" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eb3" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="780" y="364" as="sourcePoint"/>
+            <mxPoint x="780" y="400" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eb4" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="780" y="464" as="sourcePoint"/>
+            <mxPoint x="780" y="500" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eb5" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#2E7D32;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="780" y="564" as="sourcePoint"/>
+            <mxPoint x="780" y="600" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="n1" value="Колонки «Евро» и «Фин» в реестре 05: ✓ — ячейка настроена под тип, ✗ — не настроена (размещение запрещено). Пустое значение = разрешены оба." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=12;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="200" width="520" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="n2" value="Смешанная ячейка (галка стоит) не участвует в закреплении секции. Остальные ячейки секции робот настраивает по первой размещённой паллете." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=12;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="320" width="520" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="n3" value="Настройка робота: 13 → «Роботы» → «Робот по размещению». Настройки тары ячейки: 05 → карточка ячейки → «Параметры»." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=12;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="440" width="520" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="t3" value="Итог: занятая паллета закрепляет тип за секцией — свободные ячейки получают этот тип, вторая тара отмечается крестом и не принимается." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#2E7D32;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="720" width="1520" height="24" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="placement-flow" name="2. Поток размещения ТСД">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1660" pageHeight="980" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="ft" value="Поток размещения паллеты (ТСД)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#4C2A9E;" vertex="1" parent="1">
+          <mxGeometry x="40" y="16" width="800" height="36" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="s1" value="1. Скан SSCC паллеты" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE7FF;strokeColor=#6432FF;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="100" width="520" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="s2" value="2. Подбор ячейки: зоны клиента, тара, высота, секция, ярус, лимиты" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B39DDB;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="120" y="210" width="520" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="s3" value="3. Показана ячейка назначения (зона, тара, подсказки)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B39DDB;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="120" y="328" width="520" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="s4" value="4. Скан штрихкода ячейки и подтверждение (place_confirm → occupy)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B39DDB;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="120" y="446" width="520" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="s5" value="5. Автонастройка секции: тип закреплён, вторая тара — крест и запрет" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="120" y="564" width="520" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="s6" value="6. Ячейка занята. Перемещение/удаление паллеты → статус «Свободна»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="120" y="682" width="520" height="72" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f1" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#6432FF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="164" as="sourcePoint"/>
+            <mxPoint x="380" y="210" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f2" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#6432FF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="282" as="sourcePoint"/>
+            <mxPoint x="380" y="328" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f3" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#6432FF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="400" as="sourcePoint"/>
+            <mxPoint x="380" y="446" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f4" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#6432FF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="518" as="sourcePoint"/>
+            <mxPoint x="380" y="564" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f5" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=1.6;strokeColor=#6432FF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="636" as="sourcePoint"/>
+            <mxPoint x="380" y="682" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="n4" value="Enter в пустом поле «ячейка назначения» → робот предлагает ДРУГУЮ подходящую ячейку (place_suggest_next) и закрепляет её за заданием. Поле остаётся пустым для скана." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=12;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="760" y="300" width="520" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="n5" value="Если паллету убрали, а статус остался «Занята» — автокоррекция освобождает пустую ячейку (нет остатка в товарном запасе и содержимом)." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=12;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="760" y="620" width="520" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="n6" value="Другая ячейка — только из разрешённых правилами: зона клиента, тара, высота, занятость, секция, ярус." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#FFF8E1;strokeColor=#E6B800;align=left;verticalAlign=top;fontSize=12;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="760" y="410" width="520" height="80" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

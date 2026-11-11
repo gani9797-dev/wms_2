@@ -31,12 +31,37 @@ function wms_columns_ensure(PDO $pdo): void
     }
 }
 
-/** Ключ текущего пользователя: логин сессии либо 'admin'. */
+/**
+ * Ключ текущего пользователя (настройки столбцов/страниц персональные):
+ * логин сотрудника, иначе id сотрудника, иначе старая сессия, иначе 'admin'.
+ */
 function wms_columns_user(): string
 {
     try {
-        if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['wms_auth_user'])) {
-            return (string)$_SESSION['wms_auth_user'];
+        if (function_exists('wms_auth_user')) {
+            $u = wms_auth_user();
+            if (is_array($u)) {
+                $login = trim((string)($u['login'] ?? ''));
+                if ($login !== '') {
+                    return 'login:' . substr($login, 0, 80);
+                }
+                $id = (int)($u['id'] ?? 0);
+                if ($id > 0) {
+                    return 'emp:' . $id;
+                }
+            }
+        }
+    } catch (Throwable) {
+    }
+    try {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $eid = (int)($_SESSION['wms_employee_id'] ?? 0);
+            if ($eid > 0) {
+                return 'emp:' . $eid;
+            }
+            if (!empty($_SESSION['wms_auth_user'])) {
+                return (string)$_SESSION['wms_auth_user'];
+            }
         }
     } catch (Throwable) {
     }

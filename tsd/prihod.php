@@ -109,13 +109,14 @@ function req_batch(array $body): ?string
 }
 
 /** INSERT в receipt_operations с партией; на старых БД без колонки — без нее. */
-function op_insert(PDO $pdo, int $rid, string $sku, ?string $batch, string $status, $uid, ?string $pallet, float $qty, ?string $reason = null, int $noSerial = 0, ?string $rejectReason = null): void
+function op_insert(PDO $pdo, int $rid, string $sku, ?string $batch, string $status, $uid, ?string $pallet, float $qty, ?string $reason = null, int $noSerial = 0, ?string $rejectReason = null, ?string $palletType = null): void
 {
     $b = $batch ?? '';
+    $pt = in_array(strtolower(trim((string)$palletType)), ['fin', 'фин', 'финская'], true) ? 'fin' : (trim((string)$palletType) !== '' ? 'euro' : null);
     try {
-        $pdo->prepare("INSERT INTO receipt_operations (receipt_id,sku,supplier_batch,accept_status,accept_date,receiver_id,pallet,sku_qty,qty,reason,no_serial,reject_reason) VALUES (:r,:s,:b,:st,datetime('now'),:u,:p,1,:q,:o,:ns,:rr)")
+        $pdo->prepare("INSERT INTO receipt_operations (receipt_id,sku,supplier_batch,accept_status,accept_date,receiver_id,pallet,sku_qty,qty,reason,no_serial,reject_reason,pallet_type) VALUES (:r,:s,:b,:st,datetime('now'),:u,:p,1,:q,:o,:ns,:rr,:pt)")
             ->execute([':r' => $rid, ':s' => $sku, ':b' => $b, ':st' => $status, ':u' => $uid, ':p' => $pallet, ':q' => $qty, ':o' => $reason,
-                ':ns' => $noSerial ? 1 : 0, ':rr' => ($rejectReason !== null && $rejectReason !== '') ? $rejectReason : null]);
+                ':ns' => $noSerial ? 1 : 0, ':rr' => ($rejectReason !== null && $rejectReason !== '') ? $rejectReason : null, ':pt' => $pt]);
         return;
     } catch (Throwable) {
     }
@@ -1022,7 +1023,8 @@ if ($action === 'sscc_accept' && $method === 'POST') {
             $sku = (string)$it['sku'];
             // Излишек подтверждён оператором — принимаем введённое количество.
             if ($q > 0) {
-                op_insert($pdo, $rid, $sku, $b, 'Принято', $uid, $sscc, $q);
+                $pt = trim((string)($it['pallet_type'] ?? $body['pallet_type'] ?? ''));
+                op_insert($pdo, $rid, $sku, $b, 'Принято', $uid, $sscc, $q, null, 0, null, $pt !== '' ? $pt : null);
             }
         }
         hist($pdo, $rid, $uid, 'sscc', 'SSCC приём', null, $sscc);
@@ -1189,6 +1191,8 @@ if ($action === 'qty' && $method === 'POST') {
     $allowExcess = (int)($body['allow_excess'] ?? 0) === 1;
     $rejectReason = trim((string)($body['reject_reason'] ?? ''));
     $prodDate = norm_date($body['prod_date'] ?? '');
+    $palletType = in_array(strtolower(trim((string)($body['pallet_type'] ?? ''))), ['fin', 'фин', 'финская'], true) ? 'fin'
+        : (trim((string)($body['pallet_type'] ?? '')) !== '' ? 'euro' : null);
     if ($rid <= 0 || $sku === '' || $qty <= 0) {
         j(['error' => 'нужны receipt_id, sku и qty>0'], 422);
     }
@@ -1311,7 +1315,7 @@ if ($action === 'qty' && $method === 'POST') {
     try {
         // Приёмка без с/н: в позицию пишем признак no_serial и причину отбраковки.
         op_insert($pdo, $rid, $sku, $batch, 'Принято', $uid, $pallet, $qty, null, $noSerial,
-            $rejectReason !== '' ? $rejectReason : null);
+            $rejectReason !== '' ? $rejectReason : null, $palletType);
         // Серийные номера: receipt_flags + журнал серийных номеров («Приход»).
         write_receipt_serials($pdo, $rid, $sku, $serials, $pallet, $uid, null, $serialAggs);
         // Дата производства партии — в позицию документа.
@@ -1360,6 +1364,8 @@ if ($action === 'accept_all' && $method === 'POST') {
     $rid = (int)($body['receipt_id'] ?? 0);
     $uid = (int)($body['user_id'] ?? 0) ?: null;
     $fio = trim((string)($body['user_fio'] ?? '')) !== '' ? trim((string)$body['user_fio']) : 'ТСД';
+    $palletType = in_array(strtolower(trim((string)($body['pallet_type'] ?? ''))), ['fin', 'фин', 'финская'], true) ? 'fin'
+        : (trim((string)($body['pallet_type'] ?? '')) !== '' ? 'euro' : null);
     if ($rid <= 0) {
         j(['error' => 'нужен receipt_id'], 422);
     }
@@ -1418,7 +1424,7 @@ if ($action === 'accept_all' && $method === 'POST') {
             }
             $pdo->beginTransaction();
             try {
-                op_insert($pdo, $rid, $sku, $batch, 'Принято', $uid, null, $rest);
+                op_insert($pdo, $rid, $sku, $batch, 'Принято', $uid, null, $rest, null, 0, null, $palletType);
                 apply_qty_fact($pdo, $rid, $sku, $batch, $multi, $plan, round($fact + $rest, 3));
                 set_deviation($pdo, $rid, $sku, $batch, $multi, '');
                 hist($pdo, $rid, $uid, 'qty',

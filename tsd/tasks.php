@@ -1279,6 +1279,13 @@ if ($action === 'place_scan' && $method === 'POST') {
     try {
         $sdb = wms_storage_pdo();
         $sug = CellPlacement::suggest($sdb, $ptype, $pheight, $wid, array_keys($plans), $contractorId, $palletQuality);
+        // Зона клиента заполнена — аварийно подбираем другую клиентскую зону/хранение.
+        $fallback = false;
+        if (!$sug && $contractorId) {
+            $sug = CellPlacement::suggest($sdb, $ptype, $pheight, $wid, array_keys($plans), $contractorId,
+                $palletQuality, [], true);
+            $fallback = (bool)$sug && !empty($sug['placement']['fallback']);
+        }
         if (!$sug) {
             $zonesTxt = '';
             if ($contractorId) {
@@ -1333,6 +1340,32 @@ if ($action === 'place_scan' && $method === 'POST') {
             : (($occ['section_tuned'] ?? false) ? 'Секция 3,2 настроена под евро' : 'Добивка секции: ячейка зарезервирована');
         $reasons = (array)($sug['placement']['reasons'] ?? []);
         $hint = $reasons ? (implode('; ', $reasons) . '. ' . $tech) : $tech;
+        // Уведомление в «колокольчик» основной WMS: приход размещается в другую зону.
+        if ($fallback) {
+            try {
+                require_once __DIR__ . '/../shared/db.php';
+                require_once __DIR__ . '/../08-nomenklatura/Notifications.php';
+                $ndb = wms_nomenclature_pdo();
+                $zoneName = (string)($sug['placement']['zone_name'] ?? '');
+                $recDocNo = '';
+                try {
+                    $rq = wms_receipts_pdo()->prepare("SELECT receipt_id FROM receipt_operations WHERE pallet=:p LIMIT 1");
+                    $rq->execute([':p' => $sscc]);
+                    $ridN = (int)($rq->fetchColumn() ?: 0);
+                    if ($ridN > 0) {
+                        $dq = wms_receipts_pdo()->prepare("SELECT doc_no FROM receipts WHERE id=:i");
+                        $dq->execute([':i' => $ridN]);
+                        $recDocNo = trim((string)($dq->fetchColumn() ?: ''));
+                    }
+                } catch (Throwable) {
+                }
+                Notifications::push($ndb, 'receipt',
+                    'Приход ' . ($recDocNo !== '' ? $recDocNo : ('SSCC ' . $sscc)) . ' размещается в зону «' . $zoneName . '»',
+                    'Зона размещения клиента заполнена. Паллета ' . $sscc . ' предложена в зоне «' . $zoneName . '».',
+                    null, 1);
+            } catch (Throwable) {
+            }
+        }
         tj(['ok' => true, 'task_id' => $tid, 'doc_no' => $docNo, 'sscc' => $sscc, 'quality' => $palletQuality,
             'pallet_type' => $ptype, 'pallet_type_label' => $ptype === 'fin' ? 'Фин' : 'Евро',
             'height_mm' => $pheight, 'skus' => $names, 'qty' => $qtyTotal, 'lines' => $lines, 'existing' => false,
@@ -1347,7 +1380,12 @@ if ($action === 'place_scan' && $method === 'POST') {
             'contractor_name' => (string)($sug['placement']['contractor_name'] ?? ''),
             'temp_blocked' => $occ['temp_blocked']['code'] ?? null,
             'section_tuned' => $occ['section_tuned'],
-            'hint' => $hint]);
+            // Предупреждение красным на ТСД, если зона клиента заполнена.
+            'zone_warning' => $fallback ? (string)($sug['placement']['warning'] ?? '') : null,
+            'zone_fallback' => $fallback,
+            'zone_name' => $fallback ? (string)($sug['placement']['zone_name'] ?? '') : null,
+            'requested_zones' => $sug['placement']['requested_zones'] ?? [],
+            'hint' => $fallback ? ((string)($sug['placement']['warning'] ?? '') . '. ' . $hint) : $hint]);
     } catch (Throwable $e) {
         try {
             @file_put_contents(__DIR__ . '/place_scan.log',
@@ -1361,6 +1399,46 @@ if ($action === 'place_scan' && $method === 'POST') {
 
 // --- Смена ячейки размещения: POST ?action=place_retarget {task_id, cell} ---
 // Ячейку менять допустимо: резерв переносится, задание обновляется.
+// --- Другая ячейка для размещения (Enter в пустом поле): POST ?action=place_suggest_next ---
+if ($action === 'place_suggest_next' && $method === 'POST') {
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    $tid = (int)($b['task_id'] ?? 0);
+    $cur = trim((string)($b['current_cell'] ?? ''));
+    require_once __DIR__ . '/../shared/db.php';
+    require_once __DIR__ . '/../05-yacheyki-hraneniya/CellPlacement.php';
+    try {
+        $sdb = wms_storage_pdo();
+        $ptype = CellPlacement::normalizePalletType((string)($b['pallet_type'] ?? 'euro'));
+        $height = isset($b['height_mm']) && $b['height_mm'] !== '' ? (int)$b['height_mm'] : null;
+        $quality = (string)($b['quality'] ?? 'новый');
+        $contractorId = (int)($b['contractor_id'] ?? 0) ?: null;
+        $skus = array_values(array_filter(array_map('strval', (array)($b['skus'] ?? []))));
+        $wid = null;
+        if ($tid > 0) {
+            $h = $pdo->prepare('SELECT warehouse_id FROM tasks WHERE id=:t');
+            $h->execute([':t' => $tid]);
+            $wid = (int)($h->fetchColumn() ?: 0) ?: null;
+            if (!$skus) {
+                try {
+                    $it = $pdo->prepare('SELECT sku FROM task_items WHERE task_id=:t');
+                    $it->execute([':t' => $tid]);
+                    $skus = array_values(array_filter(array_map('strval', $it->fetchAll(PDO::FETCH_COLUMN))));
+                } catch (Throwable) {
+                }
+            }
+        }
+        $sug = CellPlacement::suggest($sdb, $ptype, $height, $wid, $skus, $contractorId, $quality,
+            $cur !== '' ? [$cur] : []);
+        if (!$sug) {
+            tj(['error' => 'Других подходящих ячеек нет'], 404);
+        }
+        tj(['ok' => true, 'cell' => $sug['cell']['code'], 'placement' => $sug['placement'],
+            'section' => $sug['section']]);
+    } catch (Throwable $e) {
+        tj(['error' => $e->getMessage()], 400);
+    }
+}
+
 if ($action === 'place_retarget' && $method === 'POST') {
     $b = json_decode(file_get_contents('php://input'), true) ?? [];
     $tid = (int)($b['task_id'] ?? 0);
@@ -2095,6 +2173,29 @@ if ($action === 'move_confirm' && $method === 'POST') {
             tj(['error' => 'Не удалось создать задание: ' . $e->getMessage()], 500);
         }
         $docNo = (string)$pdo->query('SELECT doc_no FROM tasks WHERE id = ' . (int)$tid)->fetchColumn();
+        // 1a) Атомарно резервируем ячейку назначения: два сотрудника не смогут
+        // одновременно поставить разные паллеты в одну и ту же свободную ячейку.
+        $claim = $sdb->prepare(
+            "UPDATE storage_cells SET reserved_qty = COALESCE(reserved_qty,0) + :q
+              WHERE id = :id AND status='free' AND COALESCE(qty,0) <= 0
+                AND COALESCE(pallet_count,0) = 0 AND COALESCE(reserved_qty,0) = 0"
+        );
+        $claim->execute([':q' => $qtyMove, ':id' => (int)$cell['id']]);
+        if ($claim->rowCount() === 0) {
+            try {
+                (new TaskService($pdo))->delete($tid, $uid);
+            } catch (Throwable) {
+            }
+            tj(['error' => 'Ячейка ' . $cellTo . ' только что занята другим сотрудником — выбери другую',
+                'sscc' => $sscc, 'cell' => $cellTo], 409);
+        }
+        $releaseClaim = static function () use ($sdb, $cell, $qtyMove): void {
+            try {
+                $sdb->prepare('UPDATE storage_cells SET reserved_qty = GREATEST(0, COALESCE(reserved_qty,0) - :q) WHERE id=:id')
+                    ->execute([':q' => $qtyMove, ':id' => (int)$cell['id']]);
+            } catch (Throwable) {
+            }
+        };
         // 2) Товарный запас: переносим все строки паллеты в новую ячейку.
         $ndb = wms_nomenclature_pdo();
         try {
@@ -2123,6 +2224,7 @@ if ($action === 'move_confirm' && $method === 'POST') {
                 (new TaskService($pdo))->delete($tid, $uid);
             } catch (Throwable) {
             }
+            $releaseClaim();
             tj(['error' => 'Не удалось переместить запас: ' . $e->getMessage()], 500);
         }
         // 3) Ячейки хранения: освобождаем старую, занимаем новую.
@@ -2171,8 +2273,9 @@ if ($action === 'move_confirm' && $method === 'POST') {
             // Назначение: свободная проверенная ячейка -> busy.
             $sdb->prepare(
                 'UPDATE storage_cells SET qty = COALESCE(qty,0) + :q, pallet_count = COALESCE(pallet_count,0) + 1,
+                        reserved_qty = CASE WHEN COALESCE(reserved_qty,0) > :q2 THEN COALESCE(reserved_qty,0) - :q2 ELSE 0 END,
                         pallet_type = :pt, status = \'busy\' WHERE id = :id'
-            )->execute([':q' => $qtyMove, ':pt' => $ptype, ':id' => $cell['id']]);
+            )->execute([':q' => $qtyMove, ':q2' => $qtyMove, ':pt' => $ptype, ':id' => $cell['id']]);
             try {
                 $sdb->prepare(
                     "INSERT INTO cell_history (cell_id, user_id, user_fio, action, field, field_label, old_value, new_value)
@@ -2188,6 +2291,7 @@ if ($action === 'move_confirm' && $method === 'POST') {
             } catch (Throwable) {
             }
         } catch (Throwable $e) {
+            $releaseClaim();
             tj(['error' => 'Запас перенесён, но ячейки не обновлены: ' . $e->getMessage()
                 . ' (задание ' . $docNo . ')', 'task_id' => $tid, 'doc_no' => $docNo], 500);
         }

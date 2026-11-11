@@ -106,7 +106,7 @@ body.navhide main{max-width:none}
 <div class="card" style="overflow:auto">
 <table data-sort-mode="server"><thead><tr><th data-col="warehouse" data-sort="warehouse">Склад</th><th data-col="cell" data-sort="cell">Ячейка</th><th data-col="pallet" data-sort="pallet">Паллета</th><th data-col="quality" data-sort="quality">Качество</th><th data-col="batch" data-sort="batch">Партия</th><th data-col="pallet_date" data-sort="pallet_date">Дата паллеты</th><th data-col="prod_date" data-sort="prod_date">Дата производства</th><th data-col="shelf_left" data-sort="shelf_left">Срок хранения</th><th data-col="pallet_type" data-sort="pallet_type">Тара</th><th data-col="pallet_length" data-sort="pallet_length">Длина паллеты, м</th><th data-col="pallet_width" data-sort="pallet_width">Ширина паллеты, м</th><th data-col="pallet_height" data-sort="pallet_height">Выс. паллеты, м</th><th data-col="volume" data-sort="volume">Объем, м³</th><th data-col="weight" data-sort="weight">Вес, кг</th><th data-col="product_code" data-sort="product_code">Арт. склад.</th><th data-col="sku" data-sort="sku">Артикул</th><th data-col="qty" data-sort="qty">Кол-во</th><th data-col="receipt" data-sort="receipt">Приход</th><th data-col-client="1" data-col="shipments" data-sort="shipments">Отгрузка</th><th data-sort-client="1" data-col="reserve" data-sort="reserve">Резерв</th><th data-col="gear"><span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th></tr></thead>
 <tbody id="rows"><tr><td colspan="21">Загрузка...</td></tr></tbody></table>
-<div class="hint" style="margin-top:8px">Тара: клик по номеру паллеты — смена Евро/Фин. Д/Ш/В — габариты паллеты в метрах (В — высота с товаром). Объем — Д×Ш×В. Вес — товар + тара (25 кг, если есть паллета). Если ячейка настроена только под евро, смена на фин запрещена. Дата производства — из приёмки (заполняется, если на артикуле включён контроль даты производства); срок хранения берётся из карточки артикула.</div>
+<div class="hint" style="margin-top:8px">Тара: клик по номеру паллеты — смена Евро/Фин. Д/Ш/В — габариты паллеты в метрах (В — высота с товаром). Объем — Д×Ш×В. Вес — товар + тара (25 кг, если есть паллета). Если ячейка настроена только под евро, смена на фин запрещена. Дата производства — из приёмки (заполняется, если на артикуле включён контроль даты производства); срок хранения берётся из карточки артикула. Габариты, объём и вес обновляются роботом: 13 → «Роботы» → «Робот по обновлению ВГХ».</div>
 <div class="pager"><div><span id="info">—</span> &nbsp; Строк на странице:
 <select id="pp"><option>5</option><option selected>20</option><option>50</option></select></div>
 <div class="pg" id="pg"></div></div>
@@ -139,7 +139,7 @@ body.navhide main{max-width:none}
 <div style="display:flex;gap:10px;margin-top:10px"><button class="btn" id="colreset">Сбросить</button><button class="btn pri" id="colclose">Готово</button></div>
 </div>
 <style>.ctx{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:120;min-width:210px;padding:6px 0;font-size:14px}.ctx div{padding:9px 16px;cursor:pointer}.ctx div:hover{background:#F4F2FF}</style>
-<div class="ctx" id="ctx"><div data-a="print_sscc" data-perm="labels_print">Печатать SSCC</div></div>
+<div class="ctx" id="ctx"><div data-a="print_sscc" data-perm="labels_print">Печатать SSCC</div><div data-a="qty" data-perm="stock_qty_edit">Изменить количество</div></div>
 <div class="modal" id="ssccprint"><div class="mbox" style="width:460px">
   <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Печать этикетки SSCC</h3><span id="spclose" style="cursor:pointer;color:#663EB2;font-size:20px">✕</span></div>
   <div class="hint" id="spinfo"></div>
@@ -195,6 +195,14 @@ body.navhide main{max-width:none}
 <label>Дата паллеты</label><input id="palm_date" type="date">
 <div class="hint" id="palmhint" style="margin-top:6px"></div>
 <div style="display:flex;gap:10px;margin-top:12px;justify-content:flex-end"><button class="btn" id="palmcancel">Отмена</button><button class="btn pri" id="palmsave">Сохранить</button></div>
+</div></div>
+
+<div class="modal" id="qtymodal"><div class="mbox" style="width:440px">
+<h3 style="margin:0 0 8px">Изменить количество</h3>
+<div class="hint" id="qtyinfo" style="margin-bottom:6px"></div>
+<label>Количество, шт</label><input id="qtyval" type="number" step="0.001" min="0">
+<div class="hint" id="qtyhint" style="margin-top:6px">Корректировка изменит остаток в товарном запасе и содержимое ячейки; запись попадёт в журнал склада.</div>
+<div style="display:flex;gap:10px;margin-top:12px;justify-content:flex-end"><button class="btn" id="qtycancel">Отмена</button><button class="btn pri" id="qtysave">Сохранить</button></div>
 </div></div>
 
 <script src="../shared/sort.js"></script>
@@ -277,9 +285,8 @@ const palWarn=palConf?` — ВНИМАНИЕ: паллета в нескольк
 const palQuality = o.quality || 'новый';
 const palQualityRed = palQuality === 'Брак';
 const palCell=o.pallet?`<a href="#" class="num pal-link" data-id="${o.id}" title="Сменить тару (сейчас: ${palletLabel(o.pallet_type)})${esc(palWarn)}" ${(palConf||palQualityRed)?'style="color:#B00020"':''}>${palConf?'⚠️ ':''}${esc(palNum)}</a>`:`<a href="#" class="num pal-link" data-id="${o.id}" title="Указать тару (сейчас: ${palletLabel(o.pallet_type)})" style="color:var(--mut)">— ${palletLabel(o.pallet_type)}</a>`;
-const qualityCell = `<span style="color:${palQualityRed?'#B00020':'var(--mut)'};font-weight:${palQualityRed?'700':'400'}">${esc(palQuality)}</span>`;
-// Причина отбраковки (приёмка без с/н): шрифт красный и жирный.
-const reasonCell = (o.no_serial||o.reject_reason) ? `<span style="color:#B00020;font-weight:700">${esc(o.reject_reason||'без с/н')}</span>` : '—';
+const qualityCell = `<span style="color:${palQualityRed?'#B00020':'var(--mut)'};font-weight:${palQualityRed?'700':'400'}">${esc(palQuality)}</span>`
+ +(o.no_serial||o.reject_reason?`<br><span style="color:#B00020;font-weight:700;font-size:11px" title="Причина отбраковки при приёмке">${esc(o.reject_reason||'без с/н')}</span>`:'');
 const tara=`<span class="st" title="Ячейка разрешает: ${esc(o.cell_allowed||'euro,fin')}">${esc(o.pallet_label||palletLabel(o.pallet_type))}</span>`;
 const hTip=`Высота с товаром: ${o.total_height_m??'?'} м`;
 const vTip=`${o.pallet_length_m}×${o.pallet_width_m}×${o.total_height_m} м`;
@@ -302,7 +309,7 @@ shelfCell=`<span style="${style}" title="${esc(tip)}">${dlRaw} дн.</span>`;
 }else if(expTip){
 shelfCell=`<span style="color:var(--mut)" title="${esc(expTip)}">—</span>`;
 }
-return `<tr data-idx="${idx}"${palConf?' style="background:#FFF5F5"':''}><td>${esc(o.warehouse||('Склад '+o.warehouse_id))}</td><td>${cellLink}</td><td>${palCell}</td><td>${qualityCell}</td><td>${reasonCell}</td><td>${esc(o.supplier_batch||'—')}</td><td>${esc(o.pallet_date||'—')}</td><td>${pdCell}</td><td>${shelfCell}</td><td>${tara}</td><td>${o.pallet_length_m??'—'}</td><td>${o.pallet_width_m??'—'}</td><td title="${esc(hTip)}">${o.total_height_m??'—'}</td><td title="${esc(vTip)}">${o.volume_m3??'—'}</td><td title="${esc(wTip)}">${o.weight_kg??'—'}</td><td>${codeLink}</td><td>${skuPlain}</td><td>${(o.qty!==null&&o.qty!==undefined&&o.qty!=='')?fmtN(o.qty):'—'}</td><td>${rcpt}</td><td>${ship}</td><td>${rsvQty}</td><td></td></tr>`}).join('')||'<tr><td colspan=21>Ничего не найдено</td></tr>';
+return `<tr data-idx="${idx}"${palConf?' style="background:#FFF5F5"':''}><td>${esc(o.warehouse||('Склад '+o.warehouse_id))}</td><td>${cellLink}</td><td>${palCell}</td><td>${qualityCell}</td><td>${esc(o.supplier_batch||'—')}</td><td>${o.pallet_date?esc(dFmt(o.pallet_date)):'—'}</td><td>${pdCell}</td><td>${shelfCell}</td><td>${tara}</td><td>${o.pallet_length_m??'—'}</td><td>${o.pallet_width_m??'—'}</td><td title="${esc(hTip)}">${o.total_height_m??'—'}</td><td title="${esc(vTip)}">${o.volume_m3??'—'}</td><td title="${esc(wTip)}">${o.weight_kg??'—'}</td><td>${codeLink}</td><td>${skuPlain}</td><td>${(o.qty!==null&&o.qty!==undefined&&o.qty!=='')?fmtN(o.qty):'—'}</td><td>${rcpt}</td><td>${ship}</td><td>${rsvQty}</td><td></td></tr>`}).join('')||'<tr><td colspan=21>Ничего не найдено</td></tr>';
 document.querySelectorAll('.pal-link').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openPalModal(+a.dataset.id)});
 document.querySelectorAll('.cell-link').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openCellDrawer(a.dataset.cell,a.dataset.wh)});
 document.querySelectorAll('.prod-link').forEach(a=>a.onclick=e=>{e.preventDefault();e.stopPropagation();openProductDrawer(a.dataset.code,a.dataset.sku)});
@@ -314,7 +321,8 @@ $('pg').innerHTML=h;document.querySelectorAll('#pg button').forEach(b=>b.onclick
 let ctxRowIdx=-1;
 document.addEventListener('click',e=>{const c=$('ctx');if(c&&!c.contains(e.target))c.style.display='none'});
 $('ctx').onclick=async e=>{const a=e.target.dataset.a;if(!a)return;$('ctx').style.display='none';
- if(a==='print_sscc'){const o=lastRows[ctxRowIdx];if(!o){toast('Строка не найдена');return}if(!o.pallet){toast('У выбранной строки нет SSCC/паллеты');return}spOpen(o.pallet,o.id)}};
+ if(a==='print_sscc'){const o=lastRows[ctxRowIdx];if(!o){toast('Строка не найдена');return}if(!o.pallet){toast('У выбранной строки нет SSCC/паллеты');return}spOpen(o.pallet,o.id)}
+ else if(a==='qty'){const o=lastRows[ctxRowIdx];if(!o){toast('Строка не найдена');return}qtyOpen(o)}};
 async function printStockSscc(idx,mode){
  const o=lastRows[idx];if(!o){toast('Строка не найдена');return}
  if(!o.pallet){toast('У выбранной строки нет SSCC/паллеты');return}
@@ -398,6 +406,34 @@ else{$('palmhint').style.color='';$('palmhint').textContent=`Сейчас: ${o.p
 $('palmodal').classList.add('open')}
 function closePalModal(){$('palmodal').classList.remove('open');palId=null;$('palmsave').disabled=false}
 $('palmclose').onclick=$('palmcancel').onclick=closePalModal;
+// Корректировка количества в товарном запасе (право stock_qty_edit).
+let qtyRow=null;
+function qtyOpen(o){
+ if(!o){toast('Строка не найдена');return}
+ if(!(window.WMS_PERMS&&window.WMS_PERMS.stock_qty_edit)){toast('Нет права на изменение количества');return}
+ qtyRow=o;
+ $('qtyinfo').textContent=(o.product_code||o.sku||'')+' · '+(o.product_name||'')+' · ячейка '+(o.cell||'—')+' · паллета '+(o.pallet||'—');
+ $('qtyval').value=(o.qty!==null&&o.qty!==undefined)?o.qty:'';
+ $('qtymodal').classList.add('open');
+ setTimeout(function(){const e=$('qtyval');if(e){e.focus();e.select()}},50);
+}
+function qtyClose(){$('qtymodal').classList.remove('open');qtyRow=null;}
+$('qtycancel').onclick=qtyClose;
+$('qtysave').onclick=async()=>{
+ if(!qtyRow)return;
+ const v=Number($('qtyval').value);
+ if(!isFinite(v)||v<0){toast('Количество должно быть числом ≥ 0');return}
+ const btn=$('qtysave');btn.disabled=true;
+ try{
+  const r=await fetch(API+'?action=qty_update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stock_id:qtyRow.id,qty:v})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){toast('Ошибка: '+(j.error||('HTTP '+r.status)),6000);return}
+  qtyClose();
+  toast(j.unchanged?'Количество не изменилось':('Количество сохранено: '+j.qty+' шт'));
+  load();
+ }catch(e){toast('Ошибка связи')}
+ finally{btn.disabled=false}
+};
 $('palm_type').onchange=()=>{const v=$('palm_type').value;$('palmhint').textContent=v==='fin'?'Фин — 1.2×1.0×0.138 м, до 1200 кг.':'Евро — 1.2×0.8×0.144 м, до 1500 кг.'};
 $('palmsave').onclick=async()=>{if(!palId)return;const btn=$('palmsave');btn.disabled=true;
 try{const r=await fetch(API+'?action=pallet_update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stock_id:palId,pallet_type:$('palm_type').value,supplier_batch:$('palm_batch').value,pallet_date:$('palm_date').value})});

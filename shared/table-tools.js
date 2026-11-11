@@ -7,6 +7,7 @@
   if (location.pathname.indexOf('/tsd/') === 0) return;
 
   var LSKEY = 'wms_table_tools:' + location.pathname;
+  var TT_FORM = ('tt_' + location.pathname.replace(/[^a-z0-9]+/gi, '_').toLowerCase()).slice(0, 40);
   var state = {};
   try { state = JSON.parse(localStorage.getItem(LSKEY) || '{}') || {}; } catch (e) { state = {}; }
   if (!Array.isArray(state.order)) state.order = [];
@@ -14,9 +15,45 @@
   if (typeof state.perPage === 'undefined') state.perPage = null;
 
   var lastPP = null, lastTable = null, applying = false, gearReady = false;
+  var serverLoaded = false, saveTimer = null;
 
   function save() {
     try { localStorage.setItem(LSKEY, JSON.stringify(state)); } catch (e) {}
+    // На сервер — только после загрузки персональных настроек (иначе затрём их дефолтами).
+    if (!serverLoaded) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      try {
+        fetch('/shared/table-settings.php?action=save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ form: TT_FORM, cols: state })
+        }).catch(function () {});
+      } catch (e) {}
+    }, 350);
+  }
+
+  /** Загрузить персональные настройки (логин сотрудника) с сервера. */
+  function loadServerSettings() {
+    try {
+      fetch('/shared/table-settings.php?action=get&form=' + encodeURIComponent(TT_FORM), { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          serverLoaded = true;
+          if (!j || !j.cols || typeof j.cols !== 'object') return;
+          var s = j.cols;
+          if (Array.isArray(s.order)) state.order = s.order.slice();
+          if (s.cols && typeof s.cols === 'object') state.cols = s.cols;
+          if (typeof s.perPage !== 'undefined') state.perPage = s.perPage;
+          try { localStorage.setItem(LSKEY, JSON.stringify(state)); } catch (e) {}
+          var tbl = visibleTable();
+          if (tbl) applyTable(tbl, true);
+          if (state.perPage !== null) applyPerPage(false);
+        })
+        .catch(function () { serverLoaded = true; });
+    } catch (e) {
+      serverLoaded = true;
+    }
   }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -423,8 +460,16 @@
     setupGear();
     ensurePanel();
     ensureBar();
+    loadServerSettings();
     window.addEventListener('resize', function () { updateBar(); });
     document.addEventListener('scroll', function () { updateBar(); }, true);
+    // Ручная смена «строк на странице» в любом пагинаторе сохраняется на пользователя.
+    document.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t || t.tagName !== 'SELECT' || !t.closest || !t.closest('.pager')) return;
+      var v = parseInt(t.value, 10);
+      if (!isNaN(v)) { state.perPage = v; save(); }
+    }, true);
     setInterval(tick, 2000);
     setTimeout(function () { tick(); applyPerPage(false); }, 400);
     setTimeout(function () { tick(); applyPerPage(false); }, 1500);
@@ -432,4 +477,149 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
+})();
+
+/* --- Контекстные меню (.ctx): не выпускать за пределы окна (все модули) --- */
+(function () {
+  if (window.__wmsCtxClampInit) return;
+  window.__wmsCtxClampInit = true;
+
+  function clampContextMenus() {
+    var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    if (!vw || !vh) return;
+    var margin = 8;
+    var menus = document.querySelectorAll('.ctx');
+    for (var i = 0; i < menus.length; i++) {
+      var el = menus[i];
+      var cs = window.getComputedStyle ? window.getComputedStyle(el) : null;
+      if (!cs || cs.display === 'none' || cs.visibility === 'hidden') continue;
+      if (parseFloat(cs.opacity || '1') === 0) continue;
+      var rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      var maxH = Math.max(80, vh - margin * 2);
+      var maxW = Math.max(120, vw - margin * 2);
+      if (rect.height > maxH) {
+        el.style.maxHeight = maxH + 'px';
+        el.style.overflowY = 'auto';
+        el.style.overscrollBehavior = 'contain';
+        rect = el.getBoundingClientRect();
+      }
+      if (rect.width > maxW) {
+        el.style.maxWidth = maxW + 'px';
+        rect = el.getBoundingClientRect();
+      }
+      var left = parseFloat(el.style.left);
+      var top = parseFloat(el.style.top);
+      if (!isFinite(left)) left = rect.left;
+      if (!isFinite(top)) top = rect.top;
+      var maxLeft = Math.max(margin, vw - rect.width - margin);
+      var maxTop = Math.max(margin, vh - rect.height - margin);
+      var newLeft = Math.max(margin, Math.min(left, maxLeft));
+      var newTop = Math.max(margin, Math.min(top, maxTop));
+      if (Math.abs(newLeft - left) > 0.5) el.style.left = newLeft + 'px';
+      if (Math.abs(newTop - top) > 0.5) el.style.top = newTop + 'px';
+    }
+  }
+
+  function scheduleClamp() {
+    setTimeout(clampContextMenus, 0);
+    setTimeout(clampContextMenus, 80);
+    setTimeout(clampContextMenus, 250);
+  }
+
+  document.addEventListener('contextmenu', scheduleClamp, true);
+  document.addEventListener('click', scheduleClamp, true);
+  window.addEventListener('resize', scheduleClamp);
+  window.addEventListener('orientationchange', scheduleClamp);
+  window.WMSClampContextMenus = clampContextMenus;
+})();
+/* --- Панели/модалки: контент прокручивается, кнопки внизу всегда видны --- */
+(function () {
+  if (window.__wmsPanelFix) return;
+  window.__wmsPanelFix = true;
+
+  function looksLikeActions(el) {
+    if (!el || el.nodeType !== 1) return false;
+    var tag = el.tagName;
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'FORM' || tag === 'TABLE') return false;
+    if (!el.querySelector('button, .btn, a.btn')) return false;
+    if (el.querySelector('input, select, textarea, table')) return false;
+    var cs = window.getComputedStyle ? window.getComputedStyle(el) : null;
+    if (!cs || (cs.display !== 'flex' && cs.display !== 'inline-flex')) return false;
+    if (el.getBoundingClientRect().height > 180) return false;
+    return true;
+  }
+
+  function directBody(root) {
+    for (var i = 0; i < root.children.length; i++) {
+      if (root.children[i].classList && root.children[i].classList.contains('wms-panel-body')) {
+        return root.children[i];
+      }
+    }
+    return null;
+  }
+
+  function enhancePanel(root, isModal) {
+    if (!root || root.nodeType !== 1) return;
+    if (root.dataset.wmsPanelDone === '1') {
+      if (directBody(root)) return;
+      delete root.dataset.wmsPanelDone;
+    }
+    var kids = Array.prototype.slice.call(root.children);
+    if (kids.length < 2) return;
+    var footer = null;
+    for (var i = kids.length - 1; i >= Math.max(0, kids.length - 3); i--) {
+      if (looksLikeActions(kids[i])) { footer = kids[i]; break; }
+    }
+    if (!footer) {
+      root.style.overflowY = 'auto';
+      root.style.maxHeight = '100vh';
+      root.dataset.wmsPanelDone = '1';
+      return;
+    }
+    var body = document.createElement('div');
+    body.className = 'wms-panel-body';
+    body.style.cssText = 'flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:auto;overscroll-behavior:contain;';
+    for (var j = 0; j < kids.length; j++) {
+      if (kids[j] !== footer) body.appendChild(kids[j]);
+    }
+    root.insertBefore(body, footer);
+    root.style.display = 'flex';
+    root.style.flexDirection = 'column';
+    root.style.overflow = 'hidden';
+    if (isModal) {
+      root.style.maxHeight = '90vh';
+    } else {
+      root.style.height = '100vh';
+      root.style.maxHeight = '100vh';
+    }
+    footer.style.flex = '0 0 auto';
+    footer.style.background = '#fff';
+    footer.style.zIndex = '30';
+    footer.style.boxShadow = '0 -6px 18px rgba(0,0,0,.06)';
+    footer.classList.add('wms-sticky-actions');
+    root.dataset.wmsPanelDone = '1';
+  }
+
+  function enhancePanels() {
+    var panels = document.querySelectorAll('.drawer, .fpanel, .apanel');
+    for (var i = 0; i < panels.length; i++) enhancePanel(panels[i], false);
+    var modals = document.querySelectorAll('.mbox');
+    for (var k = 0; k < modals.length; k++) enhancePanel(modals[k], true);
+  }
+
+  function schedule() {
+    setTimeout(enhancePanels, 0);
+    setTimeout(enhancePanels, 150);
+    setTimeout(enhancePanels, 500);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule);
+  else schedule();
+  document.addEventListener('click', schedule, true);
+  document.addEventListener('contextmenu', schedule, true);
+  window.addEventListener('resize', schedule);
+  window.addEventListener('orientationchange', schedule);
+  window.WMSEnhancePanels = enhancePanels;
 })();

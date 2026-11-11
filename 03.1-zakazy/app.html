@@ -78,6 +78,26 @@ body.navhide main{max-width:none}
 #colpanel{position:fixed;display:none;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);z-index:130;width:320px;max-width:92vw;max-height:80vh;overflow:auto;padding:14px 16px}
 #colpanel h2{margin:0;font-size:16px}
 .hint{font-size:12px;color:var(--mut)}
+/* Мобильная адаптация: формы и карточка заказа подстраиваются под экран. */
+@media (max-width:760px){
+ aside{display:none}
+ main{padding:10px 10px 24px}
+ .top h1{font-size:20px}
+ .bar input[type=text]{width:100%}
+ .drawer{width:100vw!important;max-width:100vw!important;padding:10px!important}
+ .drawer h2{font-size:20px}
+ .mbox{width:96vw;padding:14px}
+ .order-new-mobile{background:#FAFAFF;border-color:#D8D0F0;padding:12px}
+ .order-new-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}
+ .order-new-grid label{display:flex;flex-direction:column;font-size:11px;color:#4A4A4A;font-weight:700;gap:4px}
+ .order-new-grid input{width:100%!important;padding:9px;font-size:15px}
+ .order-new-grid .order-new-chk{flex-direction:row;align-items:center;font-weight:400;font-size:13px}
+ .order-new-grid .order-new-chk input{width:auto!important}
+ .order-new-owner{grid-column:1/-1;font-size:12px;color:#4A4A4A}
+ .order-new-actions{display:flex;gap:8px;margin-top:10px}
+ .order-new-actions .btn{flex:1}
+}
+@media (max-width:420px){.order-new-grid{grid-template-columns:1fr}}
 </style>
 <style data-nav2>aside nav.nav{display:block}aside a.mi{display:block;color:#8A92A6;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px}aside a.mi.on{background:#6432FF;color:#fff}.grp .par{display:flex;align-items:center;gap:4px}.grp .par a.mi{flex:1}.caret{cursor:pointer;color:#8A92A6;padding:7px 10px;border-radius:8px;user-select:none;font-size:13px}.caret:hover{background:#2A3446;color:#fff}.grp.open .caret{transform:rotate(90deg);color:#fff}.grp .sub{display:none}.grp.open .sub{display:block}.sub-a{padding-left:26px !important;font-size:12.5px !important}</style></head>
 <body>
@@ -230,24 +250,56 @@ document.addEventListener('wms:auth',()=>{if(curId)open(curId)});
 function addOrderInlineRow(){
  const tbl=$('orderItemsTable');
  if(!tbl||!tbl.tBodies[0])return;
- const old=tbl.querySelector('.order-new-row');
- if(old){const f=old.querySelector('[data-new-sku]');if(f)f.focus();return}
- const tr=document.createElement('tr');tr.className='order-new-row';
- tr.innerHTML=`<td>+</td>
-  <td><input data-new-wms readonly style="width:80px;padding:4px;border:1px solid var(--line);border-radius:6px;background:#F7FAFC"></td>
-  <td><input data-new-barcode placeholder="штрихкод" style="width:130px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
-  <td><input data-new-sku placeholder="артикул" style="width:120px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
-  <td><input data-new-name readonly style="width:190px;padding:4px;border:1px solid var(--line);border-radius:6px;background:#F7FAFC"></td>
-  <td><input data-new-unit readonly style="width:54px;padding:4px;border:1px solid var(--line);border-radius:6px;background:#F7FAFC"></td>
-  <td><input data-new-qty type="number" step="1" min="1" value="1" style="width:78px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
-  <td style="text-align:center"><input data-new-serial type="checkbox" disabled></td>
-  <td style="text-align:center"><input data-new-chz type="checkbox" disabled></td>
-  <td><span data-new-owner style="font-size:12px"></span></td>
-  <td><input data-new-batch placeholder="партия" style="width:100px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
-  <td><input data-new-prod type="date" style="width:120px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
-  <td><button class="btn sm pri" data-new-save data-perm="doc_edit_order">✓</button> <button class="btn sm" data-new-cancel>✕</button></td>`;
- tbl.tBodies[0].appendChild(tr);
- const q=(s)=>tr.querySelector(s);
+ // Одна и та же строка/форма в одном экземпляре (десктоп — строка таблицы, мобильный — карточка).
+ const oldRow=tbl.querySelector('.order-new-row');
+ if(oldRow){const f=oldRow.querySelector('[data-new-sku]');if(f)f.focus();return}
+ const oldForm=document.getElementById('orderNewForm');
+ if(oldForm){const f=oldForm.querySelector('[data-new-sku]');if(f)f.focus();return}
+ const mobile=(window.innerWidth||0)<760;
+ let root;
+ if(mobile){
+  root=document.createElement('div');
+  root.id='orderNewForm';
+  root.className='card order-new-mobile';
+  root.innerHTML='<div style="font-weight:700;margin-bottom:8px">Новая строка</div>'
+   +'<div class="order-new-grid">'
+   +'<label>Штрихкод *<input data-new-barcode placeholder="штрихкод" autocomplete="off"></label>'
+   +'<label>Артикул *<input data-new-sku placeholder="артикул" autocomplete="off"></label>'
+   +'<label>Наименование<input data-new-name readonly></label>'
+   +'<label>Ед. изм.<input data-new-unit readonly></label>'
+   +'<label>Количество *<input data-new-qty type="number" step="1" min="1" value="1"></label>'
+   +'<label>Партия<input data-new-batch placeholder="партия"></label>'
+   +'<label>Дата производства<input data-new-prod type="date"></label>'
+   +'<label>Код WMS<input data-new-wms readonly></label>'
+   +'<label class="order-new-chk"><input data-new-serial type="checkbox" disabled> контроль с/н</label>'
+   +'<label class="order-new-chk"><input data-new-chz type="checkbox" disabled> контроль ч/з</label>'
+   +'<div class="order-new-owner">Владелец: <span data-new-owner></span></div>'
+   +'</div>'
+   +'<div class="order-new-actions"><button class="btn pri" data-new-save data-perm="doc_edit_order">Добавить строку</button><button class="btn" data-new-cancel>Отмена</button></div>';
+  // Форму кладём сразу под таблицей (вне горизонтально прокручиваемого контейнера).
+  const wrap=tbl.parentElement;
+  wrap.insertAdjacentElement('afterend',root);
+ }else{
+  root=document.createElement('tr');root.className='order-new-row';
+  root.innerHTML=`<td>+</td>
+   <td><input data-new-wms readonly style="width:80px;padding:4px;border:1px solid var(--line);border-radius:6px;background:#F7FAFC"></td>
+   <td><input data-new-barcode placeholder="штрихкод" style="width:130px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
+   <td><input data-new-sku placeholder="артикул" style="width:120px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
+   <td><input data-new-name readonly style="width:190px;padding:4px;border:1px solid var(--line);border-radius:6px;background:#F7FAFC"></td>
+   <td><input data-new-unit readonly style="width:54px;padding:4px;border:1px solid var(--line);border-radius:6px;background:#F7FAFC"></td>
+   <td><input data-new-qty type="number" step="1" min="1" value="1" style="width:78px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
+   <td style="text-align:center"><input data-new-serial type="checkbox" disabled></td>
+   <td style="text-align:center"><input data-new-chz type="checkbox" disabled></td>
+   <td><span data-new-owner style="font-size:12px"></span></td>
+   <td><input data-new-batch placeholder="партия" style="width:100px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
+   <td><input data-new-prod type="date" style="width:120px;padding:4px;border:1px solid var(--line);border-radius:6px"></td>
+   <td><button class="btn sm pri" data-new-save data-perm="doc_edit_order">✓</button> <button class="btn sm" data-new-cancel>✕</button></td>`;
+  tbl.tBodies[0].appendChild(root);
+ }
+ // Новая строка/форма не должна оставаться за нижней границей экрана.
+ try{ root.scrollIntoView({block:'nearest', inline:'nearest'}); }catch(e){ try{ root.scrollIntoView(false); }catch(e2){} }
+ setTimeout(function(){ const f=root.querySelector('[data-new-barcode]'); if(f) f.focus(); }, 30);
+ const q=(s)=>root.querySelector(s);
  const fill=async(input)=>{
   const val=(input.value||'').trim();if(!val)return;
   const isBc=input.matches('[data-new-barcode]');
@@ -263,13 +315,13 @@ function addOrderInlineRow(){
    q('[data-new-serial]').checked=!!Number(p.scan_serial_out);
    q('[data-new-chz]').checked=!!Number(p.scan_chz);
    q('[data-new-owner]').textContent=p.owner_name||'';
-   tr.dataset.ownerId=p.owner_contractor_id||'';
-   tr.dataset.ownerName=p.owner_name||'';
+   root.dataset.ownerId=p.owner_contractor_id||'';
+   root.dataset.ownerName=p.owner_name||'';
   }catch(e){toast('Ошибка поиска товара')}
  };
  q('[data-new-sku]').onchange=()=>fill(q('[data-new-sku]'));
  q('[data-new-barcode]').onchange=()=>fill(q('[data-new-barcode]'));
- q('[data-new-cancel]').onclick=()=>tr.remove();
+ q('[data-new-cancel]').onclick=()=>root.remove();
  q('[data-new-save]').onclick=async()=>{
   const sku=q('[data-new-sku]').value.trim(),name=q('[data-new-name]').value.trim(),qty=Number(q('[data-new-qty]').value||0);
   if(!sku){toast('Укажите артикул');return}
@@ -279,7 +331,7 @@ function addOrderInlineRow(){
   if(!Number.isInteger(qty)){toast('Количество — только целое число');return}
   const body={wms_code:q('[data-new-wms]').value,barcode:q('[data-new-barcode]').value,sku:sku,name:name,unit:q('[data-new-unit]').value||'шт',qty:qty,
    scan_serial:q('[data-new-serial]').checked?1:0,scan_chz:q('[data-new-chz]').checked?1:0,
-   owner_contractor_id:tr.dataset.ownerId||0,owner_name:tr.dataset.ownerName||'',
+   owner_contractor_id:root.dataset.ownerId||0,owner_name:root.dataset.ownerName||'',
    supplier_batch:q('[data-new-batch]').value,prod_date:q('[data-new-prod]').value};
   const r=await fetch(`${API}?action=item_add&id=${curId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const j=await r.json();if(!r.ok){toast('Ошибка: '+(j.error||''));return}

@@ -39,6 +39,7 @@ final class ShipmentRepository
             'total_with_vat' => ['s.total_with_vat', 'n'], 'id' => ['s.id', 'n'],
             'vehicle_arrival' => ['s.vehicle_arrival', 'd'],
             'ship_date' => ['COALESCE(s.fact_shipment_date, s.plan_shipment_date)', 'd'],
+            'fact_shipment_date' => ['s.fact_shipment_date', 'd'],
             'consignee' => ['s.consignee', 't'], 'vehicle' => ['s.vehicle', 't'],
             'gate' => ['s.gate', 't'], 'loading_type' => ['s.loading_type', 't'],
             'warehouse' => ['w.name', 't'], 'status' => ['s.status', 't'],

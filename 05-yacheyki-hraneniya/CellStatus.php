@@ -127,12 +127,13 @@ final class CellStatus
         };
     }
 
-    // Пересчет статуса по факту: заблокированные и резерв не трогаем.
+    // Пересчет статуса по факту: пустая reserved/busy ячейка становится свободной,
+    // ручную блокировку (карантин/инвентаризация) сохраняем.
     public static function actual(string $current, float $qty): string
     {
-        if (in_array($current, [self::BLOCKED, self::RESERVED], true)) {
-            return $current;
+        if ($qty > 0) {
+            return in_array($current, [self::BLOCKED, self::RESERVED], true) ? $current : self::BUSY;
         }
-        return $qty > 0 ? self::BUSY : self::FREE;
+        return $current === self::BLOCKED ? self::BLOCKED : self::FREE;
     }
 }
