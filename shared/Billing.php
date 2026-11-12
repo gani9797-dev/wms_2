@@ -31,6 +31,7 @@ function billing_pdo(): PDO
     $pdo = function_exists('wms_nomenclature_pdo') ? wms_nomenclature_pdo() : wms_pg_pdo();
     billing_ensure_schema($pdo);
     billing_seed($pdo);
+    billing_ensure_extra_services($pdo);
     return $pdo;
 }
 
@@ -167,10 +168,13 @@ function billing_seed(PDO $pdo): void
     // Стартовый набор услуг (ТЗ §6.1.5).
     $services = [
         ['IN_PALLET', 'Паллетная приёмка', 'in', 'PER_UNIT', 'pallet', 'PALLET', 'IN_PALLET', 300],
+        ['IN_PALLET_EURO', 'Паллетная приёмка (евро)', 'in', 'PER_UNIT', 'pallet', 'PALLET', 'IN_PALLET_EURO', 300],
+        ['IN_PALLET_FIN', 'Паллетная приёмка (фин)', 'in', 'PER_UNIT', 'pallet', 'PALLET', 'IN_PALLET_FIN', 300],
         ['IN_BOX', 'Коробочная приёмка', 'in', 'PER_UNIT', 'box', 'BOX', 'IN_BOX', 25],
         ['IN_PIECE', 'Штучная приёмка', 'in', 'PER_UNIT', 'piece', 'PIECE', 'IN_PIECE', 3],
         ['IN_SN_SCAN', 'Сканирование серийного номера при приёмке', 'in', 'PER_UNIT', 'scan', 'SN_SCAN', 'IN_SN_SCAN', 2],
         ['IN_UNLOAD', 'Разгрузка ТС (за паллету)', 'in', 'PER_UNIT', 'pallet', 'PALLET', 'IN_UNLOAD', 120],
+        ['IN_UNLOAD_M3', 'Разгрузка валом, м³', 'in', 'PER_UNIT', 'm3', 'M3', 'IN_UNLOAD_M3', 100],
         ['IN_DOC', 'Оформление приёмки (за документ)', 'in', 'PER_DOCUMENT', 'document', 'DOCUMENT', 'IN_DOC', 500],
         ['IN_PLACEMENT', 'Размещение на место хранения', 'in', 'PER_UNIT', 'pallet', 'PALLET', 'IN_PLACEMENT', 90],
         ['STORAGE_PALLET_DAY', 'Хранение, паллетоместо/сутки', 'storage', 'STORAGE_DAY', 'pallet_place', 'PALLET_PLACE', 'STORAGE_DAY', 380],
@@ -187,6 +191,8 @@ function billing_seed(PDO $pdo): void
         ['LBL_SN_SCAN', 'Сканирование SN при отгрузке', 'label', 'PER_UNIT', 'scan', 'SN_SCAN', 'LBL_SN_SCAN', 2],
         ['LBL_RELABEL', 'Перемаркировка / замена этикетки', 'label', 'PER_UNIT', 'sticker', 'STICKER', 'LBL_RELABEL', 10],
         ['OUT_PALLET', 'Паллетная отгрузка', 'out', 'PER_UNIT', 'pallet', 'PALLET', 'OUT_PALLET', 300],
+        ['OUT_PALLET_EURO', 'Паллетная отгрузка (евро)', 'out', 'PER_UNIT', 'pallet', 'PALLET', 'OUT_PALLET_EURO', 300],
+        ['OUT_PALLET_FIN', 'Паллетная отгрузка (фин)', 'out', 'PER_UNIT', 'pallet', 'PALLET', 'OUT_PALLET_FIN', 300],
         ['OUT_BOX', 'Отгрузка коробами', 'out', 'PER_UNIT', 'box', 'BOX', 'OUT_BOX', 25],
         ['OUT_PIECE', 'Отгрузка штучно', 'out', 'PER_UNIT', 'piece', 'PIECE', 'OUT_PIECE', 3],
         ['OUT_LOAD', 'Погрузка ТС', 'out', 'PER_UNIT', 'pallet', 'PALLET', 'OUT_LOAD', 150],
@@ -348,6 +354,74 @@ function billing_seed_demo(PDO $pdo): void
                 ':q' => $q, ':u' => $uom, ':doc' => $doc]);
         } catch (Throwable) {
         }
+    }
+}
+
+/**
+ * Дополнительные услуги для фиксации при приёмке/отгрузке:
+ * евро/фин паллеты и разгрузка валом (м³, 100 ₽/м³).
+ * Идемпотентно добавляет услуги и строки тарифов, чтобы настройка была
+ * видна и редактируема в модуле 16 «Услуги / Тарифы».
+ */
+function billing_ensure_extra_services(PDO $pdo): void
+{
+    $extras = [
+        ['IN_PALLET_EURO', 'Паллетная приёмка (евро)', 'in', 'PER_UNIT', 'pallet', 'PALLET', 'IN_PALLET_EURO', 300, 171],
+        ['IN_PALLET_FIN', 'Паллетная приёмка (фин)', 'in', 'PER_UNIT', 'pallet', 'PALLET', 'IN_PALLET_FIN', 300, 172],
+        ['IN_UNLOAD_M3', 'Разгрузка валом, м³', 'in', 'PER_UNIT', 'm3', 'M3', 'IN_UNLOAD_M3', 100, 174],
+        ['OUT_PALLET_EURO', 'Паллетная отгрузка (евро)', 'out', 'PER_UNIT', 'pallet', 'PALLET', 'OUT_PALLET_EURO', 300, 191],
+        ['OUT_PALLET_FIN', 'Паллетная отгрузка (фин)', 'out', 'PER_UNIT', 'pallet', 'PALLET', 'OUT_PALLET_FIN', 300, 192],
+    ];
+    try {
+        $groups = [];
+        foreach ($pdo->query('SELECT id, code FROM billing_service_group') as $r) {
+            $groups[strtolower((string)$r['code'])] = (int)$r['id'];
+        }
+        $uoms = [];
+        foreach ($pdo->query('SELECT id, code FROM billing_uom') as $r) {
+            $uoms[strtolower((string)$r['code'])] = (int)$r['id'];
+        }
+        $calcs = [];
+        foreach ($pdo->query('SELECT id, code FROM billing_calc_type') as $r) {
+            $calcs[strtolower((string)$r['code'])] = (int)$r['id'];
+        }
+        $find = $pdo->prepare('SELECT id FROM billing_service WHERE code=:c LIMIT 1');
+        $ins = $pdo->prepare(
+            "INSERT INTO billing_service (code,name,group_id,calc_type_id,uom_id,driver_code,event_type_code,default_price,is_active,sort_order)
+             VALUES (:c,:n,:g,:t,:u,:d,:e,:p,1,:o)"
+        );
+        foreach ($extras as [$code, $name, $group, $calc, $uom, $driver, $event, $price, $sort]) {
+            $find->execute([':c' => $code]);
+            if ($find->fetchColumn()) {
+                continue;
+            }
+            $ins->execute([
+                ':c' => $code, ':n' => $name,
+                ':g' => $groups[strtolower($group)] ?? null,
+                ':t' => $calcs[strtolower($calc)] ?? null,
+                ':u' => $uoms[strtolower($uom)] ?? null,
+                ':d' => $driver, ':e' => $event, ':p' => $price, ':o' => $sort,
+            ]);
+        }
+        // Включаем новые услуги во все действующие тарифы по цене по умолчанию.
+        $codes = array_map(static fn($x) => $x[0], $extras);
+        $ph = implode(',', array_fill(0, count($codes), '?'));
+        $svc = $pdo->prepare("SELECT id, code, default_price FROM billing_service WHERE code IN ($ph)");
+        $svc->execute($codes);
+        $svcRows = $svc->fetchAll(PDO::FETCH_ASSOC);
+        $tariffs = $pdo->query("SELECT id FROM billing_tariff WHERE status IN ('draft','approved')")->fetchAll(PDO::FETCH_COLUMN);
+        $has = $pdo->prepare('SELECT id FROM billing_tariff_line WHERE tariff_id=:t AND service_id=:s LIMIT 1');
+        $line = $pdo->prepare('INSERT INTO billing_tariff_line (tariff_id,service_id,is_enabled,price) VALUES (:t,:s,1,:p)');
+        foreach ($tariffs as $tid) {
+            foreach ($svcRows as $s) {
+                $has->execute([':t' => (int)$tid, ':s' => (int)$s['id']]);
+                if ($has->fetchColumn()) {
+                    continue;
+                }
+                $line->execute([':t' => (int)$tid, ':s' => (int)$s['id'], ':p' => (float)$s['default_price']]);
+            }
+        }
+    } catch (Throwable) {
     }
 }
 
@@ -1091,6 +1165,26 @@ function billing_storage_run(PDO $pdo, string $from, string $to, array $clients,
 }
 
 
+/**
+ * Коэффициент движения для суточного хранения.
+ * Разные единицы (паллеты/короба/штуки/м³) не смешиваем: иначе приёмка
+ * паллетами создаёт фиктивное хранение коробов/штук/м³. Разрешены только
+ * pallet <-> pallet_place и совпадающие единицы.
+ */
+function billing_storage_uom_factor(string $from, string $to): ?float
+{
+    $from = strtolower(trim($from));
+    $to = strtolower(trim($to));
+    if ($from === $to) {
+        return 1.0;
+    }
+    $pairs = [
+        'pallet|pallet_place' => 1.0,
+        'pallet_place|pallet' => 1.0,
+    ];
+    return $pairs[$from . '|' . $to] ?? null;
+}
+
 /** Приход и расход клиента за сутки с пересчётом в единицу хранения. */
 function billing_day_movements(PDO $pdo, int $clientId, string $uom, string $day): array
 {
@@ -1102,7 +1196,10 @@ function billing_day_movements(PDO $pdo, int $clientId, string $uom, string $day
         $q->execute([':c' => $clientId, ':d' => $day]);
         foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $type = (string)$r['event_type_code'];
-            $f = billing_factor($pdo, (string)($r['uom_code'] ?? ''), $uom);
+            $f = billing_storage_uom_factor((string)($r['uom_code'] ?? ''), $uom);
+            if ($f === null) {
+                continue;
+            }
             if (str_starts_with($type, 'IN_')) {
                 $in += (float)$r['quantity'] * $f;
             } elseif (str_starts_with($type, 'OUT_')) {
@@ -1125,7 +1222,10 @@ function billing_movement_balance(PDO $pdo, int $clientId, string $uom, string $
             $q->execute([':c' => $clientId, ':d' => $day]);
             $sum = 0.0;
             foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $sum += (float)$r['quantity'] * billing_factor($pdo, (string)($r['uom_code'] ?? ''), $uom);
+                $f = billing_storage_uom_factor((string)($r['uom_code'] ?? ''), $uom);
+                if ($f !== null) {
+                    $sum += (float)$r['quantity'] * $f;
+                }
             }
             return $sum;
         }
@@ -1136,7 +1236,10 @@ function billing_movement_balance(PDO $pdo, int $clientId, string $uom, string $
         $q->execute([':c' => $clientId, ':d' => $day]);
         $sum = 0.0;
         foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            $f = billing_factor($pdo, (string)($r['uom_code'] ?? ''), $uom);
+            $f = billing_storage_uom_factor((string)($r['uom_code'] ?? ''), $uom);
+            if ($f === null) {
+                continue;
+            }
             $sum += str_starts_with((string)$r['event_type_code'], 'OUT_') ? -(float)$r['quantity'] * $f : (float)$r['quantity'] * $f;
         }
         return $sum;

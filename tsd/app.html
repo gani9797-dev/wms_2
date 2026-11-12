@@ -355,6 +355,8 @@ if(total===0){
 <button id="ssend">Отгрузить паллету (Enter)</button>
 <div class="mut" style="margin-top:6px">Сканируй SSCC по кругу: количество сканов равно числу паллет.</div></div>`;
 }
+s+=`<div class="card"><b>Фиксация услуг</b><div class="mut">Стикеровка и паллеты (евро/фин) для биллинга клиента.</div>
+ <div class="row" style="margin-top:8px"><button id="svcfix">Фиксация услуг</button></div></div>`;
 s+=`<div class="card"><b>Паллеты (${total})</b>`+((SHIP.pallets||[]).length
  ?(SHIP.pallets||[]).map(p=>`<div class="item"><b>${p.sscc}</b> <span class="mut">${p.status_label}${p.qty?(' · '+p.qty+' шт'):''}</span></div>`).join('')
  :'<div class="mut">Паллет нет</div>')+`</div>`;
@@ -363,7 +365,34 @@ $('detail').innerHTML=s;
 $('tasks').innerHTML='';$('home').style.display='none';$('detail').classList.remove('hidden');
  const e=$('sscc');if(e){e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();shipPallet()}};if($('ssend'))$('ssend').onclick=shipPallet}
  if($('shipbulk'))$('shipbulk').onclick=shipAllBulk;
+ if($('svcfix'))$('svcfix').onclick=renderServiceFixShip;
  $('bk').onclick=()=>backOrRoot();window.scrollTo(0,0);
+}
+async function renderServiceFixShip(){
+ let d={};
+ try{const r=await apiShip('?action=service_fix_info&shipment_id='+SHIP.head.id);d=await r.json().catch(()=>({}))}catch(_){toast('Нет связи — повтори',3500);return}
+ if(d.error){toast(d.error,4000);return}
+ const ev=(d.events||[]).map(e=>`<div class="item"><b>${e.service_name||e.service_code}</b> <span class="mut">${e.quantity} ${e.uom_code||''}</span></div>`).join('')||'<div class="mut">Услуги ещё не фиксировались</div>';
+ const client=d.client?`${d.client.name} (${d.client.code})`:'клиент не найден';
+ $('detail').innerHTML=`<div class="card"><div class="mut">Фиксация услуг · ${SHIP.head.doc_no}</div>
+ <b style="font-size:19px">${client}</b>
+ <div class="mut">Отгрузка: ${SHIP.head.doc_no} · дата ${new Date().toISOString().slice(0,10)}</div>
+ <div class="inforow"><b>Паллеты</b></div>
+ <div class="row"><input id="pe" type="number" min="0" value="${d.pallets_euro||0}" placeholder="Евро, шт"><input id="pf" type="number" min="0" value="${d.pallets_fin||0}" placeholder="Фин, шт"></div>
+ <div class="inforow"><b>Стикеровка</b></div>
+ <div class="row"><input id="ps" type="number" min="0" value="0" placeholder="Стикеров, шт"></div>
+ <div class="inforow"><b>Уже зафиксировано</b></div>${ev}
+ <div class="row" style="margin-top:10px"><button id="ssave" class="green">Сохранить услуги</button><button class="ghost" id="sback">Назад</button></div></div>`;
+ $('sback').onclick=()=>_openShipOut(SHIP.head.id);
+ $('ssave').onclick=async()=>{
+  const body={shipment_id:SHIP.head.id,pallets_euro:+($('pe').value||0),pallets_fin:+($('pf').value||0),sticker_qty:+($('ps').value||0),user_id:ME?ME.id:null,user_fio:ME?ME.fio:''};
+  let j={},ok=false;
+  try{const r=await apiShip('?action=service_fix',{method:'POST',body:JSON.stringify(body)});j=await r.json().catch(()=>({}));ok=r.ok}catch(_){toast('Нет сети — повтори',3500);return}
+  if(!ok){toast(j.error||'Ошибка фиксации услуг',4500);return}
+  toast('Услуги зафиксированы: '+(j.client?j.client.name:'')+' · '+(j.total_net||0)+' ₽ без НДС',6000);
+  if(j.warning)toast(j.warning,6000);
+  await renderServiceFixShip();
+ };
 }
 async function shipAllBulk(){if(!confirm('Отгрузить всю отгрузку валом и списать товар по системе?'))return;
  const uid=ME?ME.id:null;

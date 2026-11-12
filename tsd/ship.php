@@ -279,4 +279,81 @@ if ($action === 'ship_all' && $method === 'POST') {
     j($res);
 }
 
-j(['error' => 'unknown action: ?action=tasks|task|scan|finish|ship_list|ship_task|ship_pallet|ship_all'], 404);
+// --- Фиксация услуг при отгрузке (стикеровка, паллеты евро/фин) ---
+if ($action === 'service_fix_info' && $method === 'GET') {
+    require_once __DIR__ . '/../shared/ServiceFixation.php';
+    $sid = (int)($_GET['shipment_id'] ?? $_GET['id'] ?? 0);
+    if ($sid <= 0) {
+        j(['error' => 'нужен shipment_id'], 422);
+    }
+    $h = $pdo->prepare('SELECT * FROM shipments WHERE id=:i');
+    $h->execute([':i' => $sid]);
+    $head = $h->fetch(PDO::FETCH_ASSOC);
+    if (!$head) {
+        j(['error' => 'Отгрузка не найдена'], 404);
+    }
+    $bpdo = wms_service_billing_pdo();
+    $client = wms_service_client_resolve($bpdo, (int)$head['contractor_id']);
+    $euro = 0;
+    $fin = 0;
+    try {
+        $st = $pdo->prepare(
+            "SELECT COALESCE(NULLIF(TRIM(ps.pallet_type),''),'euro') AS pt,
+                    COUNT(DISTINCT sp.sscc) AS n
+               FROM shipment_pallets sp
+               LEFT JOIN product_stock ps ON TRIM(ps.pallet)=sp.sscc
+              WHERE sp.shipment_id=:s GROUP BY pt"
+        );
+        $st->execute([':s' => $sid]);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            if ((string)$r['pt'] === 'fin') {
+                $fin += (int)$r['n'];
+            } else {
+                $euro += (int)$r['n'];
+            }
+        }
+    } catch (Throwable) {
+    }
+    j(['ok' => true, 'shipment' => $head, 'client' => $client,
+        'pallets_euro' => $euro, 'pallets_fin' => $fin,
+        'events' => wms_service_fix_events($bpdo, (string)$head['doc_no'])]);
+}
+
+if ($action === 'service_fix' && $method === 'POST') {
+    require_once __DIR__ . '/../shared/ServiceFixation.php';
+    $b = json_decode(file_get_contents('php://input'), true) ?? [];
+    $sid = (int)($b['shipment_id'] ?? $_GET['id'] ?? 0);
+    if ($sid <= 0 && trim((string)($b['doc_no'] ?? '')) !== '') {
+        $h = $pdo->prepare('SELECT id FROM shipments WHERE doc_no=:q LIMIT 1');
+        $h->execute([':q' => trim((string)$b['doc_no'])]);
+        $sid = (int)($h->fetchColumn() ?: 0);
+    }
+    if ($sid <= 0) {
+        j(['error' => 'нужен shipment_id'], 422);
+    }
+    $h = $pdo->prepare('SELECT * FROM shipments WHERE id=:i');
+    $h->execute([':i' => $sid]);
+    $head = $h->fetch(PDO::FETCH_ASSOC);
+    if (!$head) {
+        j(['error' => 'Отгрузка не найдена'], 404);
+    }
+    $bpdo = wms_service_billing_pdo();
+    $res = wms_service_fixation_save($bpdo, [
+        'contractor_id' => (int)$head['contractor_id'],
+        'stage' => 'ship',
+        'doc_type' => 'Отгрузка',
+        'doc_no' => (string)$head['doc_no'],
+        'event_date' => (string)($b['event_date'] ?? date('Y-m-d')),
+        'pallets_euro' => (int)($b['pallets_euro'] ?? 0),
+        'pallets_fin' => (int)($b['pallets_fin'] ?? 0),
+        'sticker_qty' => (int)($b['sticker_qty'] ?? 0),
+        'user_id' => (int)($b['user_id'] ?? 0),
+        'user_fio' => trim((string)($b['user_fio'] ?? '')),
+    ]);
+    if (empty($res['ok'])) {
+        j(['error' => $res['error'] ?? 'Ошибка фиксации услуг'], 422);
+    }
+    j($res);
+}
+
+j(['error' => 'unknown action: ?action=tasks|task|scan|finish|ship_list|ship_task|ship_pallet|ship_all|service_fix|service_fix_info'], 404);

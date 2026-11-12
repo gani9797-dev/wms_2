@@ -387,6 +387,103 @@ try {
         j(['ok' => true, 'id' => $id]);
     }
 
+    // --- Экспорт услуг клиента в Excel + итоговый счёт ---
+    if ($action === 'export' || $action === 'invoice') {
+        require_once __DIR__ . '/../shared/XlsxWrite.php';
+        $clientId = (int)($_GET['client_id'] ?? 0);
+        $from = substr((string)($_GET['from'] ?? ''), 0, 10) ?: date('Y-m-01');
+        $to = substr((string)($_GET['to'] ?? ''), 0, 10) ?: date('Y-m-t');
+        if ($action === 'invoice' && $clientId <= 0) {
+            throw new RuntimeException('Для счёта выберите клиента');
+        }
+        $w = ["c.status='ACTIVE'", 'c.period_from>=:f', 'c.period_to<=:t'];
+        $p = [':f' => $from, ':t' => $to];
+        if ($clientId > 0) {
+            $w[] = 'c.client_id=:cl';
+            $p[':cl'] = $clientId;
+        }
+        $st = $pdo->prepare(
+            "SELECT c.*, cl.name AS client_name, cl.code AS client_code,
+                    s.name AS service_name, s.code AS service_code, u.code AS uom_code
+               FROM billing_charge c
+               LEFT JOIN billing_client cl ON cl.id=c.client_id
+               LEFT JOIN billing_service s ON s.id=c.service_id
+               LEFT JOIN billing_uom u ON u.id=s.uom_id
+              WHERE " . implode(' AND ', $w) . "
+              ORDER BY cl.name, c.charge_date, s.name, c.id"
+        );
+        $st->execute($p);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        if (!$rows) {
+            throw new RuntimeException('За выбранный период начислений нет');
+        }
+        $totalNet = 0.0;
+        $totalVat = 0.0;
+        $totalGross = 0.0;
+        $services = [];
+        $clients = [];
+        $detail = [['Дата', 'Клиент', 'Код услуги', 'Услуга', 'Кол-во', 'Ед.', 'Цена', 'Сумма без НДС', 'НДС', 'Сумма с НДС']];
+        foreach ($rows as $r) {
+            $net = (float)$r['amount_net'];
+            $vat = (float)$r['vat_amount'];
+            $gross = (float)$r['amount_gross'];
+            $totalNet += $net;
+            $totalVat += $vat;
+            $totalGross += $gross;
+            $cname = (string)($r['client_name'] ?? '');
+            $sname = (string)($r['service_name'] ?? '');
+            $key = $cname . "\x1F" . $sname . "\x1F" . (string)($r['uom_code'] ?? '');
+            if (!isset($services[$key])) {
+                $services[$key] = ['client' => $cname, 'service' => $sname,
+                    'uom' => (string)($r['uom_code'] ?? ''), 'qty' => 0.0, 'net' => 0.0, 'gross' => 0.0];
+            }
+            $services[$key]['qty'] += (float)$r['quantity'];
+            $services[$key]['net'] += $net;
+            $services[$key]['gross'] += $gross;
+            $clients[$cname] = ($clients[$cname] ?? 0) + $net;
+            $detail[] = [(string)$r['charge_date'], $cname, (string)($r['service_code'] ?? ''), $sname,
+                (float)$r['quantity'], (string)($r['uom_code'] ?? ''), (float)$r['price'], $net, $vat, $gross];
+        }
+        $summary = [['Клиент', 'Услуга', 'Ед.', 'Кол-во', 'Сумма без НДС', 'Сумма с НДС']];
+        foreach ($services as $s) {
+            $summary[] = [$s['client'], $s['service'], $s['uom'], round($s['qty'], 3), round($s['net'], 2), round($s['gross'], 2)];
+        }
+        $clientRows = [['Клиент', 'Сумма без НДС']];
+        foreach ($clients as $n => $v) {
+            $clientRows[] = [$n, round($v, 2)];
+        }
+        $invNo = 'INV-' . date('Ymd-His');
+        $invoice = [
+            ['СЧЁТ НА ОПЛАТУ УСЛУГ', $invNo],
+            ['Период', $from . ' — ' . $to],
+            ['Клиент', $clientId > 0 ? (string)($rows[0]['client_name'] ?? '') : 'Все клиенты'],
+            [],
+            ['Код услуги', 'Услуга', 'Кол-во', 'Ед.', 'Цена', 'Сумма без НДС', 'НДС', 'Сумма с НДС'],
+        ];
+        foreach ($rows as $r) {
+            $invoice[] = [(string)($r['service_code'] ?? ''), (string)($r['service_name'] ?? ''),
+                (float)$r['quantity'], (string)($r['uom_code'] ?? ''), (float)$r['price'],
+                (float)$r['amount_net'], (float)$r['vat_amount'], (float)$r['amount_gross']];
+        }
+        $invoice[] = [];
+        $invoice[] = ['ИТОГО без НДС', '', '', '', '', round($totalNet, 2), round($totalVat, 2), round($totalGross, 2)];
+        $invoice[] = ['В том числе НДС', round($totalVat, 2)];
+        $invoice[] = ['К оплате', round($totalGross, 2)];
+        $bin = wms_xlsx_write([
+            ['name' => 'Услуги', 'rows' => $detail],
+            ['name' => 'Сводка', 'rows' => $summary],
+            ['name' => 'По клиентам', 'rows' => $clientRows],
+            ['name' => 'Счёт', 'rows' => $invoice],
+        ]);
+        $fname = ($action === 'invoice' ? 'invoice_' : 'billing_') . ($clientId > 0 ? ('client' . $clientId . '_') : '') . $from . '_' . $to . '.xlsx';
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $fname . '"');
+        header('Content-Length: ' . strlen($bin));
+        header('Cache-Control: no-store');
+        echo $bin;
+        exit;
+    }
+
     if ($action === 'storage') {
         $clientId = (int)($_GET['client_id'] ?? 0);
         $from = substr((string)($_GET['from'] ?? ''), 0, 10);

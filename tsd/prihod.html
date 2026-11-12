@@ -155,11 +155,13 @@ function scrEan(){SCREEN='ean';
 <input id="ean" placeholder="Скан..." autocomplete="off"><button id="go">Найти</button>
  <button class="ghost" id="all">Принять весь приход</button>
  <button class="ghost" id="fin">Завершить приёмку</button>
+ <button class="ghost" id="svc">Фиксация услуг</button>
  <div class="mut">Паллета: ${PALLET||'—'}${CROSS?' · кросс-док':''}</div>
  <div class="kv"><i>Тара приёмки</i><b><select id="ptype" style="min-height:40px"><option value="euro"${PALLET_TYPE==='euro'?' selected':''}>Евро</option><option value="fin"${PALLET_TYPE==='fin'?' selected':''}>Фин</option></select></b></div>
 <div class="mut">«Принять весь приход» — всё количество по документу без номеров паллет. Не сработает для товаров со сканированием с/н или Честного знака.</div></div>`;
 const e=$('ean');e.focus();e.onkeydown=v=>{if(v.key==='Enter'){v.preventDefault();find()}};$('go').onclick=find;$('fin').onclick=()=>go('finish',scrFinish);
 const pt=$('ptype');if(pt)pt.onchange=()=>{PALLET_TYPE=pt.value||'euro';toast('Тара приёмки: '+(PALLET_TYPE==='fin'?'Фин':'Евро'))};
+if($('svc'))$('svc').onclick=renderServiceFixReceive;
 $('all').onclick=acceptAllReceipt;
  async function find(){const v=e.value.trim();if(!v){toast('Отсканируй штрихкод');return}
  const r=await api('?action=ean&receipt_id='+DOC.id+'&ean='+encodeURIComponent(v));const j=await r.json();
@@ -646,9 +648,42 @@ const dev=j.deviation?`<div class="mut">Отклонение: <b>${j.deviation}<
 $('m').innerHTML=`<div class="card green"><div class="step">КОНЕЦ ПРИЁМКИ</div><h2>Документ закрыт ✓</h2>
 <div class="mut">Статус: <b>${j.status_label||'Закрыто'}</b></div>
 <div class="mut">Прогресс: ${j.progress.fact} / ${j.progress.plan} · ${j.progress.pct}%</div>${dev}
-<h2>Сформированные акты</h2><table class="mini"><tr><th>Акт</th><th>Строк</th><th>Штук</th></tr>${rows}</table>
-<button class="ghost" id="bk">К документам</button></div>`;
-$('bk').onclick=()=>go('docs',scrDocs)}
+ <h2>Сформированные акты</h2><table class="mini"><tr><th>Акт</th><th>Строк</th><th>Штук</th></tr>${rows}</table>
+ <button id="svc" class="amber">Фиксация услуг (паллеты / валом / стикеровка)</button>
+ <button class="ghost" id="bk">К документам</button></div>`;
+ $('svc').onclick=renderServiceFixReceive;
+ $('bk').onclick=()=>go('docs',scrDocs)}
+
+// --- Фиксация услуг приёмки: паллеты евро/фин, стикеровка, приёмка валом (м³) ---
+async function renderServiceFixReceive(){
+ if(!DOC){toast('Открой документ');return}
+ let d={};
+ try{const r=await api('?action=service_fix_info&receipt_id='+DOC.id);d=await r.json()}catch(e){toast('Нет связи');return}
+ if(d.error){toast(d.error);return}
+ const ev=(d.events||[]).map(e=>`<div class="item"><b>${esc(e.service_name||e.service_code)}</b> <span class="mut">${e.quantity} ${esc(e.uom_code||'')}</span></div>`).join('')||'<div class="mut">Услуги ещё не фиксировались</div>';
+ const client=d.client?`${esc(d.client.name)} (${esc(d.client.code)})`:'клиент не найден';
+ const today=new Date().toISOString().slice(0,10);
+ $('m').innerHTML=`<div class="card"><div class="step">ФИКСАЦИЯ УСЛУГ · ${esc(DOC.doc_no)}</div>
+ <h2>${client}</h2>
+ <div class="mut">Укажи фактически выгруженные паллеты евро/фин, количество стикеров и объём приёмки валом.</div>
+ <div class="inforow"><b>Паллеты</b></div>
+ <div class="row"><input id="pe" type="number" min="0" value="${d.pallets_euro||0}" placeholder="Евро, шт"><input id="pf" type="number" min="0" value="${d.pallets_fin||0}" placeholder="Фин, шт"></div>
+ <div class="inforow"><b>Стикеровка</b></div>
+ <div class="row"><input id="ps" type="number" min="0" value="0" placeholder="Стикеров, шт"></div>
+ <div class="inforow"><b>Приёмка валом</b><div class="mut">1 м³ = 100 ₽ (настройка в модуле «Биллинги»)</div></div>
+ <div class="row"><input id="pm" type="number" min="0" step="0.001" value="${d.volume_m3||0}" placeholder="Объём, м³"></div>
+ <div class="inforow"><b>Уже зафиксировано</b></div>${ev}
+ <div class="row" style="margin-top:10px"><button id="ssave" class="green">Сохранить услуги</button><button class="ghost" id="sback">Назад</button></div></div>`;
+ $('sback').onclick=()=>{if(DOC&&DOC.status==='closed'){go('docs',scrDocs)}else{go('ean',scrEan)}};
+ $('ssave').onclick=async()=>{
+  const body={receipt_id:DOC.id,pallets_euro:+($('pe').value||0),pallets_fin:+($('pf').value||0),sticker_qty:+($('ps').value||0),bulk_m3:+($('pm').value||0),event_date:today,user_id:uid(),user_fio:ME?ME.fio:''};
+  const {j}=await post('service_fix',body);
+  if(j.error){toast('Ошибка: '+j.error,5000);return}
+  toast('Услуги зафиксированы: '+(j.client?j.client.name:'')+' · '+(j.total_net||0)+' ₽ без НДС',6000);
+  if(j.warning)toast(j.warning,6000);
+  await renderServiceFixReceive();
+ };
+}
 async function scrFinish(){SCREEN='finish';let h=`<div class="card"><div class="step">ЗАКРЫТИЕ</div><h2>Закрытие документа</h2>`;
 if(CROSS){const {j}=await post('crossdock_move',{receipt_id:DOC.id,sscc:PALLET||''});
 h+=j.error?`<div class="mut">Кросс-док: ${j.error}</div>`:`<div class="mut">Кросс-док → в зоне отгрузки ✓</div>`}

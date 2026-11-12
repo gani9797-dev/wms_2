@@ -59,6 +59,7 @@ tr:hover td{background:#FAFAFF}
 <button data-t="recalc">Пересчитать</button>
 <button data-t="charges">Начисления</button>
 <button data-t="storage">Хранение</button>
+<button data-t="invoice">Счёт и экспорт</button>
 <button data-t="periods">Периоды</button>
 </div>
 <div id="pane"></div>
@@ -116,8 +117,36 @@ async function render(){
   if(TAB==='recalc')return renderRecalc();
   if(TAB==='charges')return renderCharges();
   if(TAB==='storage')return renderStorage();
+  if(TAB==='invoice')return renderInvoice();
   if(TAB==='periods')return renderPeriods();
  }catch(e){$('pane').innerHTML='<div class="card" style="padding:16px;color:#B71C1C">Ошибка: '+esc(e.message)+'</div>'}
+}
+
+/* ---------------- Счёт и экспорт в Excel ---------------- */
+async function renderInvoice(){
+ const r=await refs();
+ const clients=r.clients||[];
+ const [f0,t0]=prevPeriod();
+ $('pane').innerHTML=`<div class="card" style="padding:14px">
+  <div class="hint">Выгрузка всех предоставленных услуг клиенту за период и формирование итогового счёта в Excel.</div>
+  <div class="grid3" style="margin-top:10px">
+   <div class="fld"><label>Клиент</label><select id="inv_client"><option value="">Все клиенты</option>
+    ${clients.map(c=>`<option value="${c.id}">${esc(c.name)} (${esc(c.code||'')})</option>`).join('')}</select></div>
+   <div class="fld"><label>Период с</label><input type="date" id="inv_from" value="${f0}"></div>
+   <div class="fld"><label>Период по</label><input type="date" id="inv_to" value="${t0}"></div>
+  </div>
+  <div class="bar" style="margin-top:12px">
+   <button class="btn" id="inv_export">Экспорт услуг в Excel</button>
+   <button class="btn pri" id="inv_invoice">Сформировать счёт (Excel)</button>
+  </div>
+  <div class="hint" style="margin-top:8px">В файле: лист «Услуги», «Сводка», «По клиентам» и «Счёт» с итогами (без НДС / НДС / к оплате).</div>
+ </div>`;
+ const qs=()=>{const p=new URLSearchParams();p.set('client_id',$('inv_client').value||'0');p.set('from',$('inv_from').value||'');p.set('to',$('inv_to').value||'');return p.toString()};
+ $('inv_export').onclick=()=>{location.href=API+'?action=export&'+qs()};
+ $('inv_invoice').onclick=()=>{
+  if(!$('inv_client').value){toast('Для счёта выберите клиента');return}
+  location.href=API+'?action=invoice&'+qs();
+ };
 }
 
 /* ---------------- Услуги ---------------- */

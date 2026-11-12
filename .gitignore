@@ -37,6 +37,12 @@ in/success/*
 in/error/*
 out/success/*
 out/error/*
+in/*.csv
+in/*.txt
+in/*.xlsx
+out/*.csv
+out/*.txt
+out/*.xlsx
 !in/success/.gitkeep
 !in/error/.gitkeep
 !out/success/.gitkeep

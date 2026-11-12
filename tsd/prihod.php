@@ -1912,6 +1912,84 @@ if ($action === 'close' && $method === 'POST') {
         'progress' => refresh_head($pdo, $rid), 'stock' => $stock]);
 }
 
+// --- Фиксация услуг при приёмке (паллеты евро/фин, стикеровка, приёмка валом м³) ---
+if ($action === 'service_fix_info' && $method === 'GET') {
+    require_once __DIR__ . '/../shared/ServiceFixation.php';
+    $rid = (int)($_GET['receipt_id'] ?? 0);
+    if ($rid <= 0) {
+        j(['error' => 'нужен receipt_id'], 422);
+    }
+    $h = $pdo->prepare('SELECT * FROM receipts WHERE id=:i');
+    $h->execute([':i' => $rid]);
+    $head = $h->fetch(PDO::FETCH_ASSOC);
+    if (!$head) {
+        j(['error' => 'Поступление не найдено'], 404);
+    }
+    $bpdo = wms_service_billing_pdo();
+    $client = wms_service_client_resolve($bpdo, (int)$head['contractor_id']);
+    $euro = 0;
+    $fin = 0;
+    try {
+        $st = $pdo->prepare(
+            "SELECT COALESCE(NULLIF(TRIM(pallet_type),''),'euro') AS pt,
+                    COUNT(DISTINCT pallet) AS n
+               FROM receipt_operations
+              WHERE receipt_id=:r AND accept_status='Принято' AND pallet IS NOT NULL AND pallet<>''
+              GROUP BY pt"
+        );
+        $st->execute([':r' => $rid]);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            if ((string)$r['pt'] === 'fin') {
+                $fin += (int)$r['n'];
+            } else {
+                $euro += (int)$r['n'];
+            }
+        }
+    } catch (Throwable) {
+    }
+    j(['ok' => true, 'receipt' => $head, 'client' => $client,
+        'pallets_euro' => $euro, 'pallets_fin' => $fin,
+        'volume_m3' => (float)($head['volume'] ?? 0),
+        'events' => wms_service_fix_events($bpdo, (string)$head['doc_no'])]);
+}
+
+if ($action === 'service_fix' && $method === 'POST') {
+    require_once __DIR__ . '/../shared/ServiceFixation.php';
+    $rid = (int)($body['receipt_id'] ?? 0);
+    if ($rid <= 0 && trim((string)($body['doc_no'] ?? '')) !== '') {
+        $h = $pdo->prepare('SELECT id FROM receipts WHERE doc_no=:q LIMIT 1');
+        $h->execute([':q' => trim((string)$body['doc_no'])]);
+        $rid = (int)($h->fetchColumn() ?: 0);
+    }
+    if ($rid <= 0) {
+        j(['error' => 'нужен receipt_id'], 422);
+    }
+    $h = $pdo->prepare('SELECT * FROM receipts WHERE id=:i');
+    $h->execute([':i' => $rid]);
+    $head = $h->fetch(PDO::FETCH_ASSOC);
+    if (!$head) {
+        j(['error' => 'Поступление не найдено'], 404);
+    }
+    $bpdo = wms_service_billing_pdo();
+    $res = wms_service_fixation_save($bpdo, [
+        'contractor_id' => (int)$head['contractor_id'],
+        'stage' => 'receive',
+        'doc_type' => 'Поступление',
+        'doc_no' => (string)$head['doc_no'],
+        'event_date' => (string)($body['event_date'] ?? substr((string)($head['accept_date'] ?? date('Y-m-d')), 0, 10)),
+        'pallets_euro' => (int)($body['pallets_euro'] ?? 0),
+        'pallets_fin' => (int)($body['pallets_fin'] ?? 0),
+        'sticker_qty' => (int)($body['sticker_qty'] ?? 0),
+        'bulk_m3' => (float)($body['bulk_m3'] ?? 0),
+        'user_id' => (int)($body['user_id'] ?? 0),
+        'user_fio' => trim((string)($body['user_fio'] ?? '')),
+    ]);
+    if (empty($res['ok'])) {
+        j(['error' => $res['error'] ?? 'Ошибка фиксации услуг'], 422);
+    }
+    j($res);
+}
+
 // Обмеры товара с ТСД (новый товар из CSV-прихода): сохранить габариты + снять флаг need_measure
 if ($action === 'measure_save' && $method === 'POST') {
     $sku = trim((string)($body['sku'] ?? ''));
