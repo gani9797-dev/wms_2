@@ -71,7 +71,7 @@ function billing_ensure_schema(PDO $pdo): void
         "CREATE TABLE IF NOT EXISTS billing_tariff_line (id {$auto}, tariff_id BIGINT NOT NULL, service_id BIGINT NOT NULL, is_enabled SMALLINT DEFAULT 1, price {$num} DEFAULT 0, min_charge {$num} NULL, max_charge {$num} NULL, discount_percent {$num} DEFAULT 0, min_qty_threshold {$num} NULL, free_qty {$num} DEFAULT 0, date_from {$d} NULL, date_to {$d} NULL, comment TEXT NULL)",
         "CREATE TABLE IF NOT EXISTS billing_tariff_tier (id {$auto}, line_id BIGINT NOT NULL, threshold_from {$num} DEFAULT 0, threshold_to {$num} NULL, price {$num} DEFAULT 0, mode VARCHAR(20) DEFAULT 'VOLUME', basis VARCHAR(20) DEFAULT 'PER_DAY')",
         "CREATE TABLE IF NOT EXISTS billing_event (id {$auto}, external_id VARCHAR(100) NULL, source VARCHAR(20) DEFAULT 'MANUAL', client_id BIGINT NOT NULL, event_type_code VARCHAR(40) NOT NULL, event_date {$d} NOT NULL, quantity {$num} DEFAULT 0, uom_code VARCHAR(20) NULL, sku VARCHAR(50) NULL, pallet_count {$num} DEFAULT 0, box_count {$num} DEFAULT 0, piece_count {$num} DEFAULT 0, sticker_qty {$num} DEFAULT 0, weight_kg {$num} DEFAULT 0, volume_m3 {$num} DEFAULT 0, doc_type VARCHAR(50) NULL, doc_no VARCHAR(100) NULL, status VARCHAR(30) DEFAULT 'NEW', reason TEXT NULL, payload TEXT NULL, created_at {$ts} DEFAULT {$now})",
-        "CREATE TABLE IF NOT EXISTS billing_stock_daily (id {$auto}, client_id BIGINT NOT NULL, service_id BIGINT NOT NULL, uom_code VARCHAR(20) NULL, day {$d} NOT NULL, qty_start {$num} DEFAULT 0, qty_in {$num} DEFAULT 0, qty_out {$num} DEFAULT 0, qty_billable {$num} DEFAULT 0, is_free_day SMALLINT DEFAULT 0, day_no INTEGER DEFAULT 0, price {$num} DEFAULT 0, amount_net {$num} DEFAULT 0, charge_id BIGINT NULL, tariff_id BIGINT NULL, run_id BIGINT NULL, created_at {$ts} DEFAULT {$now})",
+        "CREATE TABLE IF NOT EXISTS billing_stock_daily (id {$auto}, client_id BIGINT NOT NULL, service_id BIGINT NOT NULL, uom_code VARCHAR(20) NULL, day {$d} NOT NULL, qty_start {$num} DEFAULT 0, qty_in {$num} DEFAULT 0, qty_out {$num} DEFAULT 0, qty_billable {$num} DEFAULT 0, is_free_day SMALLINT DEFAULT 0, day_no INTEGER DEFAULT 0, price {$num} DEFAULT 0, amount_net {$num} DEFAULT 0, charge_id BIGINT NULL, tariff_id BIGINT NULL, run_id BIGINT NULL, pallet_type VARCHAR(10) NULL, weight_band VARCHAR(10) NULL, weight_kg {$num} NULL, created_at {$ts} DEFAULT {$now})",
         "CREATE TABLE IF NOT EXISTS billing_charge (id {$auto}, client_id BIGINT NOT NULL, service_id BIGINT NOT NULL, charge_date {$d} NULL, period_from {$d} NULL, period_to {$d} NULL, quantity {$num} DEFAULT 0, price {$num} DEFAULT 0, amount_net {$num} DEFAULT 0, vat_rate {$num} DEFAULT 20, vat_amount {$num} DEFAULT 0, amount_gross {$num} DEFAULT 0, tariff_id BIGINT NULL, tariff_line_id BIGINT NULL, tier_id BIGINT NULL, event_id BIGINT NULL, stock_daily_id BIGINT NULL, calc_trace TEXT NULL, status VARCHAR(20) DEFAULT 'ACTIVE', adjustment_of_id BIGINT NULL, run_id BIGINT NULL, created_at {$ts} DEFAULT {$now})",
         "CREATE TABLE IF NOT EXISTS billing_period (id {$auto}, client_id BIGINT NULL, period_from {$d} NOT NULL, period_to {$d} NOT NULL, status VARCHAR(20) DEFAULT 'OPEN', closed_at {$ts} NULL, control_json TEXT NULL, created_at {$ts} DEFAULT {$now})",
         "CREATE TABLE IF NOT EXISTS billing_run (id {$auto}, period_from {$d} NOT NULL, period_to {$d} NOT NULL, client_scope TEXT NULL, mode VARCHAR(20) DEFAULT 'FULL', status VARCHAR(20) DEFAULT 'DONE', started_at {$ts} NULL, finished_at {$ts} NULL, stats TEXT NULL, created_at {$ts} DEFAULT {$now})",
@@ -82,6 +82,21 @@ function billing_ensure_schema(PDO $pdo): void
     foreach ($ddl as $sql) {
         try {
             $pdo->exec($sql);
+        } catch (Throwable) {
+        }
+    }
+    // Новые колонки для разреза хранения: тара и весовая группа паллеты.
+    foreach ([
+        'pallet_type VARCHAR(10) NULL',
+        'weight_band VARCHAR(10) NULL',
+        'weight_kg ' . $num . ' NULL',
+    ] as $colDef) {
+        try {
+            if ($pg) {
+                $pdo->exec('ALTER TABLE billing_stock_daily ADD COLUMN IF NOT EXISTS ' . $colDef);
+            } else {
+                $pdo->exec('ALTER TABLE billing_stock_daily ADD COLUMN ' . $colDef);
+            }
         } catch (Throwable) {
         }
     }
@@ -371,6 +386,15 @@ function billing_ensure_extra_services(PDO $pdo): void
         ['IN_UNLOAD_M3', 'Разгрузка валом, м³', 'in', 'PER_UNIT', 'm3', 'M3', 'IN_UNLOAD_M3', 100, 174],
         ['OUT_PALLET_EURO', 'Паллетная отгрузка (евро)', 'out', 'PER_UNIT', 'pallet', 'PALLET', 'OUT_PALLET_EURO', 300, 191],
         ['OUT_PALLET_FIN', 'Паллетная отгрузка (фин)', 'out', 'PER_UNIT', 'pallet', 'PALLET', 'OUT_PALLET_FIN', 300, 192],
+        // Хранение паллет: разрез по таре и весовой группе (до 10/20/50/100 кг).
+        ['STORAGE_PALLET_EURO_10', 'Хранение, евро-паллета до 10 кг', 'storage', 'STORAGE_DAY', 'pallet_place', 'PALLET_PLACE', 'STORAGE_DAY', 380, 181],
+        ['STORAGE_PALLET_EURO_20', 'Хранение, евро-паллета до 20 кг', 'storage', 'STORAGE_DAY', 'pallet_place', 'PALLET_PLACE', 'STORAGE_DAY', 380, 182],
+        ['STORAGE_PALLET_EURO_50', 'Хранение, евро-паллета до 50 кг', 'storage', 'STORAGE_DAY', 'pallet_place', 'PALLET_PLACE', 'STORAGE_DAY', 380, 183],
+        ['STORAGE_PALLET_EURO_100', 'Хранение, евро-паллета до 100 кг', 'storage', 'STORAGE_DAY', 'pallet_place', 'PALLET_PLACE', 'STORAGE_DAY', 380, 184],
+        ['STORAGE_PALLET_FIN_10', 'Хранение, фин-паллета до 10 кг', 'storage', 'STORAGE_DAY', 'pallet_place', 'PALLET_PLACE', 'STORAGE_DAY', 380, 185],
+        ['STORAGE_PALLET_FIN_20', 'Хранение, фин-паллета до 20 кг', 'storage', 'STORAGE_DAY', 'pallet_place', 'PALLET_PLACE', 'STORAGE_DAY', 380, 186],
+        ['STORAGE_PALLET_FIN_50', 'Хранение, фин-паллета до 50 кг', 'storage', 'STORAGE_DAY', 'pallet_place', 'PALLET_PLACE', 'STORAGE_DAY', 380, 187],
+        ['STORAGE_PALLET_FIN_100', 'Хранение, фин-паллета до 100 кг', 'storage', 'STORAGE_DAY', 'pallet_place', 'PALLET_PLACE', 'STORAGE_DAY', 380, 188],
     ];
     try {
         $groups = [];
@@ -1024,6 +1048,78 @@ function billing_services_by_event(PDO $pdo): array
     return $out;
 }
 
+/** Весовая группа паллеты: до 10 / до 20 / до 50 / до 100 кг. */
+function billing_pallet_weight_band(float $kg): string
+{
+    if ($kg <= 10) {
+        return '10';
+    }
+    if ($kg <= 20) {
+        return '20';
+    }
+    if ($kg <= 50) {
+        return '50';
+    }
+    return '100'; // до 100 кг и выше
+}
+
+/**
+ * Текущий состав паллет клиента: количество по таре и весовой группе.
+ * Источник — фактический product_stock (qty > 0).
+ * @return array{total:int,bands:array<string,array{count:int,weight:float}>}
+ */
+function billing_pallet_composition(PDO $pdo, int $clientId): array
+{
+    $out = ['total' => 0, 'bands' => []];
+    try {
+        $cl = $pdo->prepare('SELECT counterparty_id, name FROM billing_client WHERE id=:c LIMIT 1');
+        $cl->execute([':c' => $clientId]);
+        $client = $cl->fetch(PDO::FETCH_ASSOC);
+        if (!$client) {
+            return $out;
+        }
+        $cp = (int)($client['counterparty_id'] ?? 0);
+        $name = trim((string)($client['name'] ?? ''));
+        $sql = "SELECT ps.pallet, ps.qty, ps.vgh_weight_kg, p.weight_g,
+                       COALESCE(NULLIF(TRIM(ps.pallet_type),''), NULLIF(TRIM(p.pallet_type),''), 'euro') AS pt
+                  FROM product_stock ps JOIN products p ON p.id=ps.product_id
+                 WHERE ps.qty > 0 AND ps.pallet IS NOT NULL AND TRIM(ps.pallet) <> ''
+                   AND (p.contractor_id = :cp
+                        OR p.contractor_id IN (SELECT id FROM counterparties WHERE LOWER(TRIM(name))=LOWER(TRIM(:nm))))";
+        $st = $pdo->prepare($sql);
+        $st->execute([':cp' => $cp, ':nm' => $name]);
+        $pallets = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $pallet = trim((string)$r['pallet']);
+            if ($pallet === '') {
+                continue;
+            }
+            if (!isset($pallets[$pallet])) {
+                $pallets[$pallet] = ['pt' => (string)($r['pt'] ?? 'euro'), 'vg' => 0.0, 'goods' => 0.0];
+            }
+            $pallets[$pallet]['vg'] = max((float)$pallets[$pallet]['vg'], (float)($r['vgh_weight_kg'] ?? 0));
+            $pallets[$pallet]['goods'] += (float)($r['qty'] ?? 0) * (float)($r['weight_g'] ?? 0) / 1000.0;
+        }
+        foreach ($pallets as $p) {
+            $kg = (float)$p['vg'] > 0 ? (float)$p['vg'] : (float)$p['goods'];
+            $pt = strtolower(trim((string)$p['pt']));
+            if (!in_array($pt, ['euro', 'fin'], true)) {
+                $pt = 'euro';
+            }
+            $band = billing_pallet_weight_band($kg);
+            $key = $pt . '|' . $band;
+            if (!isset($out['bands'][$key])) {
+                $out['bands'][$key] = ['count' => 0, 'weight' => 0.0];
+            }
+            $out['bands'][$key]['count']++;
+            $out['bands'][$key]['weight'] += $kg;
+            $out['total']++;
+        }
+    } catch (Throwable) {
+    }
+    return $out;
+}
+
 /**
  * Суточное хранение по формуле заказчика.
  * @return array{days:int, amount:float, problems:array}
@@ -1037,7 +1133,10 @@ function billing_storage_run(PDO $pdo, string $from, string $to, array $clients,
         foreach ($pdo->query("SELECT s.*, u.code AS uom_code FROM billing_service s
                                LEFT JOIN billing_uom u ON u.id=s.uom_id
                                JOIN billing_calc_type c ON c.id=s.calc_type_id
-                              WHERE c.code='STORAGE_DAY' AND s.is_active=1 ORDER BY s.id") as $r) {
+                              WHERE c.code='STORAGE_DAY' AND s.is_active=1
+                                AND s.code NOT LIKE 'STORAGE_PALLET_EURO_%'
+                                AND s.code NOT LIKE 'STORAGE_PALLET_FIN_%'
+                              ORDER BY s.id") as $r) {
             $storages[] = $r;
         }
     } catch (Throwable) {
@@ -1091,6 +1190,34 @@ function billing_storage_run(PDO $pdo, string $from, string $to, array $clients,
             $qty = $start;
             $freeDays = (int)($tariff['free_storage_days'] ?? 0);
             $basis = strtoupper((string)($tariff['storage_day_basis'] ?? 'END_OF_DAY'));
+            // Разрез хранения паллет по таре и весу: до 10/20/50/100 кг.
+            $dim = [];
+            $dimTotal = 0;
+            $comp = ['total' => 0, 'bands' => []];
+            if (strtoupper((string)($svc['code'] ?? '')) === 'STORAGE_PALLET_DAY') {
+                $comp = billing_pallet_composition($pdo, $clientId);
+                foreach ($comp['bands'] as $key => $b) {
+                    [$pt, $band] = array_pad(explode('|', (string)$key, 2), 2, '');
+                    $code = 'STORAGE_PALLET_' . strtoupper((string)$pt) . '_' . (string)$band;
+                    try {
+                        $ss = $pdo->prepare("SELECT s.*, u.code AS uom_code FROM billing_service s
+                                              LEFT JOIN billing_uom u ON u.id=s.uom_id
+                                             WHERE s.code=:c AND s.is_active=1 LIMIT 1");
+                        $ss->execute([':c' => $code]);
+                        $srow = $ss->fetch(PDO::FETCH_ASSOC);
+                        if (!$srow) {
+                            continue;
+                        }
+                        $l2 = billing_line_for($pdo, (int)$tariff['id'], (int)$srow['id'], $from);
+                        if (!$l2 || (int)$l2['is_enabled'] !== 1) {
+                            continue;
+                        }
+                        $dim[$key] = ['svc' => $srow, 'line' => $l2, 'tiers' => billing_tiers($pdo, (int)$l2['id'])];
+                        $dimTotal += (int)$b['count'];
+                    } catch (Throwable) {
+                    }
+                }
+            }
             foreach ($days as $d) {
                 if ($d > date('Y-m-d')) {
                     break;
@@ -1109,6 +1236,86 @@ function billing_storage_run(PDO $pdo, string $from, string $to, array $clients,
                 if ($billable < 0) {
                     $billable = 0;
                     $res['problems'][] = ['reason' => 'отрицательный остаток', 'client_id' => $clientId, 'date' => $d, 'uom' => $uom];
+                }
+                // Разрез хранения паллет по таре и весовой группе.
+                if ($dim && $dimTotal > 0 && (int)$comp['total'] > 0) {
+                    $sumStart = 0.0;
+                    $sumIn = 0.0;
+                    $sumOut = 0.0;
+                    $sumBill = 0.0;
+                    $dimKeys = array_keys($dim);
+                    $lastKey = end($dimKeys);
+                    foreach ($dim as $key => $cfg) {
+                        $cnt = (int)($comp['bands'][$key]['count'] ?? 0);
+                        if ($cnt <= 0) {
+                            continue;
+                        }
+                        $share = $cnt / $dimTotal;
+                        $isLast = ((string)$key === (string)$lastKey);
+                        $qs = $isLast ? round($qty - $sumStart, 4) : round($qty * $share, 4);
+                        $qi = $isLast ? round($in - $sumIn, 4) : round($in * $share, 4);
+                        $qo = $isLast ? round($out - $sumOut, 4) : round($out * $share, 4);
+                        $qb = $isLast ? round($billable - $sumBill, 4) : round($billable * $share, 4);
+                        $sumStart += $qs;
+                        $sumIn += $qi;
+                        $sumOut += $qo;
+                        $sumBill += $qb;
+                        $svc2 = $cfg['svc'];
+                        $line2 = $cfg['line'];
+                        $price2 = (float)$line2['price'];
+                        $amount2 = 0.0;
+                        $tierId2 = null;
+                        if (!$isFree && $qb > 0) {
+                            $calc2 = billing_tier_amount($cfg['tiers'], $qb, $price2);
+                            $amount2 = (float)$calc2['amount'];
+                            $price2 = (float)$calc2['price'];
+                            $tierId2 = $calc2['tier_id'];
+                            $discount2 = (float)($line2['discount_percent'] ?? 0);
+                            if ($discount2 > 0) {
+                                $amount2 *= (1 - $discount2 / 100);
+                            }
+                            $amount2 *= billing_calendar_factor($pdo, $d);
+                            $amount2 = billing_round($amount2, (string)($tariff['rounding_rule'] ?? 'ROUND'));
+                        }
+                        [$pt, $band] = array_pad(explode('|', (string)$key, 2), 2, '');
+                        $avgW = $cnt > 0 ? round((float)$comp['bands'][$key]['weight'] / $cnt, 3) : 0.0;
+                        $res['days']++;
+                        $res['amount'] += $amount2;
+                        if ($mode === 'FULL') {
+                            $trace2 = [
+                                'qty_start' => round($qs, 4), 'qty_in' => round($qi, 4), 'qty_out' => round($qo, 4),
+                                'qty_billable' => round($qb, 4), 'basis' => $basis, 'day_no' => $dayNo,
+                                'free_storage_days' => $freeDays, 'is_free_day' => $isFree,
+                                'price' => $price2, 'tier_id' => $tierId2, 'service' => $svc2['code'],
+                                'pallet_type' => $pt, 'weight_band' => $band, 'weight_kg' => $avgW,
+                            ];
+                            $ins2 = $pdo->prepare(
+                                "INSERT INTO billing_stock_daily (client_id,service_id,uom_code,day,qty_start,qty_in,qty_out,qty_billable,
+                                    is_free_day,day_no,price,amount_net,tariff_id,run_id,pallet_type,weight_band,weight_kg)
+                                 VALUES (:c,:s,:u,:d,:qs,:qi,:qo,:qb,:fr,:dn,:p,:a,:t,:r,:pt,:wb,:wk)"
+                            );
+                            $ins2->execute([':c' => $clientId, ':s' => (int)$svc2['id'], ':u' => $uom, ':d' => $d,
+                                ':qs' => round($qs, 4), ':qi' => round($qi, 4), ':qo' => round($qo, 4),
+                                ':qb' => round($qb, 4), ':fr' => $isFree, ':dn' => $dayNo,
+                                ':p' => $price2, ':a' => $amount2, ':t' => (int)$tariff['id'], ':r' => $runId,
+                                ':pt' => $pt, ':wb' => $band, ':wk' => $avgW]);
+                            $sdId2 = (int)$pdo->lastInsertId();
+                            if ($amount2 > 0) {
+                                $chId2 = billing_add_charge($pdo, [
+                                    'client_id' => $clientId, 'service_id' => (int)$svc2['id'], 'charge_date' => $d,
+                                    'period_from' => $from, 'period_to' => $to, 'quantity' => $qb,
+                                    'price' => $price2, 'amount_net' => $amount2, 'vat_rate' => (float)($svc2['vat_rate'] ?? 20),
+                                    'tariff_id' => (int)$tariff['id'], 'tariff_line_id' => (int)$line2['id'],
+                                    'tier_id' => $tierId2, 'stock_daily_id' => $sdId2,
+                                    'calc_trace' => $trace2, 'status' => 'ACTIVE', 'run_id' => $runId,
+                                ]);
+                                $pdo->prepare('UPDATE billing_stock_daily SET charge_id=:ch WHERE id=:id')
+                                    ->execute([':ch' => $chId2, ':id' => $sdId2]);
+                            }
+                        }
+                    }
+                    $qty = $end;
+                    continue;
                 }
                 $amount = 0.0;
                 $price = (float)$line['price'];

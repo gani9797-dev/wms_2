@@ -480,19 +480,31 @@ function pretty(s){try{const j=typeof s==='string'?JSON.parse(s):s;return JSON.s
 
 /* ---------------- Хранение ---------------- */
 async function renderStorage(){
- const r=await refs();const [f,t]=prevPeriod();
+ const r=await refs();
+ const now=new Date();
+ const defFrom=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
+ const defTo=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(new Date(now.getFullYear(),now.getMonth()+1,0).getDate()).padStart(2,'0');
  const cid=+($('shc')||{}).value||0;
+ const f=($('shf')||{}).value||defFrom;
+ const t=($('sht')||{}).value||defTo;
  const d=await api('?action=storage&client_id='+cid+'&from='+f+'&to='+t);
  const rows=d.rows||[];
+ const bandLabel=b=>({'10':'до 10 кг','20':'до 20 кг','50':'до 50 кг','100':'до 100 кг'}[b]||b||'—');
  $('pane').innerHTML=`<div class="bar"><span class="hint">Клиент:</span><select id="shc"><option value="0">Все</option>${(r.clients||[]).map(c=>`<option value="${c.id}"${+c.id===cid?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
+ <span class="hint">Период:</span><input type="date" id="shf" value="${esc(f)}"><input type="date" id="sht" value="${esc(t)}">
  <button class="btn" id="shload">Показать</button><span class="hint">Итого хранение: <b>${fmt(d.total_net)}</b> · строк: ${rows.length}</span></div>
- <div class="hint" style="margin-bottom:8px">Qty_billable = остаток на начало суток + приход − расход (режим END_OF_DAY), с бесплатными сутками и ступенями.</div>
- <div class="card"><table><thead><tr><th>Дата</th><th>Клиент</th><th>Ед.</th><th>Начало</th><th>Приход</th><th>Расход</th><th>К оплате</th><th>День</th><th>Бесплатно</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>
- ${rows.map(x=>`<tr><td>${esc((x.day||'').slice(0,10))}</td><td>${esc(x.client_name||'')}</td><td>${esc(x.uom_code||'')}</td>
+ <div class="hint" style="margin-bottom:8px">Qty_billable = остаток на начало суток + приход − расход (режим END_OF_DAY). Для паллет — разрез по таре (евро/фин) и весовой группе.</div>
+ <div class="card" style="overflow:auto"><table><thead><tr><th>Дата</th><th>Клиент</th><th>Тара</th><th>Весовая группа</th><th>Ср. вес, кг</th><th>Ед.</th><th>Начало</th><th>Приход</th><th>Расход</th><th>К оплате</th><th>День</th><th>Бесплатно</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>
+ ${rows.map(x=>`<tr><td>${esc((x.day||'').slice(0,10))}</td><td>${esc(x.client_name||'')}</td>
+ <td>${x.pallet_type?esc(x.pallet_type==='fin'?'Фин':'Евро'):'—'}</td><td>${esc(bandLabel(x.weight_band))}</td><td>${x.weight_kg!=null?fmt(x.weight_kg):'—'}</td>
+ <td>${esc(x.uom_code||'')}</td>
  <td>${fmt(x.qty_start)}</td><td>${fmt(x.qty_in)}</td><td>${fmt(x.qty_out)}</td><td><b>${fmt(x.qty_billable)}</b></td><td>${esc(x.day_no)}</td>
- <td>${+x.is_free_day?'<span class="st warn">да</span>':'—'}</td><td>${fmt(x.price)}</td><td class="${(+x.amount_net||0)<0?'neg':'pos'}">${fmt(x.amount_net)}</td></tr>`).join('')||'<tr><td colspan="11" class="hint">Нет строк — запустите прогон</td></tr>'}
+ <td>${+x.is_free_day?'<span class="st warn">да</span>':'—'}</td><td>${fmt(x.price)}</td><td class="${(+x.amount_net||0)<0?'neg':'pos'}">${fmt(x.amount_net)}</td></tr>`).join('')||'<tr><td colspan="14" class="hint">Нет строк за выбранный период</td></tr>'}
  </tbody></table></div>`;
- $('shload').onclick=()=>renderStorage();$('shc').onchange=()=>renderStorage();
+ $('shload').onclick=()=>renderStorage();
+ $('shc').onchange=()=>renderStorage();
+ $('shf').onchange=()=>renderStorage();
+ $('sht').onchange=()=>renderStorage();
 }
 
 /* ---------------- Периоды ---------------- */
