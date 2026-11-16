@@ -462,6 +462,121 @@ function sot_serial_cleanup(PDO $pdo, int $ttlSec = 900): int
     }
 }
 
+/** Код ячейки out по номеру ворот/ячейки сортировки: Exp1-1 → OUT1. */
+function sot_out_code(string $gate, string $sortCell): string
+{
+    $n = '';
+    if (preg_match('/(\d+)/', $gate, $m)) {
+        $n = $m[1];
+    } elseif (preg_match('/exp\s*(\d+)/i', $sortCell, $m)) {
+        $n = $m[1];
+    }
+    return $n !== '' ? ('OUT' . $n) : 'OUT1';
+}
+
+/**
+ * После сортировки переносит остаток паллеты из ячейки сортировки (Exp1-1)
+ * в ячейку отгрузки (OUT1). Пишет перемещение в журнал склада.
+ */
+function sot_move_to_out(PDO $shipPdo, string $pallet, array $sortCell, array $head,
+    float $qty, string $sku, ?int $uid, string $fio): array
+{
+    $from = trim((string)($sortCell['code'] ?? ''));
+    if ($pallet === '' || $from === '') {
+        return ['ok' => false, 'error' => 'нет паллеты/ячейки сортировки'];
+    }
+    $outCode = sot_out_code((string)($head['gate'] ?? ''), $from);
+    $sdb = sot_storage();
+    $nom = sot_nom();
+    if (!$sdb || !$nom) {
+        return ['ok' => false, 'error' => 'БД склада/номенклатуры недоступна'];
+    }
+    // Ячейка OUTn создаётся автоматически при первом использовании.
+    $cq = $sdb->prepare('SELECT * FROM storage_cells WHERE UPPER(code)=UPPER(:c) LIMIT 1');
+    $cq->execute([':c' => $outCode]);
+    $outCell = $cq->fetch(PDO::FETCH_ASSOC);
+    if (!$outCell) {
+        try {
+            $sdb->prepare(
+                "INSERT INTO storage_cells (code,warehouse_id,zone,cell_type,status,capacity,qty,reserved_qty,pallet_count,
+                    allowed_goods,allowed_pallet_types,pallet_type,allow_mixed_goods,allow_multi_pallet_types,beam_width,comment)
+                 VALUES (:c,1,'shipment','pallet','free',0,0,0,0,'Все','euro,fin',NULL,1,1,3.2,'Зона отгрузки (out)')"
+            )->execute([':c' => $outCode]);
+        } catch (Throwable) {
+        }
+        try {
+            $cq->execute([':c' => $outCode]);
+        } catch (Throwable $ex) {
+            return ['ok' => false, 'error' => $ex->getMessage()];
+        }
+        $outCell = $cq->fetch(PDO::FETCH_ASSOC);
+    }
+    if (!$outCell) {
+        return ['ok' => false, 'error' => 'не удалось создать ячейку ' . $outCode];
+    }
+    try {
+        $up = $nom->prepare('UPDATE product_stock SET cell=:to WHERE TRIM(pallet)=:p AND cell=:from AND qty>0');
+        $up->execute([':to' => (string)$outCell['code'], ':p' => $pallet, ':from' => $from]);
+        $moved = $up->rowCount();
+        // Пересчёт занятости исходной и целевой ячеек.
+        foreach ([$from, (string)$outCell['code']] as $code) {
+            $sum = $nom->prepare('SELECT COALESCE(SUM(qty),0) q, SUM(CASE WHEN qty>0 THEN 1 ELSE 0 END) pc FROM product_stock WHERE cell=:c');
+            $sum->execute([':c' => $code]);
+            $rr = $sum->fetch(PDO::FETCH_ASSOC) ?: ['q' => 0, 'pc' => 0];
+            $sdb->prepare("UPDATE storage_cells SET qty=:q, pallet_count=:pc,
+                    status=CASE WHEN :q2>0 THEN 'busy' ELSE 'free' END,
+                    reserved_qty=CASE WHEN :q3>0 THEN reserved_qty ELSE 0 END
+                  WHERE code=:c")
+                ->execute([':q' => (float)$rr['q'], ':pc' => (int)$rr['pc'], ':q2' => (float)$rr['q'],
+                    ':q3' => (float)$rr['q'], ':c' => $code]);
+        }
+    } catch (Throwable $e) {
+        return ['ok' => false, 'error' => $e->getMessage()];
+    }
+    // Коды заказов отгрузки для журнала.
+    $orderDocs = '';
+    try {
+        $oq = $shipPdo->prepare(
+            "SELECT co.doc_no FROM shipment_orders so JOIN client_orders co ON co.id=so.order_id
+              WHERE so.shipment_id=:s ORDER BY co.doc_no"
+        );
+        $oq->execute([':s' => (int)($head['id'] ?? 0)]);
+        $orderDocs = implode(', ', array_map('strval', $oq->fetchAll(PDO::FETCH_COLUMN)));
+    } catch (Throwable) {
+    }
+    $qtyAfter = null;
+    try {
+        $aq = $nom->prepare('SELECT COALESCE(SUM(qty),0) FROM product_stock WHERE product_id=(SELECT id FROM products WHERE sku=:s LIMIT 1)');
+        $aq->execute([':s' => $sku]);
+        $qtyAfter = (float)$aq->fetchColumn();
+    } catch (Throwable) {
+    }
+    try {
+        require_once __DIR__ . '/../shared/Journal.php';
+        WmsJournal::log(wms_journal_pdo(), [
+            'op_type' => 'перемещение',
+            'doc_type' => 'Отгрузка',
+            'doc_no' => (string)($head['doc_no'] ?? ''),
+            'shipment_doc_no' => (string)($head['doc_no'] ?? ''),
+            'order_doc_no' => $orderDocs,
+            'sku' => $sku,
+            'qty' => $qty,
+            'qty_after' => $qtyAfter,
+            'qty_change' => 0,
+            'pallet' => $pallet,
+            'sscc' => $pallet,
+            'cell_from' => $from,
+            'cell_to' => (string)$outCell['code'],
+            'zone' => 'Отгрузка',
+            'user_id' => $uid,
+            'user_fio' => $fio,
+            'comment' => 'Сортировка завершена: паллета направлена в ' . (string)$outCell['code'],
+        ]);
+    } catch (Throwable) {
+    }
+    return ['ok' => true, 'from' => $from, 'to' => (string)$outCell['code'], 'moved_rows' => $moved];
+}
+
 /** Отгрузки и клиенты, связанные с паллетой. */
 function sot_pallet_shipments(PDO $pdo, string $sscc): array
 {
@@ -979,14 +1094,38 @@ if ($action === 'confirm' && $method === 'POST') {
         // Журнал склада: факт сортировки (виден в модуле 14).
         try {
             require_once __DIR__ . '/../shared/Journal.php';
+            $orderDocs = '';
+            try {
+                $oq = $pdo->prepare(
+                    "SELECT co.doc_no FROM shipment_orders so JOIN client_orders co ON co.id=so.order_id
+                      WHERE so.shipment_id=:s ORDER BY co.doc_no"
+                );
+                $oq->execute([':s' => $sid]);
+                $orderDocs = implode(', ', array_map('strval', $oq->fetchAll(PDO::FETCH_COLUMN)));
+            } catch (Throwable) {
+            }
+            $qtyAfter = null;
+            $nom = sot_nom();
+            if ($nom) {
+                try {
+                    $aq = $nom->prepare('SELECT COALESCE(SUM(qty),0) FROM product_stock WHERE product_id=(SELECT id FROM products WHERE sku=:s LIMIT 1)');
+                    $aq->execute([':s' => $sku]);
+                    $qtyAfter = (float)$aq->fetchColumn();
+                } catch (Throwable) {
+                }
+            }
             WmsJournal::log(wms_journal_pdo(), [
                 'op_type' => 'сортировка',
                 'doc_type' => 'Отгрузка',
                 'doc_no' => (string)($head['doc_no'] ?? ''),
+                'shipment_doc_no' => (string)($head['doc_no'] ?? ''),
+                'order_doc_no' => $orderDocs,
                 'sku' => $sku,
                 'product_name' => (string)($item['name'] ?? ''),
                 'supplier_batch' => (string)($item['supplier_batch'] ?? ''),
                 'qty' => $qty,
+                'qty_after' => $qtyAfter,
+                'qty_change' => 0,
                 'pallet' => $pallet,
                 'sscc' => $pallet,
                 'cell_from' => (string)($pcell['code'] ?? ''),
@@ -1013,6 +1152,13 @@ if ($action === 'confirm' && $method === 'POST') {
                 } catch (Throwable) {
                 }
             }
+        }
+        // После сортировки паллета уходит из зоны сортировки в ячейку out:
+        // Exp1-1/Exp1-2 → OUT1, Exp2-1/Exp2-2 → OUT2 и т.д.
+        try {
+            sot_move_to_out($pdo, $pallet, (array)$pcell, (array)$head, (float)$qty, $sku, $uid,
+                (string)($b['user_fio'] ?? ''));
+        } catch (Throwable) {
         }
         // Прогресс отгрузки считаем НА ТЕКУЩЕМ подключении: внутри транзакции
         // нельзя открывать новые подключения (DDL-гаранты блокируются транзакцией).

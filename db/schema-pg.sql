@@ -1842,10 +1842,14 @@ CREATE TABLE IF NOT EXISTS wms_journal (
   op_type VARCHAR(30) NOT NULL,           -- приход/отбор/перемещение/размещение/пополнение/отгрузка
   doc_type VARCHAR(30) NULL,
   doc_no VARCHAR(100) NULL,
+  shipment_doc_no VARCHAR(50) NULL,
+  order_doc_no VARCHAR(255) NULL,
   sku VARCHAR(50) NULL,
   product_name VARCHAR(255) NULL,
   supplier_batch VARCHAR(100) NULL,
   qty NUMERIC(14,3) NOT NULL DEFAULT 0,
+  qty_after NUMERIC(14,3) NULL,
+  qty_change NUMERIC(14,3) NULL,
   pallet VARCHAR(50) NULL,
   sscc VARCHAR(50) NULL,
   cell_from VARCHAR(50) NULL,
@@ -1859,6 +1863,10 @@ CREATE TABLE IF NOT EXISTS wms_journal (
 );
 ALTER TABLE wms_journal ADD COLUMN IF NOT EXISTS quality VARCHAR(20) NULL DEFAULT 'новый';
 ALTER TABLE wms_journal ADD COLUMN IF NOT EXISTS supplier_batch VARCHAR(100);
+ALTER TABLE wms_journal ADD COLUMN IF NOT EXISTS shipment_doc_no VARCHAR(50);
+ALTER TABLE wms_journal ADD COLUMN IF NOT EXISTS order_doc_no VARCHAR(255);
+ALTER TABLE wms_journal ADD COLUMN IF NOT EXISTS qty_after NUMERIC(14,3);
+ALTER TABLE wms_journal ADD COLUMN IF NOT EXISTS qty_change NUMERIC(14,3);
 CREATE INDEX IF NOT EXISTS idx_journal_date ON wms_journal (doc_date);
 CREATE INDEX IF NOT EXISTS idx_journal_op ON wms_journal (op_type);
 CREATE INDEX IF NOT EXISTS idx_journal_sku ON wms_journal (sku);

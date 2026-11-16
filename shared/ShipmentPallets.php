@@ -244,6 +244,16 @@ function wms_ship_writeoff(PDO $pdo, int $sid, ?string $sscc, ?int $uid, string 
         return [];
     }
     $docNo = (string)$head['doc_no'];
+    $orderDocs = '';
+    try {
+        $oq = $pdo->prepare(
+            "SELECT co.doc_no FROM shipment_orders so JOIN client_orders co ON co.id=so.order_id
+              WHERE so.shipment_id=:s ORDER BY co.doc_no"
+        );
+        $oq->execute([':s' => $sid]);
+        $orderDocs = implode(', ', array_map('strval', $oq->fetchAll(PDO::FETCH_COLUMN)));
+    } catch (Throwable) {
+    }
     $wid = (int)($head['warehouse_id'] ?? 1) ?: 1;
     $want = []; // sku => qty (null = без ограничения, паллетный режим)
     $pallets = [];
@@ -372,9 +382,13 @@ function wms_ship_writeoff(PDO $pdo, int $sid, ?string $sscc, ?int $uid, string 
                     'op_type' => 'отгрузка',
                     'doc_type' => 'Отгрузка',
                     'doc_no' => $docNo,
+                    'shipment_doc_no' => $docNo,
+                    'order_doc_no' => $orderDocs,
                     'sku' => (string)$r['sku'],
                     'product_name' => (string)($r['name'] ?? ''),
                     'qty' => $take,
+                    'qty_after' => $pbalNew,
+                    'qty_change' => -$take,
                     'pallet' => (string)($r['pallet'] ?? ''),
                     'sscc' => (string)($r['pallet'] ?? ''),
                     'cell_from' => $cell,

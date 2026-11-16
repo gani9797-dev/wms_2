@@ -85,19 +85,23 @@ body.navhide main{max-width:none}
 <th data-col="doc_date" data-sort="doc_date">Дата/время</th>
 <th data-col="op_type" data-sort="op_type">Тип операции</th>
 <th data-col="doc_no" data-sort="doc_no">Документ</th>
+<th data-col="shipment_doc_no" data-sort="shipment_doc_no">Код отгрузки</th>
+<th data-col="order_doc_no" data-sort="order_doc_no">Код расхода заказа</th>
 <th data-col="sku" data-sort="sku">Артикул</th>
 <th data-col="supplier_batch" data-sort="supplier_batch">Партия</th>
 <th>Наименование</th>
 <th data-col="qty" data-sort="qty">Количество</th>
-<th>Паллета</th>
-<th>SSCC</th>
+<th data-col="qty_after" data-sort="qty_after">Кол-во после</th>
+<th data-col="qty_change" data-sort="qty_change">Изменение</th>
+<th data-col="sscc" data-sort="sscc">SSCC / паллета</th>
 <th data-col="cell_from" data-sort="cell_from">Откуда</th>
 <th data-col="cell_to" data-sort="cell_to">Куда</th>
 <th>Зона</th>
 <th>Пользователь</th>
 <th>Комментарий</th>
+<th><span id="colset" class="gear" title="Настройка столбцов">⚙️</span></th>
 </tr></thead>
-<tbody id="rows"><tr><td colspan="14">Загрузка…</td></tr></tbody></table>
+<tbody id="rows"><tr><td colspan="18">Загрузка…</td></tr></tbody></table>
 <div class="pager"><div><span id="info">…</span> &nbsp; Показывать по <select id="pp"><option>24</option><option selected>50</option><option>100</option><option>200</option></select></div><div class="pg" id="pg"></div></div>
 </div>
 </div>
@@ -249,17 +253,20 @@ function renderStock(rows){
 <td>${esc(dFmt(r.doc_date))}</td>
 <td>${opBadge(r.op_type)}</td>
 <td>${r.doc_type?`<span class="hint">${esc(r.doc_type)}</span> `:''}<b>${esc(r.doc_no||'—')}</b></td>
+<td>${esc(r.shipment_doc_no||'—')}</td>
+<td>${esc(r.order_doc_no||'—')}</td>
 <td><b>${esc(r.sku||'')}</b></td>
 <td>${esc(r.supplier_batch||'—')}</td>
 <td>${esc(r.product_name||'')}</td>
 <td>${fmtN(r.qty)}</td>
-<td style="color:${palQual?'#B00020':'inherit'};font-weight:${palQual?'700':'400'}">${esc(r.pallet||'—')}${palQual?'  ⚠️ брак':''}</td>
-<td>${esc(r.sscc||'—')}</td>
+<td>${r.qty_after!=null?fmtN(r.qty_after):'—'}</td>
+<td style="color:${(+r.qty_change||0)>0?'#1B7F32':((+r.qty_change||0)<0?'#B00020':'inherit')};font-weight:${(+r.qty_change||0)!==0?'700':'400'}">${r.qty_change!=null?((+r.qty_change>0?'+':'')+fmtN(r.qty_change)):'—'}</td>
+<td style="color:${palQual?'#B00020':'inherit'};font-weight:${palQual?'700':'400'}">${esc(r.sscc||r.pallet||'—')}${palQual?'  ⚠️ брак':''}</td>
 <td>${esc(r.cell_from||'—')}</td>
 <td>${esc(r.cell_to||'—')}</td>
 <td>${esc(r.zone||'—')}</td>
 <td>${esc(r.user_fio||'—')}</td>
-<td>${esc(r.comment||'')}</td></tr>`}).join('')||'<tr><td colspan="14">Ничего не найдено</td></tr>'}
+<td>${esc(r.comment||'')}</td><td></td></tr>`}).join('')||'<tr><td colspan="18">Ничего не найдено</td></tr>'}
 function renderSerial(rows){
   $('rowsSerial').innerHTML=rows.map(r=>`<tr>
 <td>${esc(dFmt(r.doc_date))}</td>
@@ -364,7 +371,7 @@ function mountSort(j){
   const old=$(j==='stock'?'tblStock':'tblSerial');if(!old)return;
   const fresh=old.cloneNode(true);
   const tb=fresh.querySelector('tbody');
-  if(tb){tb.innerHTML='<tr><td colspan="'+(j==='stock'?13:11)+'" style="color:var(--mut)">Загрузка…</td></tr>'}
+  if(tb){tb.innerHTML='<tr><td colspan="'+(j==='stock'?18:11)+'" style="color:var(--mut)">Загрузка…</td></tr>'}
   old.parentNode.replaceChild(fresh,old);
   Sort.init({mode:'server',table:fresh,key:SORT[j].key,dir:SORT[j].dir,onChange:(k,d)=>{SORT[j].key=k;SORT[j].dir=d;ST[j].page=1;load(j)}});
 }

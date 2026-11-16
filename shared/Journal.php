@@ -40,6 +40,19 @@ function wms_journal_pdo(): PDO
             // Старые базы: без quality INSERT в журнал падал и операции не
             // отображались. Дотягиваем колонку при каждом подключении (дёшево).
             wms_ensure_column($pdo, 'wms_journal', 'quality', "VARCHAR(20) NULL DEFAULT 'новый'", "quality TEXT DEFAULT 'новый'", "VARCHAR(20) NULL DEFAULT 'новый'");
+            wms_ensure_column($pdo, 'wms_journal', 'shipment_doc_no', 'VARCHAR(50) NULL', 'shipment_doc_no TEXT', 'VARCHAR(50) NULL');
+            wms_ensure_column($pdo, 'wms_journal', 'order_doc_no', 'VARCHAR(255) NULL', 'order_doc_no TEXT', 'VARCHAR(255) NULL');
+            wms_ensure_column($pdo, 'wms_journal', 'qty_after', 'NUMERIC(14,3) NULL', 'qty_after REAL', 'NUMERIC(14,3) NULL');
+            wms_ensure_column($pdo, 'wms_journal', 'qty_change', 'NUMERIC(14,3) NULL', 'qty_change REAL', 'NUMERIC(14,3) NULL');
+            // Несколько заказов в одной отгрузке — код расхода может быть длинным.
+            try {
+                $len = $pdo->query("SELECT character_maximum_length FROM information_schema.columns
+                                     WHERE table_name='wms_journal' AND column_name='order_doc_no'")->fetchColumn();
+                if ($len !== false && $len !== null && (int)$len < 255) {
+                    $pdo->exec('ALTER TABLE wms_journal ALTER COLUMN order_doc_no TYPE VARCHAR(255)');
+                }
+            } catch (Throwable) {
+            }
         } catch (Throwable) {
         }
         return $pdo;
@@ -47,6 +60,13 @@ function wms_journal_pdo(): PDO
     // SQLite: номенклатурная БД уже подключает общий файл wms_common
     // и дотягивает качество журнала в wms_ensure_ext_schema().
     $pdo = wms_nomenclature_pdo();
+    try {
+        wms_ensure_column($pdo, 'wms_journal', 'shipment_doc_no', 'VARCHAR(50) NULL', 'shipment_doc_no TEXT', 'VARCHAR(50) NULL');
+        wms_ensure_column($pdo, 'wms_journal', 'order_doc_no', 'VARCHAR(255) NULL', 'order_doc_no TEXT', 'VARCHAR(255) NULL');
+        wms_ensure_column($pdo, 'wms_journal', 'qty_after', 'NUMERIC(14,3) NULL', 'qty_after REAL', 'NUMERIC(14,3) NULL');
+        wms_ensure_column($pdo, 'wms_journal', 'qty_change', 'NUMERIC(14,3) NULL', 'qty_change REAL', 'NUMERIC(14,3) NULL');
+    } catch (Throwable) {
+    }
     return $pdo;
 }
 
@@ -74,20 +94,33 @@ final class WmsJournal
                 $op = 'перемещение';
             }
             $t = wms_ext_table($pdo, 'wms_journal');
+            $qty = (float)($r['qty'] ?? 0);
+            // Изменение количества: приход +, отгрузка −, перемещение/сортировка 0.
+            $qtyChange = array_key_exists('qty_change', $r) && $r['qty_change'] !== null
+                ? (float)$r['qty_change']
+                : (($op === 'приход') ? $qty : (($op === 'отгрузка') ? -$qty : 0.0));
+            $qtyAfter = array_key_exists('qty_after', $r) && $r['qty_after'] !== null
+                ? (float)$r['qty_after'] : null;
             $st = $pdo->prepare(
-                "INSERT INTO $t (doc_date, op_type, doc_type, doc_no, sku, product_name, supplier_batch, qty,
+                "INSERT INTO $t (doc_date, op_type, doc_type, doc_no, shipment_doc_no, order_doc_no,
+                        sku, product_name, supplier_batch, qty, qty_after, qty_change,
                         pallet, sscc, cell_from, cell_to, zone, user_id, user_fio, comment, quality)
-                 VALUES (:d, :op, :dt, :dn, :sku, :pn, :sb, :q, :pal, :sscc, :cf, :ct, :z, :uid, :uf, :cm, :ql)"
+                 VALUES (:d, :op, :dt, :dn, :sdn, :odn, :sku, :pn, :sb, :q, :qa, :qc,
+                        :pal, :sscc, :cf, :ct, :z, :uid, :uf, :cm, :ql)"
             );
             $st->execute([
                 ':d' => trim((string)($r['doc_date'] ?? '')) !== '' ? (string)$r['doc_date'] : date('Y-m-d H:i:s'),
                 ':op' => $op,
                 ':dt' => self::s($r['doc_type'] ?? null),
                 ':dn' => self::s($r['doc_no'] ?? null),
+                ':sdn' => self::s($r['shipment_doc_no'] ?? null),
+                ':odn' => self::s($r['order_doc_no'] ?? null),
                 ':sku' => self::s($r['sku'] ?? null),
                 ':pn' => self::s($r['product_name'] ?? null),
                 ':sb' => self::s($r['supplier_batch'] ?? null),
-                ':q' => (float)($r['qty'] ?? 0),
+                ':q' => $qty,
+                ':qa' => $qtyAfter,
+                ':qc' => $qtyChange,
                 ':pal' => self::s($r['pallet'] ?? null),
                 ':sscc' => self::s($r['sscc'] ?? null),
                 ':cf' => self::s($r['cell_from'] ?? null),
@@ -175,8 +208,10 @@ final class WmsJournal
         $perPage = wms_per_page($f['per_page'] ?? 50, 50, 500, 5);
         $sortMap = [
             'doc_date' => ['doc_date', 'd'], 'op_type' => ['op_type', 't'],
-            'doc_no' => ['doc_no', 't'], 'sku' => ['sku', 't'],
-            'qty' => ['qty', 'n'], 'cell_from' => ['cell_from', 't'], 'cell_to' => ['cell_to', 't'],
+            'doc_no' => ['doc_no', 't'], 'shipment_doc_no' => ['shipment_doc_no', 't'],
+            'order_doc_no' => ['order_doc_no', 't'], 'sku' => ['sku', 't'],
+            'qty' => ['qty', 'n'], 'qty_after' => ['qty_after', 'n'], 'qty_change' => ['qty_change', 'n'],
+            'sscc' => ['sscc', 't'], 'cell_from' => ['cell_from', 't'], 'cell_to' => ['cell_to', 't'],
         ];
         $orderBy = wms_order_by($pdo, (string)($f['sort'] ?? 'doc_date'), (string)($f['dir'] ?? 'DESC'), $sortMap, 'doc_date', 'd');
         $st = $pdo->prepare("SELECT * FROM $t $where ORDER BY $orderBy LIMIT :lim OFFSET :off");
@@ -279,7 +314,7 @@ final class WmsJournal
             if ($serial) {
                 $w[] = '(serial_no LIKE :q OR sku LIKE :q OR pallet LIKE :q OR receipt_doc_no LIKE :q OR shipment_doc_no LIKE :q)';
             } else {
-                $w[] = '(sku LIKE :q OR doc_no LIKE :q OR product_name LIKE :q OR pallet LIKE :q OR sscc LIKE :q OR cell_from LIKE :q OR cell_to LIKE :q)';
+                $w[] = '(sku LIKE :q OR doc_no LIKE :q OR shipment_doc_no LIKE :q OR order_doc_no LIKE :q OR product_name LIKE :q OR pallet LIKE :q OR sscc LIKE :q OR cell_from LIKE :q OR cell_to LIKE :q)';
             }
             $p[':q'] = $q;
         }

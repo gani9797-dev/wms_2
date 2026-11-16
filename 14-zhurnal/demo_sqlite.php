@@ -105,8 +105,9 @@ function wms_journal_csv_val(mixed $v): string
 
 function wms_journal_csv_stock(array $rows): string
 {
-    $head = ['Дата/время', 'Тип операции', 'Тип документа', 'Документ', 'Артикул', 'Наименование',
-        'Количество', 'Паллета', 'SSCC', 'Откуда', 'Куда', 'Зона', 'Пользователь', 'Комментарий', 'Качество'];
+    $head = ['Дата/время', 'Тип операции', 'Тип документа', 'Документ', 'Код отгрузки', 'Код расхода заказа',
+        'Артикул', 'Партия', 'Наименование', 'Количество', 'Кол-во после', 'Изменение',
+        'SSCC / паллета', 'Откуда', 'Куда', 'Зона', 'Пользователь', 'Комментарий', 'Качество'];
     $lines = ["\xEF\xBB\xBF" . implode(';', $head)];
     foreach ($rows as $r) {
         $lines[] = implode(';', [
@@ -114,11 +115,15 @@ function wms_journal_csv_stock(array $rows): string
             wms_journal_csv_val($r['op_type'] ?? ''),
             wms_journal_csv_val($r['doc_type'] ?? ''),
             wms_journal_csv_val($r['doc_no'] ?? ''),
+            wms_journal_csv_val($r['shipment_doc_no'] ?? ''),
+            wms_journal_csv_val($r['order_doc_no'] ?? ''),
             wms_journal_csv_val($r['sku'] ?? ''),
+            wms_journal_csv_val($r['supplier_batch'] ?? ''),
             wms_journal_csv_val($r['product_name'] ?? ''),
             wms_journal_csv_val($r['qty'] ?? 0),
-            wms_journal_csv_val($r['pallet'] ?? ''),
-            wms_journal_csv_val($r['sscc'] ?? ''),
+            wms_journal_csv_val($r['qty_after'] ?? ''),
+            wms_journal_csv_val($r['qty_change'] ?? ''),
+            wms_journal_csv_val($r['sscc'] ?? $r['pallet'] ?? ''),
             wms_journal_csv_val($r['cell_from'] ?? ''),
             wms_journal_csv_val($r['cell_to'] ?? ''),
             wms_journal_csv_val($r['zone'] ?? ''),

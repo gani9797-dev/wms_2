@@ -670,12 +670,34 @@ if ($action === 'move_to_sort' && $method === 'POST') {
     // Журнал склада: перемещение из промежуточной ячейки пользователя на ворота.
     try {
         require_once __DIR__ . '/../shared/Journal.php';
+        $orderDocs = '';
+        try {
+            $oq = $pdo->prepare(
+                "SELECT co.doc_no FROM shipment_orders so JOIN client_orders co ON co.id=so.order_id
+                  WHERE so.shipment_id=:s ORDER BY co.doc_no"
+            );
+            $oq->execute([':s' => $sid]);
+            $orderDocs = implode(', ', array_map('strval', $oq->fetchAll(PDO::FETCH_COLUMN)));
+        } catch (Throwable) {
+        }
+        $qtyAfter = null;
+        try {
+            $ndb = wms_nomenclature_pdo();
+            $aq = $ndb->prepare("SELECT COALESCE(SUM(qty),0) FROM product_stock WHERE TRIM(pallet)=:p AND qty>0");
+            $aq->execute([':p' => $pallet]);
+            $qtyAfter = (float)$aq->fetchColumn();
+        } catch (Throwable) {
+        }
         WmsJournal::log(wms_journal_pdo(), [
             'op_type' => 'перемещение',
             'doc_type' => 'Отгрузка',
             'doc_no' => $gates['doc_no'],
+            'shipment_doc_no' => $gates['doc_no'],
+            'order_doc_no' => $orderDocs,
             'sku' => '',
-            'qty' => 0,
+            'qty' => $qtyAfter ?? 0,
+            'qty_after' => $qtyAfter,
+            'qty_change' => 0,
             'pallet' => $pallet,
             'sscc' => $pallet,
             'cell_from' => wms_pick_buffer_cell($uid),
