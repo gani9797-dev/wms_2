@@ -268,7 +268,13 @@ function receipt_upload_parse_file(array $file): array
     $name = (string)($file['name'] ?? 'upload');
     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
     if (in_array($ext, ['xlsx', 'xlsm'], true)) {
-        $read = wms_xlsx_read_grid($tmp);
+        try {
+            $read = wms_xlsx_read_grid($tmp);
+        } catch (Throwable $e) {
+            throw new RuntimeException(
+                'Не удалось прочитать Excel-файл «' . $name . '»: ' . $e->getMessage(), 0, $e
+            );
+        }
         $parsed = receipt_grid_parse($read['grid']);
         return [
             'rows' => $parsed['rows'],

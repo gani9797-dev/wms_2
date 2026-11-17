@@ -12,12 +12,72 @@ require_once __DIR__ . '/CsvUpload.php';
 
 // ---------- Чтение .xlsx без библиотек ----------
 
-/** Загрузить XML листа xlsx без пространств имен: убираем xmlns и префиксы тегов. */
+/**
+ * Загрузить XML листа xlsx без пространств имен.
+ *
+ * Excel (особенно файлы из 1С/сторонних редакторов) добавляет служебные
+ * namespace-атрибуты вроде x14ac:dyDescent, xr:uid, r:id. Раньше снимались
+ * только xmlns и префиксы тегов, а префиксы атрибутов оставались — SimpleXML
+ * падал с невнятным «parser error», а в журнал писались десятки warning.
+ * Теперь снимаем и префиксные атрибуты, а ошибки разбора отдаём понятным
+ * сообщением без спама в лог.
+ */
 function wms_xml_load(string $xmlStr): SimpleXMLElement
 {
-    $s = preg_replace('/\sxmlns(:\w+)?="[^"]*"/', '', $xmlStr);
-    $s = preg_replace('/<(\/?)(\w+):/', '<$1', $s);
-    return new SimpleXMLElement($s);
+    // 1) Убираем объявления пространств имён (двойные и одинарные кавычки).
+    $s = preg_replace('/\sxmlns(?::[A-Za-z_][\w.-]*)?\s*=\s*("[^"]*"|\'[^\']*\')/i', '', $xmlStr);
+    if ($s === null) {
+        throw new RuntimeException('Не удалось подготовить XML Excel к чтению');
+    }
+    // 2) Убираем префиксы у тегов: <x:row> -> <row>, </x:row> -> </row>.
+    $s = preg_replace('/<(\/?)([A-Za-z_][\w.-]*):([A-Za-z_][\w.-]*)/', '<$1$3', $s);
+    // 3) Убираем префиксные атрибуты: x14ac:dyDescent="0.3", xr:uid="...".
+    //    Атрибуты xml:space / xml:lang / xml:base — стандартные, оставляем.
+    $s = preg_replace(
+        '/\s+(?!xml:)([A-Za-z_][\w.-]*):([A-Za-z_][\w.-]*)\s*=\s*("[^"]*"|\'[^\']*\')/i',
+        '',
+        $s
+    );
+    if ($s === null || trim($s) === '') {
+        throw new RuntimeException('Внутренний XML Excel пуст или повреждён');
+    }
+
+    $prev = libxml_use_internal_errors(true);
+    libxml_clear_errors();
+    try {
+        $xml = new SimpleXMLElement($s, LIBXML_NONET | LIBXML_NOCDATA);
+        $errors = libxml_get_errors();
+        foreach ($errors as $err) {
+            if ((int)$err->level >= LIBXML_ERR_ERROR) {
+                $detail = trim((string)$err->message);
+                if ($detail === '') {
+                    $detail = 'неизвестная ошибка XML';
+                }
+                if ((int)$err->line > 0) {
+                    $detail .= ' (строка ' . (int)$err->line . ')';
+                }
+                throw new RuntimeException(
+                    'Не удалось прочитать внутренний XML Excel. ' .
+                    'Файл повреждён или сохранён в неподдерживаемом формате. Детали: ' . $detail
+                );
+            }
+        }
+        return $xml;
+    } catch (RuntimeException $e) {
+        throw $e;
+    } catch (Throwable $e) {
+        $detail = trim((string)$e->getMessage());
+        if ($detail === '') {
+            $detail = 'неизвестная ошибка XML';
+        }
+        throw new RuntimeException(
+            'Не удалось прочитать внутренний XML Excel. ' .
+            'Файл повреждён или сохранён в неподдерживаемом формате. Детали: ' . $detail
+        );
+    } finally {
+        libxml_clear_errors();
+        libxml_use_internal_errors($prev);
+    }
 }
 
 /** Индекс колонки из ссылки вида "B20" -> 1 (0-based). */
@@ -380,7 +440,11 @@ function wms_xlsx_read_grid(string $tmpPath): array
         ksort($grid);
         $grid = array_values($grid);
     } catch (Throwable $e) {
-        throw new RuntimeException('Не удалось разобрать лист .xlsx: ' . $e->getMessage());
+        $msg = trim((string)$e->getMessage());
+        if (str_contains($msg, 'Не удалось прочитать внутренний XML Excel')) {
+            throw new RuntimeException($msg, 0, $e);
+        }
+        throw new RuntimeException('Не удалось разобрать лист .xlsx: ' . ($msg !== '' ? $msg : 'неизвестная ошибка'));
     }
     if (!$grid) {
         throw new RuntimeException('Лист .xlsx пуст');
