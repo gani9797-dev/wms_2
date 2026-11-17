@@ -6,11 +6,15 @@
 
 ## Быстрый старт
 
-```bash
-cp .env.example .env      # укажите PG_HOST/PG_DB/PG_USER/PG_PASSWORD и TSD_TOKEN
-php -S 0.0.0.0:8001 -t . router.php
+```bat
+copy .env.example .env      rem укажите PG_HOST/PG_DB/PG_USER/PG_PASSWORD и TSD_TOKEN
+start-server.bat
 ```
 
+- `start-server.bat` запускает **Caddy :8001** и **4 PHP-воркера :8011–8014**
+  (балансировка, gzip, одновременные запросы). Остановка — `stop-server.bat`.
+- Для отладки без Caddy можно запустить один воркер:
+  `php -S 0.0.0.0:8001 -t . router.php`.
 - Портал: <http://127.0.0.1:8001> (вход — `/login`, по `employees.login`/`password_hash`).
 - БД: PostgreSQL (по умолчанию `WMS_DB_DRIVER=pgsql`), схема — [`db/schema-pg.sql`](db/schema-pg.sql).
 - Секреты (`.env`, БД) в git не коммитятся.

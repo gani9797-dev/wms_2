@@ -1,0 +1,17 @@
+{
+	# Funnel завершает TLS и проксирует HTTP на 127.0.0.1:8001.
+	auto_https off
+	admin off
+}
+
+:8001 {
+	# Сжатие для HTML/JS/CSS/JSON: страницы WMS весят 60–120 КБ.
+	encode zstd gzip
+
+	# Несколько однопоточных PHP-серверов за балансировщиком.
+	reverse_proxy 127.0.0.1:8011 127.0.0.1:8012 127.0.0.1:8013 127.0.0.1:8014 {
+		lb_policy round_robin
+		lb_try_duration 5s
+		lb_try_interval 250ms
+	}
+}
